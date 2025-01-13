@@ -1525,9 +1525,9 @@ pub mod testing {
             Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams)>,
         ) {
             if let Some((transfer, aux)) = transfer_aux {
-                (MsgTransfer { message, transfer: Some(transfer) }, aux)
+                (MsgTransfer { message, transfer: Some(transfer), refund_masp_tx: None }, aux)
             } else {
-                (MsgTransfer { message, transfer: None }, None)
+                (MsgTransfer { message, transfer: None, refund_masp_tx: None }, None)
             }
         }
     }
@@ -1575,9 +1575,9 @@ pub mod testing {
             Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams)>,
         ) {
             if let Some((transfer, aux)) = transfer_aux {
-                (MsgNftTransfer { message, transfer: Some(transfer) }, aux)
+                (MsgNftTransfer { message, transfer: Some(transfer), refund_masp_tx: None }, aux)
             } else {
-                (MsgNftTransfer { message, transfer: None }, None)
+                (MsgNftTransfer { message, transfer: None, refund_masp_tx: None }, None)
             }
         }
     }

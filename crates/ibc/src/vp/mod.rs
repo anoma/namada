@@ -27,6 +27,7 @@ use namada_vp::native_vp::{Ctx, CtxPreStorageRead, NativeVp, VpEvaluator};
 use namada_vp::VpEnv;
 use thiserror::Error;
 
+use crate::context::middlewares::create_transfer_middlewares;
 use crate::core::host::types::identifiers::ChainId as IbcChainId;
 use crate::core::host::types::path::UPGRADED_IBC_STATE;
 use crate::event::IbcEvent;
@@ -36,8 +37,8 @@ use crate::storage::{
 };
 use crate::trace::calc_hash;
 use crate::{
-    Error as ActionError, IbcActions, NftTransferModule, TransferModule,
-    ValidationParams, COMMITMENT_PREFIX,
+    Error as ActionError, IbcActions, NftTransferModule, ValidationParams,
+    COMMITMENT_PREFIX,
 };
 
 #[allow(missing_docs)]
@@ -128,11 +129,12 @@ where
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL> + Debug,
     CA: 'static + Clone + Debug,
     Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    Params: parameters::Read<VpValidationContext<'view, 'ctx, S, CA, EVAL>>,
+    Params:
+        parameters::Read<VpValidationContext<'view, 'ctx, S, CA, EVAL>> + Debug,
     ParamsPre: parameters::Keys
         + parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    ParamsPseudo:
-        parameters::Read<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>,
+    ParamsPseudo: parameters::Read<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>
+        + Debug,
     Token: token::Keys
         + token::Write<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>
         + Debug,
@@ -209,11 +211,12 @@ where
     S: 'static + StateRead,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL> + Debug,
     CA: 'static + Clone + Debug,
-    Params: parameters::Read<VpValidationContext<'view, 'ctx, S, CA, EVAL>>,
+    Params:
+        parameters::Read<VpValidationContext<'view, 'ctx, S, CA, EVAL>> + Debug,
     ParamsPre: parameters::Keys
         + parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    ParamsPseudo:
-        parameters::Read<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>,
+    ParamsPseudo: parameters::Read<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>
+        + Debug,
     Token: token::Keys
         + token::Write<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>
         + Debug,
@@ -246,9 +249,13 @@ where
             ctx.clone(),
             verifiers.clone(),
         );
-        let module = TransferModule::new(ctx.clone(), verifiers);
+        let module = create_transfer_middlewares::<_, ParamsPseudo>(
+            ctx.clone(),
+            verifiers,
+        );
         actions.add_transfer_module(module);
-        let module = NftTransferModule::<_, Token>::new(ctx.clone());
+        let module =
+            NftTransferModule::<_, ParamsPseudo, Token>::new(ctx.clone());
         actions.add_transfer_module(module);
         // Charge gas for the expensive execution
         self.ctx.charge_gas(IBC_ACTION_EXECUTE_GAS.into())?;
@@ -301,9 +308,10 @@ where
             IbcActions::<_, Params, Token>::new(ctx.clone(), verifiers.clone());
         actions.set_validation_params(self.validation_params()?);
 
-        let module = TransferModule::new(ctx.clone(), verifiers);
+        let module =
+            create_transfer_middlewares::<_, Params>(ctx.clone(), verifiers);
         actions.add_transfer_module(module);
-        let module = NftTransferModule::<_, Token>::new(ctx);
+        let module = NftTransferModule::<_, Params, Token>::new(ctx);
         actions.add_transfer_module(module);
         // Charge gas for the expensive validation
         self.ctx.charge_gas(IBC_ACTION_VALIDATE_GAS.into())?;
@@ -2353,6 +2361,7 @@ mod tests {
         let tx_data = MsgTransfer::<Transfer> {
             message: msg,
             transfer: None,
+            refund_masp_tx: None,
         }
         .serialize_to_vec();
 
@@ -3213,6 +3222,7 @@ mod tests {
         let tx_data = MsgNftTransfer::<Transfer> {
             message: msg,
             transfer: None,
+            refund_masp_tx: None,
         }
         .serialize_to_vec();
 

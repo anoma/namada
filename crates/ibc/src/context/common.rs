@@ -19,8 +19,10 @@ use ibc::core::host::types::identifiers::{
 };
 use ibc::primitives::proto::{Any, Protobuf};
 use ibc::primitives::Timestamp;
+use masp_primitives::transaction::Transaction as MaspTransaction;
 use namada_core::address::Address;
 use namada_core::chain::BlockHeight;
+use namada_core::masp::MaspEpoch;
 use namada_core::storage::Key;
 use namada_core::tendermint::Time as TmTime;
 use namada_core::token::Amount;
@@ -576,14 +578,11 @@ pub trait IbcCommonContext: IbcStorageContext {
         port_id: &PortId,
         channel_id: &ChannelId,
         sequence: Sequence,
-    ) -> Result<AcknowledgementCommitment> {
+    ) -> Result<Option<AcknowledgementCommitment>> {
         let key = storage::ack_key(port_id, channel_id, sequence);
         match self.storage().read_bytes(&key)? {
-            Some(value) => Ok(value.into()),
-            None => {
-                Err(PacketError::PacketAcknowledgementNotFound { sequence }
-                    .into())
-            }
+            Some(value) => Ok(Some(value.into())),
+            None => Ok(None),
         }
     }
 
@@ -760,6 +759,35 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::withdraw_key(token);
         self.storage_mut()
             .write(&key, amount)
+            .map_err(ContextError::from)
+    }
+
+    /// Read the MASP shielding transaction for the shielded refund
+    fn refund_masp_tx(
+        &self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        sequence: Sequence,
+        epoch: MaspEpoch,
+    ) -> Result<Option<MaspTransaction>> {
+        let key =
+            storage::refund_masp_tx_key(port_id, channel_id, sequence, epoch);
+        self.storage().read(&key).map_err(ContextError::from)
+    }
+
+    /// Write the MASP shielding transaction for the shielded refund
+    fn store_refund_masp_tx(
+        &mut self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        sequence: Sequence,
+        epoch: MaspEpoch,
+        masp_tx: MaspTransaction,
+    ) -> Result<()> {
+        let key =
+            storage::refund_masp_tx_key(port_id, channel_id, sequence, epoch);
+        self.storage_mut()
+            .write(&key, masp_tx)
             .map_err(ContextError::from)
     }
 }

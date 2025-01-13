@@ -12,10 +12,11 @@ use ibc::apps::transfer::types::PORT_ID_STR as FT_PORT_ID_STR;
 use ibc::core::channel::types::msgs::PacketMsg;
 use ibc::core::channel::types::packet::Packet;
 use ibc::core::handler::types::msgs::MsgEnvelope;
-use ibc::core::host::types::identifiers::PortId;
+use ibc::core::host::types::identifiers::{ChannelId, PortId, Sequence};
 use ibc::primitives::proto::Protobuf;
 use masp_primitives::transaction::Transaction as MaspTransaction;
 use namada_core::borsh::BorshSerializeExt;
+use namada_core::masp::MaspEpoch;
 
 /// The different variants of an Ibc message
 #[derive(Debug, Clone)]
@@ -36,6 +37,8 @@ pub struct MsgTransfer<Transfer> {
     pub message: IbcMsgTransfer,
     /// Shieleded transfer for MASP transaction
     pub transfer: Option<Transfer>,
+    /// MASP transaction for refund
+    pub refund_masp_tx: Option<(MaspEpoch, MaspTransaction)>,
 }
 
 impl<Transfer: BorshSerialize> BorshSerialize for MsgTransfer<Transfer> {
@@ -44,7 +47,7 @@ impl<Transfer: BorshSerialize> BorshSerialize for MsgTransfer<Transfer> {
         writer: &mut W,
     ) -> std::io::Result<()> {
         let encoded_msg = self.message.clone().encode_vec();
-        let members = (encoded_msg, &self.transfer);
+        let members = (encoded_msg, &self.transfer, &self.refund_masp_tx);
         BorshSerialize::serialize(&members, writer)
     }
 }
@@ -54,11 +57,18 @@ impl<Transfer: BorshDeserialize> BorshDeserialize for MsgTransfer<Transfer> {
         reader: &mut R,
     ) -> std::io::Result<Self> {
         use std::io::{Error, ErrorKind};
-        let (msg, transfer): (Vec<u8>, Option<Transfer>) =
-            BorshDeserialize::deserialize_reader(reader)?;
+        let (msg, transfer, refund_masp_tx): (
+            Vec<u8>,
+            Option<Transfer>,
+            Option<(MaspEpoch, MaspTransaction)>,
+        ) = BorshDeserialize::deserialize_reader(reader)?;
         let message = IbcMsgTransfer::decode_vec(&msg)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
-        Ok(Self { message, transfer })
+        Ok(Self {
+            message,
+            transfer,
+            refund_masp_tx,
+        })
     }
 }
 
@@ -66,10 +76,12 @@ impl<Transfer: BorshSchema> BorshSchema for MsgTransfer<Transfer> {
     fn add_definitions_recursively(
         definitions: &mut BTreeMap<Declaration, Definition>,
     ) {
-        <(Vec<u8>, Option<Transfer>)>::add_definitions_recursively(definitions);
-        let fields = Fields::UnnamedFields(vec![
-            <(Vec<u8>, Option<Transfer>)>::declaration(),
-        ]);
+        <(Vec<u8>, Option<Transfer>, Option<MaspTransaction>)>::add_definitions_recursively(definitions);
+        let fields = Fields::UnnamedFields(vec![<(
+            Vec<u8>,
+            Option<Transfer>,
+            Option<(MaspEpoch, MaspTransaction)>,
+        )>::declaration()]);
         definitions.insert(Self::declaration(), Definition::Struct { fields });
     }
 
@@ -86,6 +98,8 @@ pub struct MsgNftTransfer<Transfer> {
     pub message: IbcMsgNftTransfer,
     /// Shieleded transfer for MASP transaction
     pub transfer: Option<Transfer>,
+    /// MASP transaction for refund
+    pub refund_masp_tx: Option<(MaspEpoch, MaspTransaction)>,
 }
 
 impl<Transfer: BorshSerialize> BorshSerialize for MsgNftTransfer<Transfer> {
@@ -94,7 +108,7 @@ impl<Transfer: BorshSerialize> BorshSerialize for MsgNftTransfer<Transfer> {
         writer: &mut W,
     ) -> std::io::Result<()> {
         let encoded_msg = self.message.clone().encode_vec();
-        let members = (encoded_msg, &self.transfer);
+        let members = (encoded_msg, &self.transfer, &self.refund_masp_tx);
         BorshSerialize::serialize(&members, writer)
     }
 }
@@ -104,11 +118,18 @@ impl<Transfer: BorshDeserialize> BorshDeserialize for MsgNftTransfer<Transfer> {
         reader: &mut R,
     ) -> std::io::Result<Self> {
         use std::io::{Error, ErrorKind};
-        let (msg, transfer): (Vec<u8>, Option<Transfer>) =
-            BorshDeserialize::deserialize_reader(reader)?;
+        let (msg, transfer, refund_masp_tx): (
+            Vec<u8>,
+            Option<Transfer>,
+            Option<(MaspEpoch, MaspTransaction)>,
+        ) = BorshDeserialize::deserialize_reader(reader)?;
         let message = IbcMsgNftTransfer::decode_vec(&msg)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
-        Ok(Self { message, transfer })
+        Ok(Self {
+            message,
+            transfer,
+            refund_masp_tx,
+        })
     }
 }
 
@@ -116,10 +137,12 @@ impl<Transfer: BorshSchema> BorshSchema for MsgNftTransfer<Transfer> {
     fn add_definitions_recursively(
         definitions: &mut BTreeMap<Declaration, Definition>,
     ) {
-        <(Vec<u8>, Option<Transfer>)>::add_definitions_recursively(definitions);
-        let fields = Fields::UnnamedFields(vec![
-            <(Vec<u8>, Option<Transfer>)>::declaration(),
-        ]);
+        <(Vec<u8>, Option<Transfer>, Option<Transfer>)>::add_definitions_recursively(definitions);
+        let fields = Fields::UnnamedFields(vec![<(
+            Vec<u8>,
+            Option<Transfer>,
+            Option<(MaspEpoch, MaspTransaction)>,
+        )>::declaration()]);
         definitions.insert(Self::declaration(), Definition::Struct { fields });
     }
 
@@ -148,6 +171,20 @@ pub fn extract_masp_tx_from_envelope(
         }
         _ => None,
     }
+}
+
+/// Get the port ID, channel ID and sequence of the packet in the envelope
+pub fn packet_info_from_envelope(
+    envelope: &MsgEnvelope,
+) -> Option<(&PortId, &ChannelId, Sequence)> {
+    let packet = match envelope {
+        MsgEnvelope::Packet(PacketMsg::Recv(msg)) => &msg.packet,
+        MsgEnvelope::Packet(PacketMsg::Ack(msg)) => &msg.packet,
+        MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => &msg.packet,
+        MsgEnvelope::Packet(PacketMsg::TimeoutOnClose(msg)) => &msg.packet,
+        _ => return None,
+    };
+    Some((&packet.port_id_on_a, &packet.chan_id_on_a, packet.seq_on_a))
 }
 
 /// Decode IBC shielding data from the string
