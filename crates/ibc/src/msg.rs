@@ -17,6 +17,10 @@ use ibc::primitives::proto::Protobuf;
 use masp_primitives::transaction::Transaction as MaspTransaction;
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::masp::MaspEpoch;
+use namada_core::token::Amount;
+
+use crate::trace::ibc_trace_for_nft;
+use crate::Error;
 
 /// The different variants of an Ibc message
 #[derive(Debug, Clone)]
@@ -233,4 +237,131 @@ fn extract_memo_from_packet(
 /// Get IBC memo string from MASP transaction for receiving
 pub fn convert_masp_tx_to_ibc_memo(transaction: &MaspTransaction) -> String {
     IbcShieldingData(transaction.clone()).into()
+}
+
+/// IBC transfer info. for the MASP VP
+#[allow(missing_docs)]
+pub struct IbcTransferInfo {
+    pub src_port_id: PortId,
+    pub src_channel_id: ChannelId,
+    pub ibc_traces: Vec<String>,
+    pub amount: Amount,
+    pub receiver: String,
+}
+
+impl TryFrom<IbcMsgTransfer> for IbcTransferInfo {
+    type Error = Error;
+
+    fn try_from(
+        message: IbcMsgTransfer,
+    ) -> std::result::Result<Self, Self::Error> {
+        let ibc_traces = vec![message.packet_data.token.denom.to_string()];
+        let amount =
+            message.packet_data.token.amount.try_into().map_err(|e| {
+                Error::Other(format!(
+                    "Converting IBC amount to Namada amount failed: {e}"
+                ))
+            })?;
+        let receiver = message.packet_data.receiver.to_string();
+        Ok(Self {
+            src_port_id: message.port_id_on_a,
+            src_channel_id: message.chan_id_on_a,
+            ibc_traces,
+            amount,
+            receiver,
+        })
+    }
+}
+
+impl TryFrom<IbcMsgNftTransfer> for IbcTransferInfo {
+    type Error = Error;
+
+    fn try_from(
+        message: IbcMsgNftTransfer,
+    ) -> std::result::Result<Self, Self::Error> {
+        let ibc_traces = message
+            .packet_data
+            .token_ids
+            .0
+            .iter()
+            .map(|token_id| {
+                ibc_trace_for_nft(&message.packet_data.class_id, token_id)
+            })
+            .collect();
+        let receiver = message.packet_data.receiver.to_string();
+        Ok(Self {
+            src_port_id: message.port_id_on_a,
+            src_channel_id: message.chan_id_on_a,
+            ibc_traces,
+            amount: Amount::from_u64(1),
+            receiver,
+        })
+    }
+}
+
+/// Receiving token info
+#[allow(missing_docs)]
+pub struct ReceiveInfo {
+    pub ibc_traces: Vec<String>,
+    pub amount: Amount,
+    pub receiver: String,
+}
+
+/// Retrieve receiving token info
+pub fn recv_info_from_packet(
+    packet: &Packet,
+    is_src_chain: bool,
+) -> Result<ReceiveInfo, Error> {
+    let port_id = if is_src_chain {
+        &packet.port_id_on_a
+    } else {
+        &packet.port_id_on_b
+    };
+    match port_id.as_str() {
+        FT_PORT_ID_STR => {
+            let packet_data = serde_json::from_slice::<PacketData>(
+                &packet.data,
+            )
+            .map_err(|e| {
+                Error::Other(format!("Decoding the packet data failed: {e}"))
+            })?;
+            let receiver = packet_data.receiver.to_string();
+            let ibc_denom = packet_data.token.denom.to_string();
+            let amount = packet_data.token.amount.try_into().map_err(|e| {
+                Error::Other(format!(
+                    "Converting IBC amount to Namada amount failed: {e}"
+                ))
+            })?;
+            Ok(ReceiveInfo {
+                ibc_traces: vec![ibc_denom],
+                amount,
+                receiver,
+            })
+        }
+        NFT_PORT_ID_STR => {
+            let packet_data = serde_json::from_slice::<NftPacketData>(
+                &packet.data,
+            )
+            .map_err(|e| {
+                Error::Other(format!(
+                    "Decoding the NFT packet data failed: {e}"
+                ))
+            })?;
+            let receiver = packet_data.receiver.to_string();
+            let ibc_traces = packet_data
+                .token_ids
+                .0
+                .iter()
+                .map(|token_id| {
+                    ibc_trace_for_nft(&packet_data.class_id, token_id)
+                })
+                .collect();
+            Ok(ReceiveInfo {
+                ibc_traces,
+                amount: Amount::from_u64(1),
+                receiver,
+            })
+        }
+        _ => Err(Error::Other(format!("Invalid IBC port: {packet}"))),
+    }
 }

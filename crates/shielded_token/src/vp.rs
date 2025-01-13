@@ -389,10 +389,8 @@ where
         } = changed_balances;
         let ibc::ChangedBalances { decoder, pre, post } =
             IbcPost::apply_ibc_packet::<Transfer>(
-                &ctx.post(),
                 tx_data,
                 ibc::ChangedBalances { decoder, pre, post },
-                keys_changed,
             )?;
         Ok(ChangedBalances {
             tokens,

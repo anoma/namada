@@ -1,13 +1,13 @@
 //! IBC abstract interfaces
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use masp_primitives::transaction::components::ValueSum;
 use masp_primitives::transaction::TransparentAddress;
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
 use namada_core::masp::{MaspEpoch, TAddrData};
-use namada_core::{masp_primitives, storage, token};
+use namada_core::{masp_primitives, token};
 pub use namada_storage::Result;
 
 /// Abstract IBC storage read interface
@@ -26,10 +26,8 @@ pub trait Read<S> {
 
     /// Apply relevant IBC packets to the changed balances structure
     fn apply_ibc_packet<Transfer: BorshDeserialize>(
-        storage: &S,
         tx_data: &[u8],
         acc: ChangedBalances,
-        keys_changed: &BTreeSet<storage::Key>,
     ) -> Result<ChangedBalances>;
 }
 
