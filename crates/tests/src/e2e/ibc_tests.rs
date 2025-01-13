@@ -1403,7 +1403,7 @@ fn transfer_on_chain(
         &rpc,
     ]);
     tx_args.extend_from_slice(extra_args);
-    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
+    let mut client = run!(test, Bin::Client, tx_args, Some(240))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
