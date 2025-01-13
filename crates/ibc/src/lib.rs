@@ -202,38 +202,37 @@ where
 
     fn apply_ibc_packet<Transfer: BorshDeserialize>(
         tx_data: &[u8],
-        mut accum: ChangedBalances,
+        accum: ChangedBalances,
     ) -> StorageResult<ChangedBalances> {
         let msg = decode_message::<Transfer>(tx_data)
             .into_storage_result()
             .ok();
         match msg {
-            None => {}
+            None => Ok(accum),
             // This event is emitted on the sender
             Some(IbcMessage::Transfer(msg)) => {
                 // Get the packet commitment from post-storage that corresponds
                 // to this event
                 let ibc_transfer = IbcTransferInfo::try_from(msg.message)?;
-                accum = apply_transfer_msg(accum, ibc_transfer)?;
+                apply_transfer_msg(accum, ibc_transfer)
             }
             Some(IbcMessage::NftTransfer(msg)) => {
                 let ibc_transfer = IbcTransferInfo::try_from(msg.message)?;
-                accum = apply_transfer_msg(accum, ibc_transfer)?;
+                apply_transfer_msg(accum, ibc_transfer)
             }
             Some(IbcMessage::Envelope(envelope)) => match *envelope {
                 MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
-                    accum = apply_recv_msg(accum, &msg.packet)?;
+                    apply_recv_msg(accum, &msg.packet)
                 }
                 MsgEnvelope::Packet(PacketMsg::Ack(msg)) => {
-                    accum = apply_refund_msg(accum, &msg.packet)?;
+                    apply_refund_msg(accum, &msg.packet)
                 }
                 MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => {
-                    accum = apply_refund_msg(accum, &msg.packet)?;
+                    apply_refund_msg(accum, &msg.packet)
                 }
-                _ => {}
+                _ => Ok(accum),
             },
         }
-        Ok(accum)
     }
 }
 

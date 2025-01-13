@@ -37,18 +37,10 @@ use crate::storage_key::{
 use crate::validation::verify_shielded_tx;
 
 /// MASP VP
-pub struct MaspVp<'ctx, CTX, Params, Gov, IbcPre, IbcPost, TransToken, Transfer>
-{
+pub struct MaspVp<'ctx, CTX, Params, Gov, Ibc, TransToken, Transfer> {
     /// Generic types for DI
-    pub _marker: PhantomData<(
-        &'ctx CTX,
-        Params,
-        Gov,
-        IbcPre,
-        IbcPost,
-        TransToken,
-        Transfer,
-    )>,
+    pub _marker:
+        PhantomData<(&'ctx CTX, Params, Gov, Ibc, TransToken, Transfer)>,
 }
 
 // Balances changed by a transaction
@@ -64,25 +56,15 @@ struct ChangedBalances {
     post: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
 }
 
-impl<
-    'view,
-    'ctx: 'view,
-    CTX,
-    Params,
-    Gov,
-    IbcPre,
-    IbcPost,
-    TransToken,
-    Transfer,
-> MaspVp<'ctx, CTX, Params, Gov, IbcPre, IbcPost, TransToken, Transfer>
+impl<'view, 'ctx: 'view, CTX, Params, Gov, Ibc, TransToken, Transfer>
+    MaspVp<'ctx, CTX, Params, Gov, Ibc, TransToken, Transfer>
 where
     CTX: VpEnv<'ctx>
         + namada_tx::action::Read<Err = Error>
         + ReadConversionState,
     Params: parameters::Read<<CTX as VpEnv<'ctx>>::Pre>,
     Gov: governance::Read<<CTX as VpEnv<'ctx>>::Pre>,
-    IbcPre: ibc::Read<<CTX as VpEnv<'ctx>>::Pre>,
-    IbcPost: ibc::Read<<CTX as VpEnv<'ctx>>::Post>,
+    Ibc: ibc::Read<<CTX as VpEnv<'ctx>>::Pre>,
     TransToken:
         trans_token::Keys + trans_token::Read<<CTX as VpEnv<'ctx>>::Pre>,
     Transfer: BorshDeserialize,
@@ -388,7 +370,7 @@ where
             post,
         } = changed_balances;
         let ibc::ChangedBalances { decoder, pre, post } =
-            IbcPost::apply_ibc_packet::<Transfer>(
+            Ibc::apply_ibc_packet::<Transfer>(
                 tx_data,
                 ibc::ChangedBalances { decoder, pre, post },
             )?;
@@ -422,8 +404,8 @@ where
         // Try to get the Transaction object from the tx first (IBC) and from
         // the actions afterwards
         let shielded_tx = if let Some(tx) =
-            IbcPre::try_extract_masp_tx_from_envelope::<Transfer>(&tx_data)?.or(
-                IbcPre::try_get_refund_masp_tx::<Transfer>(
+            Ibc::try_extract_masp_tx_from_envelope::<Transfer>(&tx_data)?.or(
+                Ibc::try_get_refund_masp_tx::<Transfer>(
                     &ctx.pre(),
                     &tx_data,
                     masp_epoch,
@@ -930,7 +912,7 @@ mod shielded_token_tests {
     use namada_vm::wasm::run::VpEvalWasm;
     use namada_vm::wasm::VpCache;
     use namada_vm::WasmCacheRwAccess;
-    use namada_vp::native_vp::{self, CtxPostStorageRead, CtxPreStorageRead};
+    use namada_vp::native_vp::{self, CtxPreStorageRead};
     use namada_vp_env::Error;
     use proptest::proptest;
     use proptest::strategy::Strategy;
@@ -954,9 +936,6 @@ mod shielded_token_tests {
         >,
         namada_ibc::Store<
             CtxPreStorageRead<'ctx, 'ctx, S, VpCache<CA>, Eval<S>>,
-        >,
-        namada_ibc::Store<
-            CtxPostStorageRead<'ctx, 'ctx, S, VpCache<CA>, Eval<S>>,
         >,
         namada_trans_token::Store<
             CtxPreStorageRead<'ctx, 'ctx, S, VpCache<CA>, Eval<S>>,
