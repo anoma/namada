@@ -26,6 +26,8 @@ use ibc::core::host::types::identifiers::{
 use ibc::core::router::module::Module;
 use ibc::core::router::types::module::ModuleExtras;
 use ibc::primitives::Signer;
+use ibc_middleware_module::MiddlewareModule;
+use ibc_middleware_module_macros::from_middleware;
 use ibc_middleware_packet_forward::{
     InFlightPacket, InFlightPacketKey, PfmContext,
 };
@@ -60,167 +62,27 @@ impl<C: IbcCommonContext + Debug, Params> Debug
     }
 }
 
-impl<C, Params> Module for PfmTransferModule<C, Params>
+from_middleware! {
+    impl<C, Params> Module for PfmTransferModule<C, Params>
+    where
+        C: IbcCommonContext + Debug,
+}
+
+impl<C, Params> MiddlewareModule for PfmTransferModule<C, Params>
 where
     C: IbcCommonContext + Debug,
 {
-    fn on_chan_open_init_validate(
-        &self,
-        order: Order,
-        connection_hops: &[ConnectionId],
-        port_id: &PortId,
-        channel_id: &ChannelId,
-        counterparty: &Counterparty,
-        version: &Version,
-    ) -> Result<Version, ChannelError> {
-        self.transfer_module.on_chan_open_init_validate(
-            order,
-            connection_hops,
-            port_id,
-            channel_id,
-            counterparty,
-            version,
-        )
+    type NextMiddleware = TransferModule<C>;
+
+    fn next_middleware(&self) -> &Self::NextMiddleware {
+        &self.transfer_module
     }
 
-    fn on_chan_open_init_execute(
-        &mut self,
-        order: Order,
-        connection_hops: &[ConnectionId],
-        port_id: &PortId,
-        channel_id: &ChannelId,
-        counterparty: &Counterparty,
-        version: &Version,
-    ) -> Result<(ModuleExtras, Version), ChannelError> {
-        self.transfer_module.on_chan_open_init_execute(
-            order,
-            connection_hops,
-            port_id,
-            channel_id,
-            counterparty,
-            version,
-        )
+    fn next_middleware_mut(&mut self) -> &mut Self::NextMiddleware {
+        &mut self.transfer_module
     }
 
-    fn on_chan_open_try_validate(
-        &self,
-        order: Order,
-        connection_hops: &[ConnectionId],
-        port_id: &PortId,
-        channel_id: &ChannelId,
-        counterparty: &Counterparty,
-        counterparty_version: &Version,
-    ) -> Result<Version, ChannelError> {
-        self.transfer_module.on_chan_open_try_validate(
-            order,
-            connection_hops,
-            port_id,
-            channel_id,
-            counterparty,
-            counterparty_version,
-        )
-    }
-
-    fn on_chan_open_try_execute(
-        &mut self,
-        order: Order,
-        connection_hops: &[ConnectionId],
-        port_id: &PortId,
-        channel_id: &ChannelId,
-        counterparty: &Counterparty,
-        counterparty_version: &Version,
-    ) -> Result<(ModuleExtras, Version), ChannelError> {
-        self.transfer_module.on_chan_open_try_execute(
-            order,
-            connection_hops,
-            port_id,
-            channel_id,
-            counterparty,
-            counterparty_version,
-        )
-    }
-
-    fn on_chan_open_ack_validate(
-        &self,
-        port_id: &PortId,
-        channel_id: &ChannelId,
-        counterparty_version: &Version,
-    ) -> Result<(), ChannelError> {
-        self.transfer_module.on_chan_open_ack_validate(
-            port_id,
-            channel_id,
-            counterparty_version,
-        )
-    }
-
-    fn on_chan_open_ack_execute(
-        &mut self,
-        port_id: &PortId,
-        channel_id: &ChannelId,
-        counterparty_version: &Version,
-    ) -> Result<ModuleExtras, ChannelError> {
-        self.transfer_module.on_chan_open_ack_execute(
-            port_id,
-            channel_id,
-            counterparty_version,
-        )
-    }
-
-    fn on_chan_open_confirm_validate(
-        &self,
-        port_id: &PortId,
-        channel_id: &ChannelId,
-    ) -> Result<(), ChannelError> {
-        self.transfer_module
-            .on_chan_open_confirm_validate(port_id, channel_id)
-    }
-
-    fn on_chan_open_confirm_execute(
-        &mut self,
-        port_id: &PortId,
-        channel_id: &ChannelId,
-    ) -> Result<ModuleExtras, ChannelError> {
-        self.transfer_module
-            .on_chan_open_confirm_execute(port_id, channel_id)
-    }
-
-    fn on_chan_close_init_validate(
-        &self,
-        port_id: &PortId,
-        channel_id: &ChannelId,
-    ) -> Result<(), ChannelError> {
-        self.transfer_module
-            .on_chan_close_init_validate(port_id, channel_id)
-    }
-
-    fn on_chan_close_init_execute(
-        &mut self,
-        port_id: &PortId,
-        channel_id: &ChannelId,
-    ) -> Result<ModuleExtras, ChannelError> {
-        self.transfer_module
-            .on_chan_close_init_execute(port_id, channel_id)
-    }
-
-    fn on_chan_close_confirm_validate(
-        &self,
-        port_id: &PortId,
-        channel_id: &ChannelId,
-    ) -> Result<(), ChannelError> {
-        self.transfer_module
-            .on_chan_close_confirm_validate(port_id, channel_id)
-    }
-
-    fn on_chan_close_confirm_execute(
-        &mut self,
-        port_id: &PortId,
-        channel_id: &ChannelId,
-    ) -> Result<ModuleExtras, ChannelError> {
-        self.transfer_module
-            .on_chan_close_confirm_execute(port_id, channel_id)
-    }
-
-    fn on_recv_packet_execute(
+    fn middleware_on_recv_packet_execute(
         &mut self,
         packet: &Packet,
         relayer: &Signer,
@@ -242,50 +104,6 @@ where
         } else {
             self.transfer_module.on_recv_packet_execute(packet, relayer)
         }
-    }
-
-    fn on_acknowledgement_packet_validate(
-        &self,
-        packet: &Packet,
-        acknowledgement: &Acknowledgement,
-        relayer: &Signer,
-    ) -> Result<(), PacketError> {
-        self.transfer_module.on_acknowledgement_packet_validate(
-            packet,
-            acknowledgement,
-            relayer,
-        )
-    }
-
-    fn on_acknowledgement_packet_execute(
-        &mut self,
-        packet: &Packet,
-        acknowledgement: &Acknowledgement,
-        relayer: &Signer,
-    ) -> (ModuleExtras, Result<(), PacketError>) {
-        self.transfer_module.on_acknowledgement_packet_execute(
-            packet,
-            acknowledgement,
-            relayer,
-        )
-    }
-
-    fn on_timeout_packet_validate(
-        &self,
-        packet: &Packet,
-        relayer: &Signer,
-    ) -> Result<(), PacketError> {
-        self.transfer_module
-            .on_timeout_packet_validate(packet, relayer)
-    }
-
-    fn on_timeout_packet_execute(
-        &mut self,
-        packet: &Packet,
-        relayer: &Signer,
-    ) -> (ModuleExtras, Result<(), PacketError>) {
-        self.transfer_module
-            .on_timeout_packet_execute(packet, relayer)
     }
 }
 
