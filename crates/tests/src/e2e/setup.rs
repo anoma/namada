@@ -42,8 +42,8 @@ use rand::Rng;
 use tempfile::{tempdir, tempdir_in, TempDir};
 
 use crate::e2e::helpers::{
-    find_cosmos_address, generate_bin_command, make_hermes_config,
-    update_cosmos_config,
+    find_cosmos_address, generate_bin_command, get_cosmos_rpc_address,
+    make_hermes_config, update_cosmos_config,
 };
 
 /// For `color_eyre::install`, which fails if called more than once in the same
@@ -844,6 +844,22 @@ pub fn working_dir() -> PathBuf {
     working_dir
 }
 
+/// Return the path to all test fixture.
+pub fn fixtures_dir() -> PathBuf {
+    let mut dir = working_dir();
+    dir.push("crates");
+    dir.push("tests");
+    dir.push("fixtures");
+    dir
+}
+
+/// Return the path to all osmosis fixture.
+pub fn osmosis_fixtures_dir() -> PathBuf {
+    let mut dir = fixtures_dir();
+    dir.push("osmosis_data");
+    dir
+}
+
 /// A command under test
 pub struct NamadaCmd {
     pub session: Session<UnixProcess, LogStream<PtyStream, File>>,
@@ -1243,31 +1259,126 @@ pub fn setup_hermes(test_a: &Test, test_b: &Test) -> Result<TestDir> {
     let hermes_dir = TestDir::new();
 
     println!("\n{}", "Setting up Hermes".underline().green(),);
-
-    make_hermes_config(&hermes_dir, test_a, test_b)?;
+    let chain_name_a =
+        CosmosChainType::chain_type(test_a.net.chain_id.as_str())
+            .map(|c| c.chain_id())
+            .ok();
+    let chain_name_b =
+        CosmosChainType::chain_type(test_b.net.chain_id.as_str())
+            .map(|c| c.chain_id())
+            .ok();
+    let relayer = chain_name_a
+        .zip(chain_name_b)
+        .map(|(a, b)| format!("{a}_{b}_relayer"));
+    make_hermes_config(
+        &hermes_dir,
+        test_a,
+        test_b,
+        relayer.as_ref().map(|s| s.as_ref()),
+    )?;
 
     for test in [test_a, test_b] {
         let chain_id = test.net.chain_id.as_str();
         let chain_dir = test.test_dir.as_ref().join(chain_id);
-        let key_file_path = match CosmosChainType::chain_type(chain_id) {
-            Ok(_) => chain_dir
-                .join(format!("{}_seed.json", constants::COSMOS_RELAYER)),
-            Err(_) => wallet::wallet_file(chain_dir),
+        match CosmosChainType::chain_type(chain_id) {
+            Ok(_) => {
+                if let Some(relayer) = relayer.as_ref() {
+                    // we create a new relayer for each ibc connection between
+                    // to non-Namada chains
+                    let key_file =
+                        chain_dir.join(format!("{relayer}_seed.json"));
+                    let args = [
+                        "keys",
+                        "add",
+                        relayer,
+                        "--keyring-backend",
+                        "test",
+                        "--output",
+                        "json",
+                    ];
+                    let mut cosmos = run_cosmos_cmd(test, args, Some(10))?;
+                    let result = cosmos.exp_string("\n")?;
+                    let mut file = File::create(&key_file).unwrap();
+                    file.write_all(result.as_bytes()).map_err(|e| {
+                        eyre!(format!(
+                            "Writing a Cosmos key file failed: {}",
+                            e
+                        ))
+                    })?;
+
+                    let account = find_cosmos_address(test, relayer)?;
+                    // Add tokens to the new relayer account
+                    let args = [
+                        "tx",
+                        "bank",
+                        "send",
+                        constants::COSMOS_RELAYER,
+                        &account,
+                        "500000000stake",
+                        "--from",
+                        constants::COSMOS_RELAYER,
+                        "--gas",
+                        "250000",
+                        "--gas-prices",
+                        "0.01stake",
+                        "--node",
+                        &format!("http://{}", get_cosmos_rpc_address(test)),
+                        "--keyring-backend",
+                        "test",
+                        "--chain-id",
+                        chain_id,
+                        "--yes",
+                    ];
+
+                    let mut cosmos = run_cosmos_cmd(test, args, Some(10))?;
+                    cosmos.assert_success();
+
+                    // add to hermes
+                    let args = [
+                        "keys",
+                        "add",
+                        "--chain",
+                        chain_id,
+                        "--key-file",
+                        &key_file.to_string_lossy(),
+                        "--key-name",
+                        relayer,
+                    ];
+                    let mut hermes =
+                        run_hermes_cmd(&hermes_dir, args, Some(20))?;
+                    hermes.assert_success();
+                } else {
+                    let key_file_path = chain_dir.join(format!(
+                        "{}_seed.json",
+                        constants::COSMOS_RELAYER
+                    ));
+                    let args = [
+                        "keys",
+                        "add",
+                        "--chain",
+                        chain_id,
+                        "--key-file",
+                        &key_file_path.to_string_lossy(),
+                    ];
+                    let mut hermes =
+                        run_hermes_cmd(&hermes_dir, args, Some(20))?;
+                    hermes.assert_success();
+                }
+            }
+            Err(_) => {
+                let key_file_path = wallet::wallet_file(&chain_dir);
+                let args = [
+                    "keys",
+                    "add",
+                    "--chain",
+                    chain_id,
+                    "--key-file",
+                    &key_file_path.to_string_lossy(),
+                ];
+                let mut hermes = run_hermes_cmd(&hermes_dir, args, Some(20))?;
+                hermes.assert_success();
+            }
         };
-        let args = [
-            "keys",
-            "add",
-            // TODO: this overwrite is required because hermes keys are pulled
-            // from the namada chain dir... however, ideally we would store the
-            // `wallet.toml` file under hermes' own dir
-            "--overwrite",
-            "--chain",
-            chain_id,
-            "--key-file",
-            &key_file_path.to_string_lossy(),
-        ];
-        let mut hermes = run_hermes_cmd(&hermes_dir, args, Some(20))?;
-        hermes.assert_success();
     }
 
     Ok(hermes_dir)
@@ -1341,9 +1452,46 @@ where
 pub enum CosmosChainType {
     Gaia(Option<u64>),
     CosmWasm,
+    Osmosis,
 }
 
 impl CosmosChainType {
+    fn genesis_cmd_args<'a>(&self, mut args: Vec<&'a str>) -> Vec<&'a str> {
+        if !matches!(self, CosmosChainType::Osmosis) {
+            args.insert(0, "genesis");
+        }
+        args
+    }
+
+    fn add_genesis_account_args<'a>(
+        &self,
+        account: &'a str,
+        coins: &'a str,
+    ) -> Vec<&'a str> {
+        self.genesis_cmd_args(vec!["add-genesis-account", account, coins])
+    }
+
+    fn gentx_args<'a>(
+        &self,
+        account: &'a str,
+        coins: &'a str,
+        chain_id: &'a str,
+    ) -> Vec<&'a str> {
+        self.genesis_cmd_args(vec![
+            "gentx",
+            account,
+            coins,
+            "--keyring-backend",
+            "test",
+            "--chain-id",
+            chain_id,
+        ])
+    }
+
+    fn collect_gentxs_args<'a>(&self) -> Vec<&'a str> {
+        self.genesis_cmd_args(vec!["collect-gentxs"])
+    }
+
     pub fn chain_id(&self) -> String {
         match self {
             Self::Gaia(Some(suffix)) => {
@@ -1351,6 +1499,7 @@ impl CosmosChainType {
             }
             Self::Gaia(_) => constants::GAIA_CHAIN_ID.to_string(),
             Self::CosmWasm => constants::COSMWASM_CHAIN_ID.to_string(),
+            Self::Osmosis => constants::OSMOSIS_CHAIN_ID.to_string(),
         }
     }
 
@@ -1358,12 +1507,16 @@ impl CosmosChainType {
         match self {
             Self::Gaia(_) => "gaiad",
             Self::CosmWasm => "wasmd",
+            Self::Osmosis => "osmosisd",
         }
     }
 
     pub fn chain_type(chain_id: &str) -> Result<Self> {
         if chain_id == constants::COSMWASM_CHAIN_ID {
             return Ok(Self::CosmWasm);
+        }
+        if chain_id == constants::OSMOSIS_CHAIN_ID {
+            return Ok(Self::Osmosis);
         }
         match chain_id.strip_prefix(constants::GAIA_CHAIN_ID) {
             Some("") => Ok(Self::Gaia(None)),
@@ -1380,13 +1533,29 @@ impl CosmosChainType {
         match self {
             Self::Gaia(_) => "cosmos",
             Self::CosmWasm => "wasm",
+            Self::Osmosis => "osmo",
         }
     }
 
-    pub fn get_offset(&self) -> u64 {
+    pub fn get_p2p_port_number(&self) -> u64 {
+        10_000 + self.get_offset()
+    }
+
+    pub fn get_rpc_port_number(&self) -> u64 {
+        20_000 + self.get_offset()
+    }
+
+    pub fn get_grpc_port_number(&self) -> u64 {
+        30_000 + self.get_offset()
+    }
+
+    fn get_offset(&self) -> u64 {
+        // NB: ensure none of these ever conflict
         match self {
-            Self::Gaia(Some(off)) => *off,
-            _ => 0,
+            Self::CosmWasm => 0,
+            Self::Osmosis => 1,
+            Self::Gaia(None) => 2,
+            Self::Gaia(Some(off)) => 3 + *off,
         }
     }
 }
@@ -1437,53 +1606,109 @@ pub fn setup_cosmos(chain_type: CosmosChainType) -> Result<Test> {
 
     // Add tokens to a user account
     let account = find_cosmos_address(&test, constants::COSMOS_USER)?;
-    let args = [
-        "genesis",
-        "add-genesis-account",
-        &account,
-        "100000000stake,1000samoleans",
-    ];
+    let args = if let CosmosChainType::Osmosis = chain_type {
+        chain_type.add_genesis_account_args(
+            &account,
+            "100000000stake,1000samoleans, 10000000000uosmo",
+        )
+    } else {
+        chain_type
+            .add_genesis_account_args(&account, "100000000stake,1000samoleans")
+    };
     let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
     cosmos.assert_success();
 
     // Add the stake token to the relayer
     let account = find_cosmos_address(&test, constants::COSMOS_RELAYER)?;
-    let args = ["genesis", "add-genesis-account", &account, "10000stake"];
+    let args =
+        chain_type.add_genesis_account_args(&account, "10000000000stake");
     let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
     cosmos.assert_success();
 
     // Add the stake token to the validator
     let validator = find_cosmos_address(&test, constants::COSMOS_VALIDATOR)?;
-    let args = [
-        "genesis",
-        "add-genesis-account",
-        &validator,
-        "200000000000stake",
-    ];
+    let args =
+        chain_type.add_genesis_account_args(&validator, "200000000000stake");
     let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
     cosmos.assert_success();
 
     // stake
-    let args = [
-        "genesis",
-        "gentx",
+    let args = chain_type.gentx_args(
         constants::COSMOS_VALIDATOR,
         "100000000000stake",
-        "--keyring-backend",
-        "test",
-        "--chain-id",
         &chain_id,
-    ];
+    );
     let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
     cosmos.assert_success();
 
-    let args = ["genesis", "collect-gentxs"];
+    let args = chain_type.collect_gentxs_args();
     let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
     cosmos.assert_success();
 
     update_cosmos_config(&test)?;
 
     Ok(test)
+}
+
+pub fn run_cosmos_cmd_homeless<I, S>(
+    test: &Test,
+    args: I,
+    timeout_sec: Option<u64>,
+) -> Result<NamadaCmd>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let chain_id = test.net.chain_id.as_str();
+    let chain_type = CosmosChainType::chain_type(chain_id)?;
+    let mut run_cmd = Command::new(chain_type.command_path());
+    run_cmd.args(args);
+
+    let args: String =
+        run_cmd.get_args().map(|s| s.to_string_lossy()).join(" ");
+    let cmd_str =
+        format!("{} {}", run_cmd.get_program().to_string_lossy(), args);
+
+    let session = Session::spawn(run_cmd).map_err(|e| {
+        eyre!(
+            "\n\n{}: {}\n{}: {}",
+            "Failed to run Cosmos command".underline().red(),
+            cmd_str,
+            "Error".underline().red(),
+            e
+        )
+    })?;
+
+    let log_path = {
+        let mut rng = rand::thread_rng();
+        let log_dir = test.get_base_dir(Who::NonValidator).join("logs");
+        std::fs::create_dir_all(&log_dir)?;
+        log_dir.join(format!(
+            "{}-cosmos-{}.log",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_micros(),
+            rng.gen::<u64>()
+        ))
+    };
+    let logger = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&log_path)?;
+    let mut session = expectrl::session::log(session, logger).unwrap();
+
+    session.set_expect_timeout(timeout_sec.map(std::time::Duration::from_secs));
+
+    let cmd_process = NamadaCmd {
+        session,
+        cmd_str,
+        log_path,
+    };
+
+    println!("{}:\n{}", "> Running".underline().green(), &cmd_process);
+
+    Ok(cmd_process)
 }
 
 pub fn run_cosmos_cmd<I, S>(
@@ -1601,10 +1826,10 @@ pub mod constants {
     pub const APFEL: &str = "Apfel";
     pub const KARTOFFEL: &str = "Kartoffel";
 
-    // Gaia or CosmWasm
+    // Gaia or CosmWasm or Osmosis
     pub const GAIA_CHAIN_ID: &str = "gaia";
+    pub const OSMOSIS_CHAIN_ID: &str = "osmosis";
     pub const COSMWASM_CHAIN_ID: &str = "cosmwasm";
-    pub const COSMOS_RPC: &str = "127.0.0.1:64160";
     pub const COSMOS_USER: &str = "user";
     pub const COSMOS_RELAYER: &str = "relayer";
     pub const COSMOS_VALIDATOR: &str = "validator";
