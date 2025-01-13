@@ -45,6 +45,9 @@ konst.workspace = true
 linkme = {workspace = true, optional = true}
 ibc.workspace = true
 ibc-derive.workspace = true
+ibc-middleware-module.workspace = true
+ibc-middleware-module-macros.workspace = true
+ibc-middleware-overflow-receive.workspace = true
 ibc-middleware-packet-forward.workspace = true
 ibc-testkit = {workspace = true, optional = true}
 ics23.workspace = true

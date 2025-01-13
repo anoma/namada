@@ -554,6 +554,9 @@ impl Authorization {
             // keys that are also in the given map
             Signer::PubKeys(pks) => {
                 let hash = self.get_raw_hash();
+                if pks.len() > usize::from(u8::MAX) {
+                    return Err(VerifySigError::PksOverflow);
+                }
                 for (idx, pk) in pks.iter().enumerate() {
                     let map_idx =
                         public_keys_index_map.get_index_from_public_key(pk);
