@@ -227,6 +227,59 @@ impl TryFrom<IbcMsgNftTransfer> for IbcTransferInfo {
     }
 }
 
+struct ReceiveInfo {
+    ibc_traces: Vec<String>,
+    amount: Amount,
+    receiver: String,
+}
+
+fn recv_info_from_packet(
+    packet: &Packet,
+    is_src_chain: bool,
+) -> Result<ReceiveInfo, StorageError> {
+    let port_id = if is_src_chain {
+        &packet.port_id_on_a
+    } else {
+        &packet.port_id_on_b
+    };
+    match port_id.as_str() {
+        FT_PORT_ID_STR => {
+            let packet_data =
+                serde_json::from_slice::<PacketData>(&packet.data)
+                    .into_storage_result()?;
+            let receiver = packet_data.receiver.to_string();
+            let ibc_denom = packet_data.token.denom.to_string();
+            let amount =
+                packet_data.token.amount.try_into().into_storage_result()?;
+            Ok(ReceiveInfo {
+                ibc_traces: vec![ibc_denom],
+                amount,
+                receiver,
+            })
+        }
+        NFT_PORT_ID_STR => {
+            let packet_data =
+                serde_json::from_slice::<NftPacketData>(&packet.data)
+                    .map_err(StorageError::new)?;
+            let receiver = packet_data.receiver.to_string();
+            let ibc_traces = packet_data
+                .token_ids
+                .0
+                .iter()
+                .map(|token_id| {
+                    ibc_trace_for_nft(&packet_data.class_id, token_id)
+                })
+                .collect();
+            Ok(ReceiveInfo {
+                ibc_traces,
+                amount: Amount::from_u64(1),
+                receiver,
+            })
+        }
+        _ => Err(StorageError::new_const("Invalid packet port: {packet}")),
+    }
+}
+
 /// IBC storage `Keys/Read/Write` implementation
 #[derive(Debug)]
 pub struct Store<S>(PhantomData<S>);
@@ -317,150 +370,40 @@ where
             }
             Some(IbcMessage::Envelope(envelope)) => match *envelope {
                 MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
-                    let recv_info = match msg.packet.port_id_on_b.as_str() {
-                        FT_PORT_ID_STR => {
-                            let packet_data =
-                                serde_json::from_slice::<PacketData>(
-                                    &msg.packet.data,
-                                )
-                                .map_err(StorageError::new)?;
-                            let receiver = packet_data.receiver.to_string();
-                            let ibc_denom = packet_data.token.denom.to_string();
-                            let amount = packet_data
-                                .token
-                                .amount
-                                .try_into()
-                                .into_storage_result()?;
-                            Some((receiver, vec![ibc_denom], amount))
-                        }
-                        NFT_PORT_ID_STR => {
-                            let packet_data =
-                                serde_json::from_slice::<NftPacketData>(
-                                    &msg.packet.data,
-                                )
-                                .map_err(StorageError::new)?;
-                            let receiver = packet_data.receiver.to_string();
-                            let ibc_traces = packet_data
-                                .token_ids
-                                .0
-                                .iter()
-                                .map(|token_id| {
-                                    ibc_trace_for_nft(
-                                        &packet_data.class_id,
-                                        token_id,
-                                    )
-                                })
-                                .collect();
-                            Some((receiver, ibc_traces, Amount::from_u64(1)))
-                        }
-                        _ => None,
-                    };
-                    if let Some((receiver, ibc_traces, amount)) = recv_info {
-                        let addr = TAddrData::Ibc(receiver.clone());
-                        accum.decoder.insert(ibc_taddr(receiver), addr);
-                        accum = apply_recv_msg(
-                            storage,
-                            accum,
-                            &msg,
-                            ibc_traces,
-                            amount,
-                            keys_changed,
-                        )?;
-                    }
+                    let recv_info = recv_info_from_packet(&msg.packet, false)
+                        .map_err(StorageError::new)?;
+                    let addr = TAddrData::Ibc(recv_info.receiver.clone());
+                    accum.decoder.insert(ibc_taddr(recv_info.receiver), addr);
+                    accum = apply_recv_msg(
+                        storage,
+                        accum,
+                        &msg,
+                        recv_info.ibc_traces,
+                        recv_info.amount,
+                        keys_changed,
+                    )?;
                 }
                 MsgEnvelope::Packet(PacketMsg::Ack(msg)) => {
-                    let refund_info = match msg.packet.port_id_on_a.as_str() {
-                        FT_PORT_ID_STR => {
-                            let packet_data =
-                                serde_json::from_slice::<PacketData>(
-                                    &msg.packet.data,
-                                )
-                                .map_err(StorageError::new)?;
-                            let ibc_denom = packet_data.token.denom.to_string();
-                            let amount = packet_data
-                                .token
-                                .amount
-                                .try_into()
-                                .into_storage_result()?;
-                            Some((vec![ibc_denom], amount))
-                        }
-                        NFT_PORT_ID_STR => {
-                            let packet_data =
-                                serde_json::from_slice::<NftPacketData>(
-                                    &msg.packet.data,
-                                )
-                                .map_err(StorageError::new)?;
-                            let ibc_traces = packet_data
-                                .token_ids
-                                .0
-                                .iter()
-                                .map(|token_id| {
-                                    ibc_trace_for_nft(
-                                        &packet_data.class_id,
-                                        token_id,
-                                    )
-                                })
-                                .collect();
-                            Some((ibc_traces, Amount::from_u64(1)))
-                        }
-                        _ => None,
-                    };
-                    if let Some((ibc_traces, amount)) = refund_info {
-                        accum = apply_refund_msg(
-                            accum,
-                            &msg.packet.port_id_on_a,
-                            &msg.packet.chan_id_on_a,
-                            ibc_traces,
-                            amount,
-                        )?;
-                    }
+                    let refund_info = recv_info_from_packet(&msg.packet, true)
+                        .map_err(StorageError::new)?;
+                    accum = apply_refund_msg(
+                        accum,
+                        &msg.packet.port_id_on_a,
+                        &msg.packet.chan_id_on_a,
+                        refund_info.ibc_traces,
+                        refund_info.amount,
+                    )?;
                 }
                 MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => {
-                    let refund_info = match msg.packet.port_id_on_a.as_str() {
-                        FT_PORT_ID_STR => {
-                            let packet_data =
-                                serde_json::from_slice::<PacketData>(
-                                    &msg.packet.data,
-                                )
-                                .map_err(StorageError::new)?;
-                            let ibc_denom = packet_data.token.denom.to_string();
-                            let amount = packet_data
-                                .token
-                                .amount
-                                .try_into()
-                                .into_storage_result()?;
-                            Some((vec![ibc_denom], amount))
-                        }
-                        NFT_PORT_ID_STR => {
-                            let packet_data =
-                                serde_json::from_slice::<NftPacketData>(
-                                    &msg.packet.data,
-                                )
-                                .map_err(StorageError::new)?;
-                            let ibc_traces = packet_data
-                                .token_ids
-                                .0
-                                .iter()
-                                .map(|token_id| {
-                                    ibc_trace_for_nft(
-                                        &packet_data.class_id,
-                                        token_id,
-                                    )
-                                })
-                                .collect();
-                            Some((ibc_traces, Amount::from_u64(1)))
-                        }
-                        _ => None,
-                    };
-                    if let Some((ibc_traces, amount)) = refund_info {
-                        accum = apply_refund_msg(
-                            accum,
-                            &msg.packet.port_id_on_a,
-                            &msg.packet.chan_id_on_a,
-                            ibc_traces,
-                            amount,
-                        )?;
-                    }
+                    let refund_info = recv_info_from_packet(&msg.packet, true)
+                        .map_err(StorageError::new)?;
+                    accum = apply_refund_msg(
+                        accum,
+                        &msg.packet.port_id_on_a,
+                        &msg.packet.chan_id_on_a,
+                        refund_info.ibc_traces,
+                        refund_info.amount,
+                    )?;
                 }
                 _ => {}
             },
