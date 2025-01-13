@@ -1239,10 +1239,12 @@ pub fn sleep(seconds: u64) {
     thread::sleep(time::Duration::from_secs(seconds));
 }
 
-pub fn setup_hermes(test_a: &Test, test_b: &Test) -> Result<()> {
+pub fn setup_hermes(test_a: &Test, test_b: &Test) -> Result<TestDir> {
+    let hermes_dir = TestDir::new();
+
     println!("\n{}", "Setting up Hermes".underline().green(),);
 
-    make_hermes_config(test_a, test_b)?;
+    make_hermes_config(&hermes_dir, test_a, test_b)?;
 
     for test in [test_a, test_b] {
         let chain_id = test.net.chain_id.as_str();
@@ -1255,20 +1257,24 @@ pub fn setup_hermes(test_a: &Test, test_b: &Test) -> Result<()> {
         let args = [
             "keys",
             "add",
+            // TODO: this overwrite is required because hermes keys are pulled
+            // from the namada chain dir... however, ideally we would store the
+            // `wallet.toml` file under hermes' own dir
+            "--overwrite",
             "--chain",
             chain_id,
             "--key-file",
             &key_file_path.to_string_lossy(),
         ];
-        let mut hermes = run_hermes_cmd(test, args, Some(20))?;
+        let mut hermes = run_hermes_cmd(&hermes_dir, args, Some(20))?;
         hermes.assert_success();
     }
 
-    Ok(())
+    Ok(hermes_dir)
 }
 
 pub fn run_hermes_cmd<I, S>(
-    test: &Test,
+    hermes_dir: &TestDir,
     args: I,
     timeout_sec: Option<u64>,
 ) -> Result<NamadaCmd>
@@ -1277,7 +1283,8 @@ where
     S: AsRef<OsStr>,
 {
     let mut run_cmd = Command::new("hermes");
-    let hermes_dir = test.test_dir.as_ref().join("hermes");
+    let hermes_dir: &Path = hermes_dir.as_ref();
+    let hermes_dir = hermes_dir.join("hermes");
     run_cmd.current_dir(hermes_dir.clone());
     let config_path = hermes_dir.join("config.toml");
     run_cmd.args(["--config", &config_path.to_string_lossy()]);
@@ -1300,7 +1307,7 @@ where
 
     let log_path = {
         let mut rng = rand::thread_rng();
-        let log_dir = test.get_base_dir(Who::NonValidator).join("logs");
+        let log_dir = hermes_dir.join("logs");
         std::fs::create_dir_all(&log_dir)?;
         log_dir.join(format!(
             "{}-hermes-{}.log",
@@ -1332,37 +1339,54 @@ where
 
 #[derive(Clone, Copy, Debug)]
 pub enum CosmosChainType {
-    Gaia,
+    Gaia(Option<u64>),
     CosmWasm,
 }
 
 impl CosmosChainType {
-    pub fn chain_id(&self) -> &str {
+    pub fn chain_id(&self) -> String {
         match self {
-            Self::Gaia => constants::GAIA_CHAIN_ID,
-            Self::CosmWasm => constants::COSMWASM_CHAIN_ID,
+            Self::Gaia(Some(suffix)) => {
+                format!("{}{}", constants::GAIA_CHAIN_ID, suffix)
+            }
+            Self::Gaia(_) => constants::GAIA_CHAIN_ID.to_string(),
+            Self::CosmWasm => constants::COSMWASM_CHAIN_ID.to_string(),
         }
     }
 
     pub fn command_path(&self) -> &str {
         match self {
-            Self::Gaia => "gaiad",
+            Self::Gaia(_) => "gaiad",
             Self::CosmWasm => "wasmd",
         }
     }
 
     pub fn chain_type(chain_id: &str) -> Result<Self> {
-        match chain_id {
-            constants::GAIA_CHAIN_ID => Ok(Self::Gaia),
-            constants::COSMWASM_CHAIN_ID => Ok(Self::CosmWasm),
-            _ => Err(eyre!(format!("Unexpected Cosmos chain ID: {chain_id}"))),
+        if chain_id == constants::COSMWASM_CHAIN_ID {
+            return Ok(Self::CosmWasm);
+        }
+        match chain_id.strip_prefix(constants::GAIA_CHAIN_ID) {
+            Some("") => Ok(Self::Gaia(None)),
+            Some(suffix) => {
+                Ok(Self::Gaia(Some(suffix.parse().map_err(|_| {
+                    eyre!("Unexpected Cosmos chain ID: {chain_id}")
+                })?)))
+            }
+            _ => Err(eyre!("Unexpected Cosmos chain ID: {chain_id}")),
         }
     }
 
     pub fn account_prefix(&self) -> &str {
         match self {
-            Self::Gaia => "cosmos",
+            Self::Gaia(_) => "cosmos",
             Self::CosmWasm => "wasm",
+        }
+    }
+
+    pub fn get_offset(&self) -> u64 {
+        match self {
+            Self::Gaia(Some(off)) => *off,
+            _ => 0,
         }
     }
 }
@@ -1371,7 +1395,7 @@ pub fn setup_cosmos(chain_type: CosmosChainType) -> Result<Test> {
     let working_dir = working_dir();
     let test_dir = TestDir::new();
     let chain_id = chain_type.chain_id();
-    let cosmos_dir = test_dir.as_ref().join(chain_id);
+    let cosmos_dir = test_dir.as_ref().join(&chain_id);
     let net = Network {
         chain_id: ChainId(chain_id.to_string()),
     };
@@ -1383,7 +1407,7 @@ pub fn setup_cosmos(chain_type: CosmosChainType) -> Result<Test> {
     };
 
     // initialize
-    let args = ["--chain-id", chain_id, "init", chain_id];
+    let args = ["--chain-id", &chain_id, "init", &chain_id];
     let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
     cosmos.assert_success();
 
@@ -1448,7 +1472,7 @@ pub fn setup_cosmos(chain_type: CosmosChainType) -> Result<Test> {
         "--keyring-backend",
         "test",
         "--chain-id",
-        chain_id,
+        &chain_id,
     ];
     let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
     cosmos.assert_success();
@@ -1580,7 +1604,7 @@ pub mod constants {
     // Gaia or CosmWasm
     pub const GAIA_CHAIN_ID: &str = "gaia";
     pub const COSMWASM_CHAIN_ID: &str = "cosmwasm";
-    pub const COSMOS_RPC: &str = "127.0.0.1:26657";
+    pub const COSMOS_RPC: &str = "127.0.0.1:64160";
     pub const COSMOS_USER: &str = "user";
     pub const COSMOS_RELAYER: &str = "relayer";
     pub const COSMOS_VALIDATOR: &str = "validator";

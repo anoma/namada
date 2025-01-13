@@ -40,10 +40,12 @@ namada_vp = { path = "../vp" }
 arbitrary = { workspace = true, optional = true }
 borsh.workspace = true
 data-encoding.workspace = true
+dur.workspace = true
 konst.workspace = true
 linkme = {workspace = true, optional = true}
 ibc.workspace = true
 ibc-derive.workspace = true
+ibc-middleware-packet-forward.workspace = true
 ibc-testkit = {workspace = true, optional = true}
 ics23.workspace = true
 masp_primitives.workspace = true
