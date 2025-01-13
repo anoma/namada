@@ -82,6 +82,9 @@ use crate::tendermint::{self, validator};
 use crate::tendermint_proto::crypto::public_key;
 use crate::{protocol, storage, tendermint_node};
 
+/// A cap on a number of tx sections
+pub const MAX_TX_SECTIONS_LEN: usize = 10_000;
+
 fn key_to_tendermint(
     pk: &common::PublicKey,
 ) -> std::result::Result<public_key::Sum, ParsePublicKeyError> {
@@ -1091,6 +1094,17 @@ where
             return response;
         }
 
+        // Tx section count check
+        #[cfg(any(test, not(feature = "benches")))]
+        if tx.sections.len() > MAX_TX_SECTIONS_LEN {
+            response.code = ResultCode::InvalidTx.into();
+            response.log = format!(
+                "{INVALID_MSG}: Tx contains more than {MAX_TX_SECTIONS_LEN} \
+                 sections."
+            );
+            return response;
+        }
+
         // Tx expiration
         if let Some(exp) = tx.header.expiration {
             let last_block_timestamp = self
@@ -1256,9 +1270,11 @@ where
                 let mut gas_meter = TxGasMeter::new(gas_limit);
                 if gas_meter.add_wrapper_gas(tx_bytes).is_err() {
                     response.code = ResultCode::TxGasLimit.into();
-                    response.log = "{INVALID_MSG}: Wrapper transaction \
-                                    exceeds its gas limit"
-                        .to_string();
+                    response.log = format!(
+                        "{INVALID_MSG}: Wrapper transaction exceeds its gas \
+                         limit"
+                    )
+                    .to_string();
                     return response;
                 }
 

@@ -6857,11 +6857,22 @@ pub mod args {
                 query,
                 output_folder: self.output_folder,
                 target: chain_ctx.get(&self.target),
-                token: self.token,
                 amount: self.amount,
                 expiration: self.expiration,
-                port_id: self.port_id,
-                channel_id: self.channel_id,
+                asset: match self.asset {
+                    IbcShieldingTransferAsset::LookupNamadaAddress {
+                        port_id,
+                        channel_id,
+                        token,
+                    } => IbcShieldingTransferAsset::LookupNamadaAddress {
+                        port_id,
+                        channel_id,
+                        token,
+                    },
+                    IbcShieldingTransferAsset::Address(addr) => {
+                        IbcShieldingTransferAsset::Address(chain_ctx.get(&addr))
+                    }
+                },
             })
         }
     }
@@ -6890,11 +6901,13 @@ pub mod args {
                 query,
                 output_folder,
                 target,
-                token,
                 amount,
                 expiration,
-                port_id,
-                channel_id,
+                asset: IbcShieldingTransferAsset::LookupNamadaAddress {
+                    port_id,
+                    channel_id,
+                    token,
+                },
             }
         }
 

@@ -11,6 +11,7 @@ use namada_core::address::{self, Address, ESTABLISHED_ADDRESS_BYTES_LEN};
 use namada_core::arith::checked;
 use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
 use namada_core::chain::BlockHeight;
+use namada_core::collections::HashSet;
 use namada_core::decode;
 use namada_core::hash::Hash;
 use namada_core::internal::{HostEnvResult, KeyVal};
@@ -1968,7 +1969,7 @@ where
     let tx = unsafe { env.ctx.tx.get() };
 
     match tx.verify_signatures(
-        &hashes,
+        &HashSet::from_iter(hashes),
         public_keys_map,
         &Some(signer),
         threshold,
@@ -2124,7 +2125,7 @@ where
 
     let (gas_meter, sentinel) = env.ctx.gas_meter_and_sentinel();
     match tx.verify_signatures(
-        &hashes,
+        &HashSet::from_iter(hashes),
         public_keys_map,
         &None,
         threshold,

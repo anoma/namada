@@ -30,6 +30,8 @@ pub enum VerifySigError {
     InvalidSectionSignature(String),
     #[error("The number of PKs overflows u8::MAX")]
     PksOverflow,
+    #[error("Authorization contains repeated public keys")]
+    RepeatedPks,
     #[error("An expected signature is missing.")]
     MissingSignature,
 }
