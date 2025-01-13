@@ -41,6 +41,7 @@ use namada_sdk::ibc::core::host::types::identifiers::{
 use namada_sdk::ibc::primitives::proto::Any;
 use namada_sdk::ibc::storage::*;
 use namada_sdk::ibc::trace::ibc_token;
+use namada_sdk::ibc::IbcShieldingData;
 use namada_sdk::token::Amount;
 use namada_test_utils::TestWasms;
 use prost::Message;
@@ -140,6 +141,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
+        None,
         false,
     )?;
     wait_for_packet_relay(
@@ -214,6 +216,7 @@ fn ibc_transfers() -> Result<()> {
         Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
+        None,
         None,
         None,
         None,
@@ -299,6 +302,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
+        None,
         true,
     )?;
     wait_for_packet_relay(
@@ -353,6 +357,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
+        None,
         false,
     )?;
     wait_for_packet_relay(
@@ -379,6 +384,7 @@ fn ibc_transfers() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
         Some(Duration::new(10, 0)),
+        None,
         None,
         None,
         false,
@@ -413,6 +419,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
+        None,
         true,
     )?;
     wait_for_packet_relay(
@@ -441,6 +448,7 @@ fn ibc_transfers() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
         Some(Duration::new(10, 0)),
+        None,
         None,
         None,
         true,
@@ -605,6 +613,7 @@ fn ibc_nft_transfers() -> Result<()> {
         None,
         None,
         None,
+        None,
         false,
     )?;
     clear_packet(&hermes_dir, &port_id_namada, &channel_id_namada, &test)?;
@@ -665,6 +674,7 @@ fn ibc_nft_transfers() -> Result<()> {
         Some(BERTHA_KEY),
         &port_id_namada,
         &channel_id_namada,
+        None,
         None,
         None,
         None,
@@ -1110,6 +1120,7 @@ fn ibc_rate_limit() -> Result<()> {
         None,
         None,
         None,
+        None,
         false,
     )?;
 
@@ -1129,6 +1140,7 @@ fn ibc_rate_limit() -> Result<()> {
         Some(
             "Transfer exceeding the per-epoch throughput limit is not allowed",
         ),
+        None,
         false,
     )?;
 
@@ -1149,6 +1161,7 @@ fn ibc_rate_limit() -> Result<()> {
         Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
+        None,
         None,
         None,
         None,
@@ -1188,6 +1201,81 @@ fn ibc_rate_limit() -> Result<()> {
     check_balance(&test, ALBERT, token_addr, 0)?;
 
     Ok(())
+}
+
+/// Create a packet forward memo and serialize it
+fn packet_forward_memo(
+    receiver: Signer,
+    port_id: &PortId,
+    channel_id: &ChannelId,
+    timeout: Option<Duration>,
+    next: Option<serde_json::Map<String, serde_json::Value>>,
+) -> String {
+    serde_json::to_string(&serde_json::Value::Object(
+        packet_forward_memo_value(receiver, port_id, channel_id, timeout, next),
+    ))
+    .expect("Test failed")
+}
+
+fn packet_forward_memo_value(
+    receiver: Signer,
+    port_id: &PortId,
+    channel_id: &ChannelId,
+    timeout: Option<Duration>,
+    next: Option<serde_json::Map<String, serde_json::Value>>,
+) -> serde_json::Map<String, serde_json::Value> {
+    let value =
+        serde_json::to_value(&ibc_middleware_packet_forward::PacketMetadata {
+            forward: ForwardMetadata {
+                receiver,
+                port: port_id.clone(),
+                channel: channel_id.clone(),
+                timeout: timeout.map(|t| {
+                    ibc_middleware_packet_forward::Duration::from_dur(
+                        dur::Duration::from_std(t),
+                    )
+                }),
+                retries: Some(0),
+                next,
+            },
+        })
+        .expect("Test failed");
+
+    if let serde_json::Value::Object(memo) = value {
+        memo
+    } else {
+        unreachable!()
+    }
+}
+
+#[allow(dead_code)]
+fn shielded_recv_memo_value(
+    masp_transfer_path: &Path,
+    shielded_amount: Amount,
+    overflow_receiver: namada_core::address::Address,
+) -> serde_json::Map<String, serde_json::Value> {
+    use namada_core::string_encoding::StringEncoded;
+    use namada_sdk::ibc::{NamadaMemo, NamadaMemoData};
+
+    let transfer =
+        std::fs::read_to_string(masp_transfer_path).expect("Test failed");
+    let tx = StringEncoded::new(
+        IbcShieldingData::from_str(&transfer).expect("Test failed"),
+    );
+    let data = NamadaMemoData::OsmosisSwap {
+        shielding_data: tx,
+        shielded_amount,
+        overflow_receiver,
+    };
+
+    let value = serde_json::to_value(&NamadaMemo { namada: data })
+        .expect("Test failed");
+
+    if let serde_json::Value::Object(memo) = value {
+        memo
+    } else {
+        unreachable!()
+    }
 }
 
 /// Test the happy flows of ibc pfm
@@ -1266,6 +1354,7 @@ fn ibc_pfm_happy_flows() -> Result<()> {
         &port_id_namada,
         &channel_id_namada_2,
         None,
+        None,
     );
     transfer_from_cosmos(
         &test_gaia_1,
@@ -1312,6 +1401,7 @@ fn ibc_pfm_happy_flows() -> Result<()> {
         find_cosmos_address(&test_gaia_1, COSMOS_USER)?.into(),
         &port_id_namada,
         &channel_id_namada_1,
+        None,
         None,
     );
     transfer_from_cosmos(
@@ -1361,6 +1451,7 @@ fn ibc_pfm_happy_flows() -> Result<()> {
         None,
         None,
         None,
+        None,
         false,
     )?;
 
@@ -1385,6 +1476,7 @@ fn ibc_pfm_happy_flows() -> Result<()> {
         find_cosmos_address(&test_gaia_2, COSMOS_USER)?.into(),
         &port_id_namada,
         &channel_id_namada_2,
+        None,
         None,
     );
 
@@ -1436,6 +1528,7 @@ fn ibc_pfm_happy_flows() -> Result<()> {
         &port_id_namada,
         &channel_id_namada_1,
         None,
+        None,
     );
     transfer_from_cosmos(
         &test_gaia_2,
@@ -1472,6 +1565,7 @@ fn ibc_pfm_happy_flows() -> Result<()> {
 
     Ok(())
 }
+
 /// Test the flows of ibc pfm where the packet cannot be
 /// completed and refunds must be issued.
 ///
@@ -1560,6 +1654,7 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
         &port_id_namada,
         &channel_id_namada_2,
         None,
+        None,
     );
     transfer_from_cosmos(
         &test_gaia_1,
@@ -1595,6 +1690,7 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
         &port_id_namada,
         &channel_id_namada_2,
         Some(Duration::new(1, 0)),
+        None,
     );
     // Stop Hermes for timeout test
     let mut hermes_2 = bg_hermes_2.foreground();
@@ -1652,6 +1748,7 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
         None,
         None,
         None,
+        None,
         false,
     )?;
 
@@ -1676,6 +1773,7 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
         "Hodor".to_string().into(),
         &port_id_namada,
         &channel_id_namada_2,
+        None,
         None,
     );
     transfer_from_cosmos(
@@ -1717,6 +1815,7 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
         &port_id_namada,
         &channel_id_namada_2,
         Some(Duration::new(1, 0)),
+        None,
     );
     // Stop Hermes for timeout test
     let mut hermes_2 = bg_hermes_2.foreground();
@@ -1770,6 +1869,7 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
         &port_id_namada,
         &channel_id_namada_1,
         None,
+        None,
     );
     transfer_from_cosmos(
         &test_gaia_2,
@@ -1807,6 +1907,7 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
         "Hodor".to_string().into(),
         &port_id_namada,
         &channel_id_namada_2,
+        None,
         None,
     );
     transfer_from_cosmos(
@@ -1853,6 +1954,7 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
         &port_id_namada,
         &channel_id_namada_2,
         Some(Duration::new(1, 0)),
+        None,
     );
     // Stop Hermes for timeout test
     let mut hermes_2 = bg_hermes_2.foreground();
@@ -2144,6 +2246,7 @@ fn try_invalid_transfers(
         None,
         // the IBC denom can't be parsed when using an invalid port
         Some(&format!("Invalid IBC denom: {nam_addr}")),
+        None,
         false,
     )?;
 
@@ -2160,6 +2263,7 @@ fn try_invalid_transfers(
         None,
         None,
         Some("IBC token transfer error: context error: `ICS04 Channel error"),
+        None,
         false,
     )?;
 
@@ -2215,6 +2319,7 @@ fn transfer(
     timeout_sec: Option<Duration>,
     shielding_data_path: Option<PathBuf>,
     expected_err: Option<&str>,
+    ibc_memo: Option<&str>,
     gen_refund_target: bool,
 ) -> Result<u32> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
@@ -2241,6 +2346,10 @@ fn transfer(
         "--node",
         &rpc,
     ]);
+
+    if let Some(ibc_memo) = ibc_memo {
+        tx_args.extend_from_slice(&["--ibc-memo", ibc_memo]);
+    }
 
     if let Some(signer) = signer {
         tx_args.extend_from_slice(&["--signing-keys", signer]);
@@ -3193,28 +3302,4 @@ fn nft_transfer_from_cosmos(
     sleep(1);
 
     Ok(())
-}
-
-/// Create a packet forward memo and serialize it
-fn packet_forward_memo(
-    receiver: Signer,
-    port_id: &PortId,
-    channel_id: &ChannelId,
-    timeout: Option<Duration>,
-) -> String {
-    serde_json::to_string(&ibc_middleware_packet_forward::PacketMetadata {
-        forward: ForwardMetadata {
-            receiver,
-            port: port_id.clone(),
-            channel: channel_id.clone(),
-            timeout: timeout.map(|t| {
-                ibc_middleware_packet_forward::Duration::from_dur(
-                    dur::Duration::from_std(t),
-                )
-            }),
-            retries: Some(0),
-            next: None,
-        },
-    })
-    .expect("Test failed")
 }
