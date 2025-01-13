@@ -8,7 +8,6 @@ use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use itertools::Either;
-use namada_sdk::account::AccountPublicKeysMap;
 use namada_sdk::address::{Address, ImplicitAddress};
 use namada_sdk::args::DeviceTransport;
 use namada_sdk::borsh::BorshSerializeExt;
@@ -16,9 +15,10 @@ use namada_sdk::chain::ChainId;
 use namada_sdk::dec::Dec;
 use namada_sdk::ibc::trace::ibc_token;
 use namada_sdk::key::*;
+use namada_sdk::signing::OfflineSignatures;
 use namada_sdk::string_encoding::StringEncoded;
 use namada_sdk::token;
-use namada_sdk::tx::{Authorization, Tx};
+use namada_sdk::tx::Tx;
 use namada_sdk::uint::Uint;
 use namada_sdk::wallet::{alias, LoadStoreError, Wallet};
 use namada_vm::validate_untrusted_wasm;
@@ -1035,7 +1035,7 @@ pub async fn sign_genesis_tx(
     }
 }
 
-/// Offline sign a transactions.
+/// Sign a transaction offline
 pub async fn sign_offline(
     args::SignOffline {
         tx_path,
@@ -1060,15 +1060,23 @@ pub async fn sign_offline(
             safe_exit(1)
         };
 
-    let account_public_keys_map = AccountPublicKeysMap::from_iter(
-        secret_keys.iter().map(|sk| sk.to_public()),
-    );
-
-    let signatures = tx.compute_section_signature(
-        &secret_keys,
-        &account_public_keys_map,
+    let OfflineSignatures {
+        signatures,
+        wrapper_signature,
+    } = match namada_sdk::signing::sign_offline(
+        &mut tx,
+        secret_keys,
         owner,
-    );
+        wrapper_signer,
+    )
+    .await
+    {
+        Ok(sigs) => sigs,
+        Err(e) => {
+            eprintln!("Couldn't generate offline signatures: {}", e);
+            safe_exit(1);
+        }
+    };
 
     for signature in &signatures {
         let filename = format!(
@@ -1094,42 +1102,24 @@ pub async fn sign_offline(
         );
     }
 
-    // Generate wrapper signature if requested
-    if let Some(wrapper_signer) = wrapper_signer {
-        if tx.header.wrapper().is_some() {
-            // Wrapper signature must be computed over the raw signatures too
-            tx.add_signatures(signatures);
-            tx.protocol_filter();
-            let wrapper_signature = Authorization::new(
-                tx.sechashes(),
-                [(0, wrapper_signer)].into_iter().collect(),
-                None,
-            );
+    // Dump wrapper signature if requested
+    if let Some(wrapper_signature) = wrapper_signature {
+        let filename = format!(
+            "offline_wrapper_signature_{}.sig",
+            tx.header_hash().to_string().to_lowercase()
+        );
+        let signature_path = match output_folder_path {
+            Some(ref path) => path.join(filename).to_string_lossy().to_string(),
+            None => filename,
+        };
 
-            let filename = format!(
-                "offline_wrapper_signature_{}.sig",
-                tx.header_hash().to_string().to_lowercase()
-            );
-            let signature_path = match output_folder_path {
-                Some(ref path) => {
-                    path.join(filename).to_string_lossy().to_string()
-                }
-                None => filename,
-            };
+        let signature_file = File::create(&signature_path)
+            .expect("Should be able to create signature file.");
 
-            let signature_file = File::create(&signature_path)
-                .expect("Should be able to create signature file.");
+        serde_json::to_writer_pretty(signature_file, &wrapper_signature)
+            .expect("Signature should be serializable.");
 
-            serde_json::to_writer_pretty(signature_file, &wrapper_signature)
-                .expect("Signature should be serializable.");
-
-            println!("Wrapper signature serialized at {}", signature_path);
-        } else {
-            eprintln!(
-                "A gas payer was provided but the transaction is not a wrapper"
-            );
-            safe_exit(1);
-        }
+        println!("Wrapper signature serialized at {}", signature_path);
     }
 }
 

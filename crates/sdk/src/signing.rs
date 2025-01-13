@@ -37,7 +37,7 @@ use namada_token::storage_key::balance_key;
 use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::pos::BecomeValidator;
 use namada_tx::data::{pos, Fee};
-use namada_tx::{MaspBuilder, Section, SignatureIndex, Tx};
+use namada_tx::{Authorization, MaspBuilder, Section, SignatureIndex, Tx};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -432,6 +432,66 @@ pub async fn aux_signing_data(
         account_public_keys_map,
         fee_payer,
         shielded_hash: None,
+    })
+}
+
+/// The offline transaction's signatures produced via the offline signing
+/// procedure
+pub struct OfflineSignatures {
+    /// Inner txs' signatures
+    pub signatures: Vec<SignatureIndex>,
+    /// Wrapper signature
+    pub wrapper_signature: Option<Authorization>,
+}
+
+/// Sign a transaction offline. This allows to sign both the inner transactions
+/// of the batch as well as the wrapper transaction. It also supports
+/// multisignature.
+pub async fn sign_offline(
+    tx: &mut Tx,
+    secret_keys: Vec<namada_core::key::common::SecretKey>,
+    owner: Option<Address>,
+    wrapper_signer: Option<namada_core::key::common::SecretKey>,
+) -> Result<OfflineSignatures, Error> {
+    let account_public_keys_map = AccountPublicKeysMap::from_iter(
+        secret_keys.iter().map(|sk| sk.to_public()),
+    );
+
+    // FIXME: does this work with the hardware wallet? It does not. Should it?
+    // yes absolutely
+    let signatures = tx.compute_section_signature(
+        &secret_keys,
+        &account_public_keys_map,
+        owner,
+    );
+
+    // Generate wrapper signature if requested
+    let wrapper_signature = wrapper_signer
+        .map(|wrapper_signer| {
+            // Depends if we want to return an error or not?
+            if tx.header.wrapper().is_some() {
+                // Wrapper signature must be computed over the raw signatures
+                // too
+                tx.add_signatures(signatures.clone());
+                tx.protocol_filter();
+                Ok(Authorization::new(
+                    tx.sechashes(),
+                    [(0, wrapper_signer)].into_iter().collect(),
+                    None,
+                ))
+            } else {
+                Err(Error::Other(
+                    "A gas payer was provided but the transaction is not a \
+                     wrapper"
+                        .to_string(),
+                ))
+            }
+        })
+        .transpose()?;
+
+    Ok(OfflineSignatures {
+        signatures,
+        wrapper_signature,
     })
 }
 
