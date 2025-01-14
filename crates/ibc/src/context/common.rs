@@ -451,6 +451,31 @@ pub trait IbcCommonContext: IbcStorageContext {
         self.store_sequence(&key, seq)
     }
 
+    /// Get the last NextSequenceSend
+    fn get_last_sequence_send(
+        &self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+    ) -> Result<Sequence> {
+        let next_seq: u64 =
+            self.get_next_sequence_send(port_id, channel_id)?.into();
+        if next_seq > 1 {
+            next_seq.checked_sub(1).map(|s| s.into()).ok_or_else(|| {
+                ChannelError::Other {
+                    description: "The SequenceSend underflow".to_string(),
+                }
+                .into()
+            })
+        } else {
+            Err(ChannelError::Other {
+                description: format!(
+                    "No IBC transfer happened: Port ID {port_id}, Channel ID \
+                     {channel_id}",
+                ),
+            })?
+        }
+    }
+
     /// Get the NextSequenceRecv
     fn get_next_sequence_recv(
         &self,
@@ -773,6 +798,19 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key =
             storage::refund_masp_tx_key(port_id, channel_id, sequence, epoch);
         self.storage().read(&key).map_err(ContextError::from)
+    }
+
+    /// Check the MASP shielding transaction for the shielded refund
+    fn has_refund_masp_tx(
+        &self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        sequence: Sequence,
+        epoch: MaspEpoch,
+    ) -> Result<bool> {
+        let key =
+            storage::refund_masp_tx_key(port_id, channel_id, sequence, epoch);
+        self.storage().has_key(&key).map_err(ContextError::from)
     }
 
     /// Write the MASP shielding transaction for the shielded refund

@@ -1,11 +1,13 @@
 //! IBC module for token transfer
 
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
+use ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
+use ibc::apps::nft_transfer::types::PORT_ID_STR as NFT_PORT_ID_STR;
 use ibc::apps::transfer::context::TokenTransferValidationContext;
 use ibc::apps::transfer::module::{
     on_acknowledgement_packet_execute, on_acknowledgement_packet_validate,
@@ -19,7 +21,10 @@ use ibc::apps::transfer::module::{
     on_timeout_packet_validate,
 };
 use ibc::apps::transfer::types::error::TokenTransferError;
-use ibc::apps::transfer::types::MODULE_ID_STR;
+use ibc::apps::transfer::types::packet::PacketData;
+use ibc::apps::transfer::types::{
+    MODULE_ID_STR, PORT_ID_STR as FT_PORT_ID_STR,
+};
 use ibc::core::channel::types::acknowledgement::{
     Acknowledgement, AcknowledgementStatus,
 };
@@ -31,12 +36,11 @@ use ibc::core::host::types::identifiers::{ChannelId, ConnectionId, PortId};
 use ibc::core::router::module::Module;
 use ibc::core::router::types::module::{ModuleExtras, ModuleId};
 use ibc::primitives::Signer;
-use namada_core::address::Address;
+use namada_core::address::{Address, MASP};
+use namada_core::masp::MaspEpoch;
+use namada_state::StorageRead;
 
-use crate::{
-    try_replace_sender_for_shielded_refund, IbcCommonContext,
-    IbcStorageContext, TokenTransferContext,
-};
+use crate::{IbcCommonContext, IbcStorageContext, TokenTransferContext};
 
 /// IBC module wrapper for getting the reference of the module
 pub trait ModuleWrapper: Module {
@@ -321,10 +325,10 @@ where
             if ack.is_successful() {
                 return None;
             }
-            try_replace_sender_for_shielded_refund::<
-                <C as IbcStorageContext>::Storage,
-                Params,
-            >(self.ctx.inner.borrow().storage(), packet)
+            try_replace_sender_for_shielded_refund::<_, Params>(
+                self.ctx.inner.borrow(),
+                packet,
+            )
         });
 
         let (extras, result) = match updated_packet {
@@ -358,11 +362,10 @@ where
         packet: &Packet,
         relayer: &Signer,
     ) -> (ModuleExtras, Result<(), PacketError>) {
-        let updated_packet =
-            try_replace_sender_for_shielded_refund::<
-                <C as IbcStorageContext>::Storage,
-                Params,
-            >(self.ctx.inner.borrow().storage(), packet);
+        let updated_packet = try_replace_sender_for_shielded_refund::<_, Params>(
+            self.ctx.inner.borrow(),
+            packet,
+        );
 
         let (extras, result) = if let Some(packet) = updated_packet {
             on_timeout_packet_execute(&mut self.ctx, &packet, relayer)
@@ -371,6 +374,56 @@ where
         };
         (extras, result.map_err(into_packet_error))
     }
+}
+
+/// Replace the sender address with the MASP address for a shielded refund
+pub(crate) fn try_replace_sender_for_shielded_refund<C, Params>(
+    ctx: Ref<'_, C>,
+    packet: &Packet,
+) -> Option<Packet>
+where
+    C: IbcCommonContext,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
+{
+    // Check if the refund MASP transaction for the current MASP epoch exists
+    let epoch = ctx.storage().get_block_epoch().ok()?;
+    let masp_epoch_multiplier =
+        Params::masp_epoch_multiplier(ctx.storage()).ok()?;
+    let masp_epoch =
+        MaspEpoch::try_from_epoch(epoch, masp_epoch_multiplier).ok()?;
+    if !ctx
+        .has_refund_masp_tx(
+            &packet.port_id_on_a,
+            &packet.chan_id_on_a,
+            packet.seq_on_a,
+            masp_epoch,
+        )
+        .ok()?
+    {
+        // The refund target is a transparent address or the MASP epoch in the
+        // MASP transaction is stale. The refund target is the sender.
+        return None;
+    }
+
+    let mut packet = packet.clone();
+    match packet.port_id_on_a.as_str() {
+        FT_PORT_ID_STR => {
+            let mut data: PacketData =
+                serde_json::from_slice(&packet.data).ok()?;
+            data.sender = MASP.to_string().into();
+            packet.data = serde_json::to_vec(&data)
+                .expect("Packet data should be encoded");
+        }
+        NFT_PORT_ID_STR => {
+            let mut data: NftPacketData =
+                serde_json::from_slice(&packet.data).ok()?;
+            data.sender = MASP.to_string().into();
+            packet.data = serde_json::to_vec(&data)
+                .expect("Packet data should be encoded");
+        }
+        _ => return None,
+    }
+    Some(packet)
 }
 
 fn into_channel_error(error: TokenTransferError) -> ChannelError {

@@ -13,11 +13,13 @@ use ibc::core::channel::types::msgs::PacketMsg;
 use ibc::core::channel::types::packet::Packet;
 use ibc::core::handler::types::msgs::MsgEnvelope;
 use ibc::core::host::types::identifiers::{ChannelId, PortId, Sequence};
-use ibc::primitives::proto::Protobuf;
+use ibc::primitives::proto::{Any, Protobuf};
+use ibc_middleware_packet_forward::PacketMetadata;
 use masp_primitives::transaction::Transaction as MaspTransaction;
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::masp::MaspEpoch;
 use namada_core::token::Amount;
+use prost::Message;
 
 use crate::trace::ibc_trace_for_nft;
 use crate::Error;
@@ -155,6 +157,46 @@ impl<Transfer: BorshSchema> BorshSchema for MsgNftTransfer<Transfer> {
     }
 }
 
+/// Tries to decode transaction data to an `IbcMessage`
+pub fn decode_message<Transfer: BorshDeserialize>(
+    tx_data: &[u8],
+) -> Result<IbcMessage<Transfer>, Error> {
+    // ibc-rs message
+    if let Ok(any_msg) = Any::decode(tx_data) {
+        if let Ok(envelope) = MsgEnvelope::try_from(any_msg.clone()) {
+            return Ok(IbcMessage::Envelope(Box::new(envelope)));
+        }
+        if let Ok(message) = IbcMsgTransfer::try_from(any_msg.clone()) {
+            let msg = MsgTransfer {
+                message,
+                transfer: None,
+                refund_masp_tx: None,
+            };
+            return Ok(IbcMessage::Transfer(Box::new(msg)));
+        }
+        if let Ok(message) = IbcMsgNftTransfer::try_from(any_msg) {
+            let msg = MsgNftTransfer {
+                message,
+                transfer: None,
+                refund_masp_tx: None,
+            };
+            return Ok(IbcMessage::NftTransfer(msg));
+        }
+    }
+
+    // Transfer message with `ShieldingTransfer`
+    if let Ok(msg) = MsgTransfer::<Transfer>::try_from_slice(tx_data) {
+        return Ok(IbcMessage::Transfer(Box::new(msg)));
+    }
+
+    // NFT transfer message with `ShieldingTransfer`
+    if let Ok(msg) = MsgNftTransfer::<Transfer>::try_from_slice(tx_data) {
+        return Ok(IbcMessage::NftTransfer(msg));
+    }
+
+    Err(Error::DecodingData)
+}
+
 /// Shielding data in IBC packet memo
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
 pub struct IbcShieldingData(pub MaspTransaction);
@@ -239,9 +281,12 @@ pub fn convert_masp_tx_to_ibc_memo(transaction: &MaspTransaction) -> String {
     IbcShieldingData(transaction.clone()).into()
 }
 
+pub(crate) fn is_packet_forward(data: &PacketData) -> bool {
+    serde_json::from_str::<PacketMetadata>(data.memo.as_ref()).is_ok()
+}
+
 /// IBC transfer info. for the MASP VP
-#[allow(missing_docs)]
-pub struct IbcTransferInfo {
+pub(crate) struct IbcTransferInfo {
     pub src_port_id: PortId,
     pub src_channel_id: ChannelId,
     pub ibc_traces: Vec<String>,
@@ -300,15 +345,14 @@ impl TryFrom<IbcMsgNftTransfer> for IbcTransferInfo {
 }
 
 /// Receiving token info
-#[allow(missing_docs)]
-pub struct ReceiveInfo {
+pub(crate) struct ReceiveInfo {
     pub ibc_traces: Vec<String>,
     pub amount: Amount,
     pub receiver: String,
 }
 
 /// Retrieve receiving token info
-pub fn recv_info_from_packet(
+pub(crate) fn recv_info_from_packet(
     packet: &Packet,
     is_src_chain: bool,
 ) -> Result<ReceiveInfo, Error> {

@@ -1,261 +1,426 @@
-//! Implementation of `IbcActions` with the protocol storage
-
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::rc::Rc;
+use std::str::FromStr;
 
 use borsh::BorshDeserialize;
-use ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
+use ibc::apps::nft_transfer::handler::{
+    send_nft_transfer_execute, send_nft_transfer_validate,
+};
+use ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
+use ibc::apps::nft_transfer::types::{
+    ack_success_b64, PORT_ID_STR as NFT_PORT_ID_STR,
+};
+use ibc::apps::transfer::handler::{
+    send_transfer_execute, send_transfer_validate,
+};
 use ibc::apps::transfer::types::packet::PacketData;
-use ibc::apps::transfer::types::PrefixedCoin;
-use ibc::core::channel::types::timeout::{TimeoutHeight, TimeoutTimestamp};
+use ibc::apps::transfer::types::PORT_ID_STR as FT_PORT_ID_STR;
+use ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
+use ibc::core::channel::types::commitment::compute_ack_commitment;
+use ibc::core::channel::types::msgs::{
+    MsgRecvPacket as IbcMsgRecvPacket, PacketMsg,
+};
+use ibc::core::entrypoint::{execute, validate};
+use ibc::core::handler::types::msgs::MsgEnvelope;
+use ibc::core::host::types::identifiers::{ChannelId, PortId};
+use masp_primitives::transaction::Transaction as MaspTransaction;
 use namada_core::address::Address;
-use namada_core::borsh::{BorshSerialize, BorshSerializeExt};
-use namada_core::chain::ChainId;
-use namada_core::ibc::PGFIbcTarget;
-use namada_core::tendermint::Time as TmTime;
-use namada_core::token::Amount;
-use namada_events::EmitEvents;
-use namada_state::{
-    BlockHeader, BlockHeight, Epoch, Epochs, Key, Result, ResultExt, State,
-    StorageRead, StorageWrite, TxIndex,
-};
-use namada_systems::{parameters, trans_token};
+use namada_core::masp::MaspEpoch;
+use namada_state::StorageRead;
+use namada_systems::trans_token;
 
-use crate::event::IbcEvent;
 use crate::{
-    storage as ibc_storage, IbcActions, IbcCommonContext, IbcStorageContext,
-    MsgTransfer,
+    decode_message, extract_masp_tx_from_packet, is_packet_forward, Error,
+    IbcCommonContext, IbcContext, IbcMessage, IbcRouter, ModuleWrapper,
+    NftTransferContext, NftTransferError, TokenTransferContext,
+    TokenTransferError, ValidationParams,
 };
 
-/// IBC protocol context
+/// IBC actions to handle IBC operations
 #[derive(Debug)]
-pub struct IbcProtocolContext<'a, S, Token> {
-    state: &'a mut S,
-    /// Marker for DI types
+pub struct IbcActions<'a, C, Params, Token>
+where
+    C: IbcCommonContext,
+{
+    ctx: IbcContext<C, Params>,
+    router: IbcRouter<'a>,
+    verifiers: Rc<RefCell<BTreeSet<Address>>>,
     _marker: PhantomData<Token>,
 }
 
-impl<S, Token> StorageRead for IbcProtocolContext<'_, S, Token>
+impl<'a, C, Params, Token> IbcActions<'a, C, Params, Token>
 where
-    S: State,
+    C: IbcCommonContext,
+    Params: namada_systems::parameters::Read<C::Storage>,
+    Token: trans_token::Keys,
 {
-    type PrefixIter<'iter> = <S as StorageRead>::PrefixIter<'iter> where Self: 'iter;
-
-    fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
-        self.state.read_bytes(key)
+    /// Make new IBC actions
+    pub fn new(
+        ctx: Rc<RefCell<C>>,
+        verifiers: Rc<RefCell<BTreeSet<Address>>>,
+    ) -> Self {
+        Self {
+            ctx: IbcContext::new(ctx),
+            router: IbcRouter::new(),
+            verifiers,
+            _marker: PhantomData,
+        }
     }
 
-    fn has_key(&self, key: &Key) -> Result<bool> {
-        self.state.has_key(key)
+    /// Add a transfer module to the router
+    pub fn add_transfer_module(&mut self, module: impl ModuleWrapper + 'a) {
+        self.router.add_transfer_module(module)
     }
 
-    fn iter_prefix<'iter>(
-        &'iter self,
-        prefix: &Key,
-    ) -> Result<Self::PrefixIter<'iter>> {
-        self.state.iter_prefix(prefix)
+    /// Set the validation parameters
+    pub fn set_validation_params(&mut self, params: ValidationParams) {
+        self.ctx.validation_params = params;
     }
 
-    fn iter_next<'iter>(
-        &'iter self,
-        iter: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>> {
-        self.state.iter_next(iter)
+    /// Execute according to the message in an IBC transaction or VP
+    pub fn execute<Transfer: BorshDeserialize>(
+        &mut self,
+        tx_data: &[u8],
+    ) -> Result<(Option<Transfer>, Option<MaspTransaction>), Error> {
+        let message = decode_message::<Transfer>(tx_data)?;
+        match message {
+            IbcMessage::Transfer(msg) => {
+                let mut token_transfer_ctx = TokenTransferContext::new(
+                    self.ctx.inner.clone(),
+                    self.verifiers.clone(),
+                );
+                // Add the source to the set of verifiers
+                self.verifiers.borrow_mut().insert(
+                    Address::from_str(msg.message.packet_data.sender.as_ref())
+                        .map_err(|_| {
+                            Error::TokenTransfer(TokenTransferError::Other(
+                                format!(
+                                    "Cannot convert the sender address {}",
+                                    msg.message.packet_data.sender
+                                ),
+                            ))
+                        })?,
+                );
+                self.insert_verifiers()?;
+                if msg.transfer.is_some() {
+                    token_transfer_ctx.enable_shielded_transfer();
+                }
+                let port_id = msg.message.port_id_on_a.clone();
+                let channel_id = msg.message.chan_id_on_a.clone();
+                send_transfer_execute(
+                    &mut self.ctx,
+                    &mut token_transfer_ctx,
+                    msg.message,
+                )
+                .map_err(Error::TokenTransfer)?;
+
+                if let Some((_, (epoch, refund_masp_tx))) =
+                    msg.transfer.as_ref().zip(msg.refund_masp_tx)
+                {
+                    self.save_refund_masp_tx(
+                        &port_id,
+                        &channel_id,
+                        epoch,
+                        refund_masp_tx,
+                    )?;
+                }
+
+                Ok((msg.transfer, None))
+            }
+            IbcMessage::NftTransfer(msg) => {
+                let mut nft_transfer_ctx =
+                    NftTransferContext::<_, Token>::new(self.ctx.inner.clone());
+                if msg.transfer.is_some() {
+                    nft_transfer_ctx.enable_shielded_transfer();
+                }
+                let port_id = msg.message.port_id_on_a.clone();
+                let channel_id = msg.message.chan_id_on_a.clone();
+                // Add the source to the set of verifiers
+                self.verifiers.borrow_mut().insert(
+                    Address::from_str(msg.message.packet_data.sender.as_ref())
+                        .map_err(|_| {
+                            Error::NftTransfer(NftTransferError::Other(
+                                format!(
+                                    "Cannot convert the sender address {}",
+                                    msg.message.packet_data.sender
+                                ),
+                            ))
+                        })?,
+                );
+                self.insert_verifiers()?;
+                send_nft_transfer_execute(
+                    &mut self.ctx,
+                    &mut nft_transfer_ctx,
+                    msg.message,
+                )
+                .map_err(Error::NftTransfer)?;
+
+                if let Some((_, (epoch, refund_masp_tx))) =
+                    msg.transfer.as_ref().zip(msg.refund_masp_tx)
+                {
+                    self.save_refund_masp_tx(
+                        &port_id,
+                        &channel_id,
+                        epoch,
+                        refund_masp_tx,
+                    )?;
+                }
+
+                Ok((msg.transfer, None))
+            }
+            IbcMessage::Envelope(envelope) => {
+                if let Some(verifier) = get_envelope_verifier(envelope.as_ref())
+                {
+                    self.verifiers.borrow_mut().insert(
+                        Address::from_str(verifier.as_ref()).map_err(|_| {
+                            Error::Other(format!(
+                                "Cannot convert the address {}",
+                                verifier,
+                            ))
+                        })?,
+                    );
+                    self.insert_verifiers()?;
+                }
+                execute(&mut self.ctx, &mut self.router, *envelope.clone())
+                    .map_err(|e| Error::Context(Box::new(e)))?;
+
+                // Extract MASP tx from the memo in the packet if needed
+                let masp_tx = match &*envelope {
+                    MsgEnvelope::Packet(PacketMsg::Recv(msg))
+                        if self
+                            .is_receiving_success(msg)?
+                            .is_some_and(|ack_succ| ack_succ) =>
+                    {
+                        extract_masp_tx_from_packet(&msg.packet)
+                    }
+                    // Check if the refund masp tx is stored when the transfer
+                    // failed, i.e. ack with an error or timeout
+                    MsgEnvelope::Packet(PacketMsg::Ack(msg)) => {
+                        match serde_json::from_slice::<AcknowledgementStatus>(
+                            msg.acknowledgement.as_ref(),
+                        ) {
+                            Ok(ack) if !ack.is_successful() => {
+                                let masp_epoch = self.get_masp_epoch()?;
+                                self.ctx
+                                    .inner
+                                    .borrow()
+                                    .refund_masp_tx(
+                                        &msg.packet.port_id_on_a,
+                                        &msg.packet.chan_id_on_a,
+                                        msg.packet.seq_on_a,
+                                        masp_epoch,
+                                    )
+                                    .map_err(|e| Error::Context(Box::new(e)))?
+                            }
+                            _ => None,
+                        }
+                    }
+                    MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => {
+                        let masp_epoch = self.get_masp_epoch()?;
+                        self.ctx
+                            .inner
+                            .borrow()
+                            .refund_masp_tx(
+                                &msg.packet.port_id_on_a,
+                                &msg.packet.chan_id_on_a,
+                                msg.packet.seq_on_a,
+                                masp_epoch,
+                            )
+                            .map_err(|e| Error::Context(Box::new(e)))?
+                    }
+                    _ => None,
+                };
+                Ok((None, masp_tx))
+            }
+        }
     }
 
-    fn get_chain_id(&self) -> Result<ChainId> {
-        self.state.get_chain_id()
-    }
-
-    fn get_block_height(&self) -> Result<BlockHeight> {
-        self.state.get_block_height()
-    }
-
-    fn get_block_header(
+    /// Check the result of receiving the packet by checking the packet
+    /// acknowledgement
+    pub fn is_receiving_success(
         &self,
-        height: BlockHeight,
-    ) -> Result<Option<BlockHeader>> {
-        StorageRead::get_block_header(self.state, height)
+        msg: &IbcMsgRecvPacket,
+    ) -> Result<Option<bool>, Error> {
+        let Some(packet_ack) = self
+            .ctx
+            .inner
+            .borrow()
+            .packet_ack(
+                &msg.packet.port_id_on_b,
+                &msg.packet.chan_id_on_b,
+                msg.packet.seq_on_a,
+            )
+            .map_err(|e| Error::Context(Box::new(e)))?
+        else {
+            return Ok(None);
+        };
+        let success_ack_commitment = compute_ack_commitment(
+            &AcknowledgementStatus::success(ack_success_b64()).into(),
+        );
+        Ok(Some(packet_ack == success_ack_commitment))
     }
 
-    fn get_block_epoch(&self) -> Result<Epoch> {
-        self.state.get_block_epoch()
+    /// Validate according to the message in IBC VP
+    pub fn validate<Transfer: BorshDeserialize>(
+        &self,
+        tx_data: &[u8],
+    ) -> Result<(), Error> {
+        // Use an empty verifiers set placeholder for validation, this is only
+        // needed in actual txs to addresses whose VPs should be triggered
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+
+        let message = decode_message::<Transfer>(tx_data)?;
+        match message {
+            IbcMessage::Transfer(msg) => {
+                let mut token_transfer_ctx = TokenTransferContext::new(
+                    self.ctx.inner.clone(),
+                    verifiers.clone(),
+                );
+                self.insert_verifiers()?;
+                if msg.transfer.is_some() {
+                    token_transfer_ctx.enable_shielded_transfer();
+                }
+                send_transfer_validate(
+                    &self.ctx,
+                    &token_transfer_ctx,
+                    msg.message,
+                )
+                .map_err(Error::TokenTransfer)
+            }
+            IbcMessage::NftTransfer(msg) => {
+                let mut nft_transfer_ctx =
+                    NftTransferContext::<_, Token>::new(self.ctx.inner.clone());
+                if msg.transfer.is_some() {
+                    nft_transfer_ctx.enable_shielded_transfer();
+                }
+                send_nft_transfer_validate(
+                    &self.ctx,
+                    &nft_transfer_ctx,
+                    msg.message,
+                )
+                .map_err(Error::NftTransfer)
+            }
+            IbcMessage::Envelope(envelope) => {
+                validate(&self.ctx, &self.router, *envelope)
+                    .map_err(|e| Error::Context(Box::new(e)))
+            }
+        }
     }
 
-    fn get_pred_epochs(&self) -> Result<Epochs> {
-        self.state.get_pred_epochs()
-    }
-
-    fn get_tx_index(&self) -> Result<TxIndex> {
-        self.state.get_tx_index()
-    }
-
-    fn get_native_token(&self) -> Result<Address> {
-        self.state.get_native_token()
-    }
-}
-
-impl<S, Token> StorageWrite for IbcProtocolContext<'_, S, Token>
-where
-    S: State,
-{
-    fn write_bytes(&mut self, key: &Key, val: impl AsRef<[u8]>) -> Result<()> {
-        self.state.write_bytes(key, val)
-    }
-
-    fn delete(&mut self, key: &Key) -> Result<()> {
-        self.state.delete(key)
-    }
-}
-
-impl<S, Token> IbcStorageContext for IbcProtocolContext<'_, S, Token>
-where
-    S: State + EmitEvents,
-    Token: trans_token::Keys
-        + trans_token::Read<S>
-        + trans_token::Write<S>
-        + trans_token::Events<S>,
-{
-    type Storage = Self;
-
-    fn storage(&self) -> &Self::Storage {
-        self
-    }
-
-    fn storage_mut(&mut self) -> &mut Self::Storage {
-        self
-    }
-
-    fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<()> {
-        // There's no gas cost for protocol, we can ignore result
-        self.state.write_log_mut().emit_event(event);
+    fn insert_verifiers(&self) -> Result<(), Error> {
+        let mut ctx = self.ctx.inner.borrow_mut();
+        for verifier in self.verifiers.borrow().iter() {
+            ctx.insert_verifier(verifier).map_err(Error::Verifier)?;
+        }
         Ok(())
     }
 
-    /// Transfer token
-    fn transfer_token(
+    fn save_refund_masp_tx(
         &mut self,
-        src: &Address,
-        dest: &Address,
-        token: &Address,
-        amount: Amount,
-    ) -> Result<()> {
-        Token::transfer(self.state, token, src, dest, amount)
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        epoch: MaspEpoch,
+        refund_masp_tx: MaspTransaction,
+    ) -> Result<(), Error> {
+        let sequence = self
+            .ctx
+            .inner
+            .borrow()
+            .get_last_sequence_send(port_id, channel_id)
+            .map_err(|e| Error::Context(Box::new(e)))?;
+        self.ctx
+            .inner
+            .borrow_mut()
+            .store_refund_masp_tx(
+                port_id,
+                channel_id,
+                sequence,
+                epoch,
+                refund_masp_tx,
+            )
+            .map_err(|e| Error::Context(Box::new(e)))
     }
 
-    /// Mint token
-    fn mint_token(
-        &mut self,
-        target: &Address,
-        token: &Address,
-        amount: Amount,
-    ) -> Result<()> {
-        ibc_storage::mint_tokens_and_emit_event::<_, Token>(
-            self.state, target, token, amount,
+    fn get_masp_epoch(&self) -> Result<MaspEpoch, Error> {
+        let inner = self.ctx.inner.borrow();
+        let epoch =
+            inner.storage().get_block_epoch().map_err(Error::Storage)?;
+        let masp_epoch_multiplier =
+            Params::masp_epoch_multiplier(inner.storage())
+                .map_err(Error::Storage)?;
+        MaspEpoch::try_from_epoch(epoch, masp_epoch_multiplier)
+            .map_err(|e| Error::Other(e.to_string()))
+    }
+}
+
+// Extract the involved namada address from the packet (either sender or
+// receiver) to trigger its vp. Returns None if an address could not be found
+fn get_envelope_verifier(
+    envelope: &MsgEnvelope,
+) -> Option<ibc::primitives::Signer> {
+    match envelope {
+        MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
+            match msg.packet.port_id_on_b.as_str() {
+                FT_PORT_ID_STR => {
+                    let packet_data =
+                        serde_json::from_slice::<PacketData>(&msg.packet.data)
+                            .ok()?;
+                    if is_packet_forward(&packet_data) {
+                        None
+                    } else {
+                        Some(packet_data.receiver)
+                    }
+                }
+                NFT_PORT_ID_STR => {
+                    serde_json::from_slice::<NftPacketData>(&msg.packet.data)
+                        .ok()
+                        .map(|packet_data| packet_data.receiver)
+                }
+                _ => None,
+            }
+        }
+        MsgEnvelope::Packet(PacketMsg::Ack(msg)) => serde_json::from_slice::<
+            AcknowledgementStatus,
+        >(
+            msg.acknowledgement.as_ref(),
         )
+        .map_or(None, |ack| {
+            if ack.is_successful() {
+                None
+            } else {
+                match msg.packet.port_id_on_a.as_str() {
+                    FT_PORT_ID_STR => {
+                        serde_json::from_slice::<PacketData>(&msg.packet.data)
+                            .ok()
+                            .map(|packet_data| packet_data.sender)
+                    }
+                    NFT_PORT_ID_STR => serde_json::from_slice::<NftPacketData>(
+                        &msg.packet.data,
+                    )
+                    .ok()
+                    .map(|packet_data| packet_data.sender),
+                    _ => None,
+                }
+            }
+        }),
+        MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => {
+            match msg.packet.port_id_on_a.as_str() {
+                FT_PORT_ID_STR => {
+                    serde_json::from_slice::<PacketData>(&msg.packet.data)
+                        .ok()
+                        .map(|packet_data| packet_data.sender)
+                }
+                NFT_PORT_ID_STR => {
+                    serde_json::from_slice::<NftPacketData>(&msg.packet.data)
+                        .ok()
+                        .map(|packet_data| packet_data.sender)
+                }
+                _ => None,
+            }
+        }
+        _ => None,
     }
-
-    /// Burn token
-    fn burn_token(
-        &mut self,
-        target: &Address,
-        token: &Address,
-        amount: Amount,
-    ) -> Result<()> {
-        ibc_storage::burn_tokens::<_, Token>(self.state, target, token, amount)
-    }
-
-    fn insert_verifier(&mut self, _verifier: &Address) -> Result<()> {
-        Ok(())
-    }
-
-    fn log_string(&self, message: String) {
-        tracing::trace!(message);
-    }
-}
-
-impl<S, Token> IbcCommonContext for IbcProtocolContext<'_, S, Token>
-where
-    S: State + EmitEvents,
-    Token: trans_token::Keys
-        + trans_token::Read<S>
-        + trans_token::Write<S>
-        + trans_token::Events<S>,
-{
-}
-
-/// Transfer tokens over IBC
-pub fn transfer_over_ibc<'a, S, Params, Token, Transfer>(
-    state: &'a mut S,
-    token: &Address,
-    source: &Address,
-    target: &PGFIbcTarget,
-) -> Result<()>
-where
-    S: 'a + State + EmitEvents,
-    Params: parameters::Read<
-            <IbcProtocolContext<'a, S, Token> as IbcStorageContext>::Storage,
-        >,
-    Token: trans_token::Keys
-        + trans_token::Write<S>
-        + trans_token::Events<S>
-        + Debug,
-    Transfer: BorshSerialize + BorshDeserialize,
-{
-    let token = PrefixedCoin {
-        denom: token.to_string().parse().expect("invalid token"),
-        amount: target.amount.into(),
-    };
-    let packet_data = PacketData {
-        token,
-        sender: source.to_string().into(),
-        receiver: target.target.clone().into(),
-        memo: String::default().into(),
-    };
-    let ctx = IbcProtocolContext {
-        state,
-        _marker: PhantomData,
-    };
-    let min_duration = Params::epoch_duration_parameter(&ctx)?.min_duration;
-    #[allow(clippy::arithmetic_side_effects)]
-    let timeout_timestamp = ctx
-        .state
-        .in_mem()
-        .header
-        .as_ref()
-        .expect("The header should exist")
-        .time
-        + min_duration;
-    let timeout_timestamp =
-        TmTime::try_from(timeout_timestamp).into_storage_result()?;
-    let timeout_timestamp = TimeoutTimestamp::At(
-        timeout_timestamp.try_into().into_storage_result()?,
-    );
-    let message = IbcMsgTransfer {
-        port_id_on_a: target.port_id.clone(),
-        chan_id_on_a: target.channel_id.clone(),
-        packet_data,
-        timeout_height_on_b: TimeoutHeight::Never,
-        timeout_timestamp_on_b: timeout_timestamp,
-    };
-    let data = MsgTransfer::<Transfer> {
-        message,
-        transfer: None,
-        refund_masp_tx: None,
-    }
-    .serialize_to_vec();
-
-    // Use an empty verifiers set placeholder for validation, this is only
-    // needed in txs and not protocol
-    let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-    let mut actions = IbcActions::<_, Params, Token>::new(
-        Rc::new(RefCell::new(ctx)),
-        verifiers,
-    );
-    actions.execute::<Transfer>(&data).into_storage_result()?;
-
-    Ok(())
 }

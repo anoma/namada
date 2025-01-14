@@ -32,11 +32,10 @@ use ibc::core::router::types::module::{ModuleExtras, ModuleId};
 use ibc::primitives::Signer;
 use namada_systems::trans_token;
 
-use crate::context::transfer_mod::ModuleWrapper;
-use crate::{
-    try_replace_sender_for_shielded_refund, IbcCommonContext,
-    IbcStorageContext, NftTransferContext,
+use crate::context::transfer_mod::{
+    try_replace_sender_for_shielded_refund, ModuleWrapper,
 };
+use crate::{IbcCommonContext, IbcStorageContext, NftTransferContext};
 
 /// IBC module for NFT transfer
 #[derive(Debug)]
@@ -306,10 +305,10 @@ where
             if ack.is_successful() {
                 return None;
             }
-            try_replace_sender_for_shielded_refund::<
-                <C as IbcStorageContext>::Storage,
-                Params,
-            >(self.ctx.inner.borrow().storage(), packet)
+            try_replace_sender_for_shielded_refund::<_, Params>(
+                self.ctx.inner.borrow(),
+                packet,
+            )
         });
 
         let (extras, result) = match updated_packet {
@@ -343,11 +342,10 @@ where
         packet: &Packet,
         relayer: &Signer,
     ) -> (ModuleExtras, Result<(), PacketError>) {
-        let updated_packet =
-            try_replace_sender_for_shielded_refund::<
-                <C as IbcStorageContext>::Storage,
-                Params,
-            >(self.ctx.inner.borrow().storage(), packet);
+        let updated_packet = try_replace_sender_for_shielded_refund::<_, Params>(
+            self.ctx.inner.borrow(),
+            packet,
+        );
 
         let (extras, result) = if let Some(packet) = updated_packet {
             on_timeout_packet_execute(&mut self.ctx, &packet, relayer)
