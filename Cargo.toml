@@ -167,9 +167,7 @@ regex = "1.10.2"
 reqwest = "0.11.4"
 ripemd = "0.1"
 rlimit = "0.5.4"
-# rocksdb = {version = "0.22.0", features = ['zstd'], default-features = false}
-# TEMP branch "tomas/no-jemalloc-win", replace once upstreamed
-rocksdb = {git = "https://github.com/heliaxdev/rust-rocksdb", rev = "4dc7f4fdfa17e923d3078d51261e3db66707754d", features = ['zstd'], default-features = false}
+rocksdb = {version = "0.23.0", features = ['zstd'], default-features = false}
 rpassword = "5.0.1"
 rustversion = "1.0"
 serde = {version = "1.0.125", features = ["derive"]}
