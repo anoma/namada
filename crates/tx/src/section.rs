@@ -443,8 +443,7 @@ pub struct Authorization {
 
 impl PartialEq for Authorization {
     fn eq(&self, other: &Self) -> bool {
-        // Deconstruct the two instances to ensure we don't forget any new
-        // field
+        // Deconstruct the two instances to ensure we don't forget any new field
         let Authorization {
             targets,
             signer: _,
@@ -457,15 +456,18 @@ impl PartialEq for Authorization {
         } = other;
 
         // Two authorizations are equal when they are computed over the same
-        // target(s) and the signatures match ,regardless of how the signer is
+        // target(s) and the signatures match, regardless of how the signer is
         // expressed
 
-        // Check equivalence of the targets ignoring the specific ordering
-        if targets.len() != other_targets.len() {
-            return false;
-        }
+        // Check equivalence of the targets ignoring the specific ordering and
+        // duplicates (the PartialEq implementation of IndexSet ignores the
+        // order)
+        let unique_targets =
+            HashSet::<&namada_account::Hash>::from_iter(targets.iter());
+        let unique_other_targets =
+            HashSet::<&namada_account::Hash>::from_iter(other_targets.iter());
 
-        if !targets.iter().all(|pubkey| other_targets.contains(pubkey)) {
+        if unique_targets != unique_other_targets {
             return false;
         }
 

@@ -83,8 +83,7 @@ pub struct SigningTxData {
 
 impl PartialEq for SigningTxData {
     fn eq(&self, other: &Self) -> bool {
-        // Deconstruct the two instances to ensure we don't forget any new
-        // field
+        // Deconstruct the two instances to ensure we don't forget any new field
         let SigningTxData {
             owner,
             public_keys,
@@ -112,13 +111,17 @@ impl PartialEq for SigningTxData {
         }
 
         // Check equivalence of the public keys ignoring the specific ordering
-        if public_keys.len() != other_public_keys.len() {
-            return false;
-        }
+        // and duplicates (the PartialEq implementation of IndexSet ignores the
+        // order)
+        let unique_public_keys = HashSet::<
+            &namada_account::common::CommonPublicKey,
+        >::from_iter(public_keys.iter());
+        let unique_other_public_keys =
+            HashSet::<&namada_account::common::CommonPublicKey>::from_iter(
+                other_public_keys.iter(),
+            );
 
-        public_keys
-            .iter()
-            .all(|pubkey| other_public_keys.contains(pubkey))
+        unique_public_keys == unique_other_public_keys
     }
 }
 
