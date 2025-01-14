@@ -1063,7 +1063,7 @@ pub async fn sign_offline(
     let OfflineSignatures {
         signatures,
         wrapper_signature,
-    } = match namada_sdk::signing::sign_offline(
+    } = match namada_sdk::signing::generate_tx_signatures(
         &mut tx,
         secret_keys,
         owner,

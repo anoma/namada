@@ -435,19 +435,18 @@ pub async fn aux_signing_data(
     })
 }
 
-/// The offline transaction's signatures produced via the offline signing
-/// procedure
+/// The transaction's signatures produced via the offline signing procedure
 pub struct OfflineSignatures {
     /// Inner txs' signatures
     pub signatures: Vec<SignatureIndex>,
-    /// Wrapper signature
+    /// Optional wrapper signature
     pub wrapper_signature: Option<Authorization>,
 }
 
-/// Sign a transaction offline. This allows to sign both the inner transactions
-/// of the batch as well as the wrapper transaction. It also supports
-/// multisignature.
-pub async fn sign_offline(
+/// Generates the transaction's signatures for offline signing purposes. This
+/// allows to sign both the inner transactions of the batch as well as the
+/// wrapper transaction and it supports multisignatures.
+pub async fn generate_tx_signatures(
     tx: &mut Tx,
     secret_keys: Vec<namada_core::key::common::SecretKey>,
     owner: Option<Address>,
@@ -457,8 +456,6 @@ pub async fn sign_offline(
         secret_keys.iter().map(|sk| sk.to_public()),
     );
 
-    // FIXME: does this work with the hardware wallet? It does not. Should it?
-    // yes absolutely
     let signatures = tx.compute_section_signature(
         &secret_keys,
         &account_public_keys_map,
