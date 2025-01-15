@@ -2036,44 +2036,34 @@ checksum = "ef1a6892d9eef45c8fa6b9e0086428a2cca8491aca8f787c534a3d6d0bcb3ced"
 
 [[package]]
 name = "encdec"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25de94e10baa85551f7c65730423239370ed5bed60bf8d2a9cbf2683327ba421"
+checksum = "2ec7aafa197dadfa18575eb62d05adaec89237d0fb0663baf2e141529b3a20b0"
 dependencies = [
- "encdec-base 0.9.0",
+ "encdec-base",
  "encdec-macros",
 ]
 
 [[package]]
 name = "encdec-base"
-version = "0.8.3"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f8542ff2a35da7fc94ffcf280f35dc759219c4b48fa930e0a0f268220d7fb6a"
+checksum = "5abc9d559c177b2a75892e92c1812216e5cec7e1a14e0682b25ed6f5c0bd78a2"
 dependencies = [
  "byteorder",
+ "heapless 0.8.0",
  "num-traits",
-]
-
-[[package]]
-name = "encdec-base"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "516ae3c7d00515548bf26a6531883335ceac2e9cde4938e70feea7456569be09"
-dependencies = [
- "byteorder",
- "heapless",
- "num-traits",
- "thiserror 1.0.50",
+ "thiserror 2.0.11",
 ]
 
 [[package]]
 name = "encdec-macros"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b15497932aae6b53bf8548cc63c65929b4fab6be54e28709c80fc72f5707eeed"
+checksum = "ace893fa216d3c4cd14239cf2807b48c1ad8abcf583d779a29f410cd35cff413"
 dependencies = [
  "darling 0.14.4",
- "encdec-base 0.8.3",
+ "encdec-base",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -2389,7 +2379,7 @@ dependencies = [
  "ethabi",
  "generic-array",
  "k256",
- "num_enum 0.7.1",
+ "num_enum",
  "once_cell",
  "open-fastrlp",
  "rand 0.8.5",
@@ -3005,6 +2995,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hash32"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47d60b12902ba28e2730cd37e95b8c9223af2808df9e902d4df49588d1470606"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3088,10 +3087,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdc6457c0eb62c71aac4bc17216026d8410337c4126773b9c5daba343f17964f"
 dependencies = [
  "atomic-polyfill",
- "hash32",
+ "hash32 0.2.1",
  "rustc_version 0.4.0",
  "serde",
  "spin 0.9.8",
+ "stable_deref_trait",
+]
+
+[[package]]
+name = "heapless"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bfb9eb618601c89945a70e254898da93b13be0388091d42117462b265bb3fad"
+dependencies = [
+ "hash32 0.3.1",
  "stable_deref_trait",
 ]
 
@@ -3100,6 +3109,12 @@ name = "heck"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
+
+[[package]]
+name = "heck"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hermit-abi"
@@ -4248,25 +4263,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ledger-lib"
-version = "0.1.0"
-source = "git+https://github.com/heliaxdev/rust-ledger?rev=f96f4559b3237d09218f7583df01acf36034ea79#f96f4559b3237d09218f7583df01acf36034ea79"
-dependencies = [
- "async-trait",
- "displaydoc",
- "encdec",
- "futures",
- "ledger-proto",
- "once_cell",
- "strum 0.24.1",
- "thiserror 1.0.50",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid 1.8.0",
-]
-
-[[package]]
 name = "ledger-namada-rs"
 version = "0.0.1"
 source = "git+https://github.com/Zondax/ledger-namada?tag=v2.0.2#4eb39abc55b08a6a2b7ae0692913a469356d6642"
@@ -4280,18 +4276,6 @@ dependencies = [
  "prost 0.11.9",
  "prost-types 0.11.9",
  "sha2 0.10.8",
- "thiserror 1.0.50",
-]
-
-[[package]]
-name = "ledger-proto"
-version = "0.1.0"
-source = "git+https://github.com/heliaxdev/rust-ledger?rev=f96f4559b3237d09218f7583df01acf36034ea79#f96f4559b3237d09218f7583df01acf36034ea79"
-dependencies = [
- "bitflags 2.5.0",
- "displaydoc",
- "encdec",
- "num_enum 0.6.1",
  "thiserror 1.0.50",
 ]
 
@@ -4765,6 +4749,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "nam-ledger-lib"
+version = "0.1.1-nam.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e8a354ab142e05ce98b2b315989f7d79e392079e007364164e45cc86e043269"
+dependencies = [
+ "async-trait",
+ "displaydoc",
+ "encdec",
+ "futures",
+ "nam-ledger-proto",
+ "once_cell",
+ "strum 0.26.3",
+ "thiserror 2.0.11",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid 1.8.0",
+]
+
+[[package]]
+name = "nam-ledger-proto"
+version = "0.1.1-nam.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e46bb3019d4f618a8209c5db034aaebd97e1f617716ec86ff1e39971b23d3419"
+dependencies = [
+ "bitflags 2.5.0",
+ "displaydoc",
+ "encdec",
+ "num_enum",
+ "thiserror 2.0.11",
+]
+
+[[package]]
 name = "nam-num-traits"
 version = "0.2.20-nam.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4876,13 +4893,13 @@ dependencies = [
  "itertools 0.12.1",
  "kdam",
  "lazy_static",
- "ledger-lib",
  "ledger-namada-rs",
  "ledger-transport",
  "ledger-transport-hid",
  "linkme",
  "masp_primitives",
  "nam-jubjub",
+ "nam-ledger-lib",
  "namada_core",
  "namada_macros",
  "namada_migrations",
@@ -4975,7 +4992,7 @@ dependencies = [
  "num-rational",
  "num-traits",
  "num256",
- "num_enum 0.7.1",
+ "num_enum",
  "primitive-types",
  "proptest",
  "prost-types 0.13.2",
@@ -6103,31 +6120,11 @@ dependencies = [
 
 [[package]]
 name = "num_enum"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a015b430d3c108a207fd776d2e2196aaf8b1cf8cf93253e3a097ff3085076a1"
-dependencies = [
- "num_enum_derive 0.6.1",
-]
-
-[[package]]
-name = "num_enum"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683751d591e6d81200c39fb0d1032608b77724f34114db54f571ff1317b337c0"
 dependencies = [
- "num_enum_derive 0.7.1",
-]
-
-[[package]]
-name = "num_enum_derive"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96667db765a921f7b295ffee8b60472b686a51d4f21c2ee4ffdb94c7013b65a6"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.96",
+ "num_enum_derive",
 ]
 
 [[package]]
@@ -6630,7 +6627,7 @@ checksum = "a55c51ee6c0db07e68448e336cf8ea4131a620edefebf9893e759b2d793420f8"
 dependencies = [
  "cobs",
  "embedded-io",
- "heapless",
+ "heapless 0.7.17",
  "serde",
 ]
 
@@ -6830,7 +6827,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c55e02e35260070b6f716a2423c2ff1c3bb1642ddca6f99e1f26d06268a0e2d2"
 dependencies = [
  "bytes",
- "heck",
+ "heck 0.4.1",
  "itertools 0.11.0",
  "log",
  "multimap",
@@ -6878,7 +6875,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acf0c195eebb4af52c752bec4f52f645da98b6e92077a04110c7f349477ae5ac"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
  "syn 2.0.96",
@@ -8032,7 +8029,7 @@ version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "990079665f075b699031e9c08fd3ab99be5029b96f3b78dc0709e8f77e4efebf"
 dependencies = [
- "heck",
+ "heck 0.4.1",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -8126,12 +8123,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "strum"
+version = "0.26.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
+dependencies = [
+ "strum_macros 0.26.4",
+]
+
+[[package]]
 name = "strum_macros"
 version = "0.24.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e385be0d24f186b4ce2f9982191e7101bb737312ad61c1f2f984f34bcf85d59"
 dependencies = [
- "heck",
+ "heck 0.4.1",
  "proc-macro2",
  "quote",
  "rustversion",
@@ -8144,7 +8150,20 @@ version = "0.25.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23dc1fa9ac9c169a78ba62f0b841814b7abae11bdd047b9c58f893439e309ea0"
 dependencies = [
- "heck",
+ "heck 0.4.1",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn 2.0.96",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.26.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
+dependencies = [
+ "heck 0.5.0",
  "proc-macro2",
  "quote",
  "rustversion",
