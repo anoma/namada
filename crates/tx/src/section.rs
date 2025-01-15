@@ -431,7 +431,6 @@ pub enum Signer {
     BorshSchema,
     Serialize,
     Deserialize,
-    PartialEq,
 )]
 pub struct Authorization {
     /// The hash of the section being signed
@@ -440,6 +439,41 @@ pub struct Authorization {
     pub signer: Signer,
     /// The signature over the above hash
     pub signatures: BTreeMap<u8, common::Signature>,
+}
+
+impl PartialEq for Authorization {
+    fn eq(&self, other: &Self) -> bool {
+        // Deconstruct the two instances to ensure we don't forget any new field
+        let Authorization {
+            targets,
+            signer: _,
+            signatures,
+        } = self;
+        let Authorization {
+            targets: other_targets,
+            signer: _,
+            signatures: other_signatures,
+        } = other;
+
+        // Two authorizations are equal when they are computed over the same
+        // target(s) and the signatures match, regardless of how the signer is
+        // expressed
+
+        // Check equivalence of the targets ignoring the specific ordering and
+        // duplicates (the PartialEq implementation of IndexSet ignores the
+        // order)
+        let unique_targets =
+            HashSet::<&namada_account::Hash>::from_iter(targets.iter());
+        let unique_other_targets =
+            HashSet::<&namada_account::Hash>::from_iter(other_targets.iter());
+
+        if unique_targets != unique_other_targets {
+            return false;
+        }
+
+        // Check equivalence of the signatures
+        signatures == other_signatures
+    }
 }
 
 impl Authorization {
