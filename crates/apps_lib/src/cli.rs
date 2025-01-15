@@ -5189,7 +5189,11 @@ pub mod args {
                      the optimal route is queried on the fly."
                 )))
                 .arg(OUTPUT_DENOM.def().help(wrap!(
-                    "The IBC denomination (on Namada) of the desired asset."
+                    "IBC trace path (on Namada) of the desired asset. This is \
+                     a string of the form \
+                     `transfer/<channel-X>/<base-denom>`, where `<channel-X>` \
+                     is the channel that connects Namada to some counterparty \
+                     chain."
                 )))
                 .arg(
                     TARGET_OPT
@@ -5197,8 +5201,8 @@ pub mod args {
                         .conflicts_with(OVERFLOW_OPT.name)
                         .conflicts_with(PAYMENT_ADDRESS_TARGET_OPT.name)
                         .help(wrap!(
-                            "The transparent Namada address that shall \
-                             receive the swapped tokens."
+                            "Transparent Namada address that shall receive \
+                             the swapped tokens."
                         )),
                 )
                 .arg(
@@ -5206,8 +5210,8 @@ pub mod args {
                         .def()
                         .conflicts_with(TARGET_OPT.name)
                         .help(wrap!(
-                            "The shielded Namada address that shall receive \
-                             the minimum amount of swapped tokens."
+                            "Namada payment address that shall receive the \
+                             minimum amount of tokens swapped on Osmosis."
                         )),
                 )
                 .arg(OVERFLOW_OPT.def().help(wrap!(
@@ -5220,13 +5224,13 @@ pub mod args {
                      generated."
                 )))
                 .arg(SLIPPAGE.def().requires(WINDOW_SECONDS.name).help(wrap!(
-                    "The slippage percentage as an integer between 0 and 100. \
+                    "Slippage percentage, as a number between 0 and 100. \
                      Represents the maximum acceptable deviation from the \
                      expected price during a trade."
                 )))
                 .arg(WINDOW_SECONDS.def().requires(SLIPPAGE.name).help(wrap!(
-                    "The time period (in seconds) over which the average \
-                     price is calculated."
+                    "Time period (in seconds) over which the average price is \
+                     calculated."
                 )))
                 .arg(
                     MINIMUM_AMOUNT
@@ -5234,13 +5238,13 @@ pub mod args {
                         .conflicts_with(SLIPPAGE.name)
                         .conflicts_with(WINDOW_SECONDS.name)
                         .help(wrap!(
-                            "The minimum amount of target asset that the \
-                             trade should produce."
+                            "Minimum amount of target asset that the trade \
+                             should produce."
                         )),
                 )
                 .arg(LOCAL_RECOVERY_ADDR.def().help(wrap!(
-                    "An address on Osmosis from which to recover funds in \
-                     case of failure."
+                    "Address on Osmosis from which to recover funds in case \
+                     of failure."
                 )))
                 .group(
                     ArgGroup::new("slippage")
@@ -5257,8 +5261,8 @@ pub mod args {
                 )
                 .mut_arg(RECEIVER.name, |arg| {
                     arg.long("swap-contract").help(wrap!(
-                        "The address of the Osmosis contract performing the \
-                         swap. It will be the receiver of the IBC transfer."
+                        "Address of the Osmosis contract performing the swap. \
+                         It will be the receiver of the IBC transfer."
                     ))
                 })
         }
