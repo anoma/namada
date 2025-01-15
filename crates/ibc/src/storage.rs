@@ -13,7 +13,9 @@ use ibc::core::host::types::path::{
     ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath, UpgradeClientStatePath,
     UpgradeConsensusStatePath,
 };
+use ibc_middleware_packet_forward::InFlightPacketKey;
 use namada_core::address::{Address, InternalAddress};
+use namada_core::masp::MaspEpoch;
 use namada_core::storage::{DbKeySeg, Key, KeySeg};
 use namada_core::token::Amount;
 use namada_events::EmitEvents;
@@ -38,6 +40,7 @@ const MINT: &str = "mint";
 const THROUGHPUT_LIMIT: &str = "throughput_limit";
 const DEPOSIT: &str = "deposit";
 const WITHDRAW: &str = "withdraw";
+const REFUND_MASP_TX: &str = "refund_masp_tx";
 
 /// Mint IBC tokens. This function doesn't emit event (see
 /// `mint_tokens_and_emit_event` below)
@@ -646,4 +649,48 @@ pub fn withdraw_key(token: &Address) -> Key {
         // Set as String to avoid checking the token address
         .push(&token.to_string().to_db_key())
         .expect("Cannot obtain a storage key")
+}
+
+/// Get a middleware key prefix.
+pub fn middlewares_prefix() -> Key {
+    const MIDDLEWARES_SUBKEY: &str = "middleware";
+
+    let key: Key = namada_core::address::IBC.to_db_key().into();
+    key.with_segment(MIDDLEWARES_SUBKEY.to_string())
+}
+
+/// Get the Namada storage key associated with the provided
+/// [`InFlightPacketKey`].
+pub fn inflight_packet_key(inflight_packet_key: &InFlightPacketKey) -> Key {
+    const PFM_SUBKEY: &str = "pfm";
+
+    middlewares_prefix()
+        .with_segment(PFM_SUBKEY.to_string())
+        .with_segment(inflight_packet_key.port.to_string())
+        .with_segment(inflight_packet_key.channel.to_string())
+        .with_segment(inflight_packet_key.sequence.to_string())
+}
+
+/// Returns a key prefix of the MASP transactions for the shielded refund
+pub fn refund_masp_tx_prefix(
+    port_id: &PortId,
+    channel_id: &ChannelId,
+    sequence: Sequence,
+) -> Key {
+    let key: Key = namada_core::address::IBC.to_db_key().into();
+    key.with_segment(REFUND_MASP_TX.to_string())
+        .with_segment(port_id.to_string())
+        .with_segment(channel_id.to_string())
+        .with_segment(sequence.to_string())
+}
+
+/// Returns a key of the MASP transaction for the shielded refund
+pub fn refund_masp_tx_key(
+    port_id: &PortId,
+    channel_id: &ChannelId,
+    sequence: Sequence,
+    epoch: MaspEpoch,
+) -> Key {
+    let prefix = refund_masp_tx_prefix(port_id, channel_id, sequence);
+    prefix.with_segment(epoch.0)
 }

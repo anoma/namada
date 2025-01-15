@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::rc::Rc;
 
 use ibc::apps::transfer::context::TokenTransferValidationContext;
@@ -19,7 +20,9 @@ use ibc::apps::transfer::module::{
 };
 use ibc::apps::transfer::types::error::TokenTransferError;
 use ibc::apps::transfer::types::MODULE_ID_STR;
-use ibc::core::channel::types::acknowledgement::Acknowledgement;
+use ibc::core::channel::types::acknowledgement::{
+    Acknowledgement, AcknowledgementStatus,
+};
 use ibc::core::channel::types::channel::{Counterparty, Order};
 use ibc::core::channel::types::error::{ChannelError, PacketError};
 use ibc::core::channel::types::packet::Packet;
@@ -30,8 +33,10 @@ use ibc::core::router::types::module::{ModuleExtras, ModuleId};
 use ibc::primitives::Signer;
 use namada_core::address::Address;
 
-use super::common::IbcCommonContext;
-use super::token_transfer::TokenTransferContext;
+use crate::{
+    try_replace_sender_for_shielded_refund, IbcCommonContext,
+    IbcStorageContext, TokenTransferContext,
+};
 
 /// IBC module wrapper for getting the reference of the module
 pub trait ModuleWrapper: Module {
@@ -50,17 +55,19 @@ pub trait ModuleWrapper: Module {
 
 /// IBC module for token transfer
 #[derive(Debug)]
-pub struct TransferModule<C>
+pub struct TransferModule<C, Params>
 where
     C: IbcCommonContext,
 {
     /// IBC actions
     pub ctx: TokenTransferContext<C>,
+    _marker: PhantomData<Params>,
 }
 
-impl<C> TransferModule<C>
+impl<C, Params> TransferModule<C, Params>
 where
     C: IbcCommonContext,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
 {
     /// Make a new module
     pub fn new(
@@ -69,13 +76,16 @@ where
     ) -> Self {
         Self {
             ctx: TokenTransferContext::new(ctx, verifiers),
+            _marker: PhantomData,
         }
     }
 }
 
-impl<C> ModuleWrapper for TransferModule<C>
+impl<C, Params> ModuleWrapper for TransferModule<C, Params>
 where
     C: IbcCommonContext + Debug,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
 {
     fn as_module(&self) -> &dyn Module {
         self
@@ -94,9 +104,11 @@ where
     }
 }
 
-impl<C> Module for TransferModule<C>
+impl<C, Params> Module for TransferModule<C, Params>
 where
     C: IbcCommonContext + Debug,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
 {
     #[allow(clippy::too_many_arguments)]
     fn on_chan_open_init_validate(
@@ -276,7 +288,7 @@ where
         &mut self,
         packet: &Packet,
         _relayer: &Signer,
-    ) -> (ModuleExtras, Acknowledgement) {
+    ) -> (ModuleExtras, Option<Acknowledgement>) {
         on_recv_packet_execute(&mut self.ctx, packet)
     }
 
@@ -301,12 +313,34 @@ where
         acknowledgement: &Acknowledgement,
         relayer: &Signer,
     ) -> (ModuleExtras, Result<(), PacketError>) {
-        let (extras, result) = on_acknowledgement_packet_execute(
-            &mut self.ctx,
-            packet,
-            acknowledgement,
-            relayer,
-        );
+        let updated_packet = serde_json::from_slice::<AcknowledgementStatus>(
+            acknowledgement.as_ref(),
+        )
+        .ok()
+        .and_then(|ack| {
+            if ack.is_successful() {
+                return None;
+            }
+            try_replace_sender_for_shielded_refund::<
+                <C as IbcStorageContext>::Storage,
+                Params,
+            >(self.ctx.inner.borrow().storage(), packet)
+        });
+
+        let (extras, result) = match updated_packet {
+            Some(packet) => on_acknowledgement_packet_execute(
+                &mut self.ctx,
+                &packet,
+                acknowledgement,
+                relayer,
+            ),
+            None => on_acknowledgement_packet_execute(
+                &mut self.ctx,
+                packet,
+                acknowledgement,
+                relayer,
+            ),
+        };
         (extras, result.map_err(into_packet_error))
     }
 
@@ -324,8 +358,17 @@ where
         packet: &Packet,
         relayer: &Signer,
     ) -> (ModuleExtras, Result<(), PacketError>) {
-        let (extras, result) =
-            on_timeout_packet_execute(&mut self.ctx, packet, relayer);
+        let updated_packet =
+            try_replace_sender_for_shielded_refund::<
+                <C as IbcStorageContext>::Storage,
+                Params,
+            >(self.ctx.inner.borrow().storage(), packet);
+
+        let (extras, result) = if let Some(packet) = updated_packet {
+            on_timeout_packet_execute(&mut self.ctx, &packet, relayer)
+        } else {
+            on_timeout_packet_execute(&mut self.ctx, packet, relayer)
+        };
         (extras, result.map_err(into_packet_error))
     }
 }
@@ -497,10 +540,10 @@ pub mod testing {
             &mut self,
             _packet: &Packet,
             _relayer: &Signer,
-        ) -> (ModuleExtras, Acknowledgement) {
+        ) -> (ModuleExtras, Option<Acknowledgement>) {
             (
                 ModuleExtras::empty(),
-                AcknowledgementStatus::success(ack_success_b64()).into(),
+                Some(AcknowledgementStatus::success(ack_success_b64()).into()),
             )
         }
 

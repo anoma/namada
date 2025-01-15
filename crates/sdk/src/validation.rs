@@ -81,6 +81,7 @@ pub type MaspVp<'ctx, CTX> = token::vp::MaspVp<
     CTX,
     parameters::Store<<CTX as VpEnv<'ctx>>::Pre>,
     governance::Store<<CTX as VpEnv<'ctx>>::Pre>,
+    ibc::Store<<CTX as VpEnv<'ctx>>::Pre>,
     ibc::Store<<CTX as VpEnv<'ctx>>::Post>,
     token::Store<<CTX as VpEnv<'ctx>>::Pre>,
     token::Transfer,

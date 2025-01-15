@@ -36,7 +36,6 @@ use std::str::FromStr;
 
 pub use actions::transfer_over_ibc;
 use apps::transfer::types::packet::PacketData;
-use apps::transfer::types::PORT_ID_STR;
 use borsh::BorshDeserialize;
 pub use context::common::IbcCommonContext;
 pub use context::nft_transfer::NftTransferContext;
@@ -70,6 +69,7 @@ use ibc::core::channel::types::commitment::compute_ack_commitment;
 use ibc::core::channel::types::msgs::{
     MsgRecvPacket as IbcMsgRecvPacket, PacketMsg,
 };
+use ibc::core::channel::types::packet::Packet;
 use ibc::core::channel::types::timeout::{TimeoutHeight, TimeoutTimestamp};
 use ibc::core::entrypoint::{execute, validate};
 use ibc::core::handler::types::error::ContextError;
@@ -80,6 +80,7 @@ use ibc::core::host::types::identifiers::{ChannelId, PortId, Sequence};
 use ibc::core::router::types::error::RouterError;
 use ibc::primitives::proto::Any;
 pub use ibc::*;
+use ibc_middleware_packet_forward::PacketMetadata;
 use masp_primitives::transaction::Transaction as MaspTransaction;
 pub use msg::*;
 use namada_core::address::{self, Address};
@@ -89,7 +90,7 @@ use namada_core::ibc::core::channel::types::commitment::{
     compute_packet_commitment, AcknowledgementCommitment, PacketCommitment,
 };
 pub use namada_core::ibc::*;
-use namada_core::masp::{addr_taddr, ibc_taddr, TAddrData};
+use namada_core::masp::{addr_taddr, ibc_taddr, MaspEpoch, TAddrData};
 use namada_core::masp_primitives::transaction::components::ValueSum;
 use namada_core::token::Amount;
 use namada_events::EmitEvents;
@@ -143,6 +144,8 @@ pub enum Error {
     ChainId(IdentifierError),
     #[error("Verifier insertion error: {0}")]
     Verifier(StorageError),
+    #[error("Storage read/write error: {0}")]
+    Storage(StorageError),
     #[error("IBC error: {0}")]
     Other(String),
 }
@@ -224,6 +227,59 @@ impl TryFrom<IbcMsgNftTransfer> for IbcTransferInfo {
     }
 }
 
+struct ReceiveInfo {
+    ibc_traces: Vec<String>,
+    amount: Amount,
+    receiver: String,
+}
+
+fn recv_info_from_packet(
+    packet: &Packet,
+    is_src_chain: bool,
+) -> Result<ReceiveInfo, StorageError> {
+    let port_id = if is_src_chain {
+        &packet.port_id_on_a
+    } else {
+        &packet.port_id_on_b
+    };
+    match port_id.as_str() {
+        FT_PORT_ID_STR => {
+            let packet_data =
+                serde_json::from_slice::<PacketData>(&packet.data)
+                    .into_storage_result()?;
+            let receiver = packet_data.receiver.to_string();
+            let ibc_denom = packet_data.token.denom.to_string();
+            let amount =
+                packet_data.token.amount.try_into().into_storage_result()?;
+            Ok(ReceiveInfo {
+                ibc_traces: vec![ibc_denom],
+                amount,
+                receiver,
+            })
+        }
+        NFT_PORT_ID_STR => {
+            let packet_data =
+                serde_json::from_slice::<NftPacketData>(&packet.data)
+                    .map_err(StorageError::new)?;
+            let receiver = packet_data.receiver.to_string();
+            let ibc_traces = packet_data
+                .token_ids
+                .0
+                .iter()
+                .map(|token_id| {
+                    ibc_trace_for_nft(&packet_data.class_id, token_id)
+                })
+                .collect();
+            Ok(ReceiveInfo {
+                ibc_traces,
+                amount: Amount::from_u64(1),
+                receiver,
+            })
+        }
+        _ => Err(StorageError::new_const("Invalid packet port: {packet}")),
+    }
+}
+
 /// IBC storage `Keys/Read/Write` implementation
 #[derive(Debug)]
 pub struct Store<S>(PhantomData<S>);
@@ -239,15 +295,37 @@ where
             .into_storage_result()
             .ok();
         let tx = if let Some(IbcMessage::Envelope(ref envelope)) = msg {
-            Some(extract_masp_tx_from_envelope(envelope).ok_or_else(|| {
-                StorageError::new_const(
-                    "Missing MASP transaction in IBC message",
-                )
-            })?)
+            extract_masp_tx_from_envelope(envelope)
         } else {
             None
         };
         Ok(tx)
+    }
+
+    fn try_get_refund_masp_tx<Transfer: BorshDeserialize>(
+        storage: &S,
+        tx_data: &[u8],
+        masp_epoch: MaspEpoch,
+    ) -> StorageResult<Option<MaspTransaction>> {
+        // refund only when ack or timeout in an IBC envelope message
+        let Some(IbcMessage::Envelope(envelope)) =
+            decode_message::<Transfer>(tx_data)
+                .into_storage_result()
+                .ok()
+        else {
+            return Ok(None);
+        };
+
+        let Some((port_id, channel_id, sequence)) =
+            packet_info_from_envelope(&envelope)
+        else {
+            return Ok(None);
+        };
+
+        let key = storage::refund_masp_tx_key(
+            port_id, channel_id, sequence, masp_epoch,
+        );
+        storage.read(&key)
     }
 
     fn apply_ibc_packet<Transfer: BorshDeserialize>(
@@ -290,62 +368,45 @@ where
                     keys_changed,
                 )?;
             }
-            // This event is emitted on the receiver
-            Some(IbcMessage::Envelope(envelope)) => {
-                if let MsgEnvelope::Packet(PacketMsg::Recv(msg)) = *envelope {
-                    if msg.packet.port_id_on_b.as_str() == PORT_ID_STR {
-                        let packet_data = serde_json::from_slice::<PacketData>(
-                            &msg.packet.data,
-                        )
+            Some(IbcMessage::Envelope(envelope)) => match *envelope {
+                MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
+                    let recv_info = recv_info_from_packet(&msg.packet, false)
                         .map_err(StorageError::new)?;
-                        let receiver = packet_data.receiver.to_string();
-                        let addr = TAddrData::Ibc(receiver.clone());
-                        accum.decoder.insert(ibc_taddr(receiver), addr);
-                        let ibc_denom = packet_data.token.denom.to_string();
-                        let amount = packet_data
-                            .token
-                            .amount
-                            .try_into()
-                            .into_storage_result()?;
-                        accum = apply_recv_msg(
-                            storage,
-                            accum,
-                            &msg,
-                            vec![ibc_denom],
-                            amount,
-                            keys_changed,
-                        )?;
-                    } else {
-                        let packet_data =
-                            serde_json::from_slice::<NftPacketData>(
-                                &msg.packet.data,
-                            )
-                            .map_err(StorageError::new)?;
-                        let receiver = packet_data.receiver.to_string();
-                        let addr = TAddrData::Ibc(receiver.clone());
-                        accum.decoder.insert(ibc_taddr(receiver), addr);
-                        let ibc_traces = packet_data
-                            .token_ids
-                            .0
-                            .iter()
-                            .map(|token_id| {
-                                ibc_trace_for_nft(
-                                    &packet_data.class_id,
-                                    token_id,
-                                )
-                            })
-                            .collect();
-                        accum = apply_recv_msg(
-                            storage,
-                            accum,
-                            &msg,
-                            ibc_traces,
-                            Amount::from_u64(1),
-                            keys_changed,
-                        )?;
-                    }
+                    let addr = TAddrData::Ibc(recv_info.receiver.clone());
+                    accum.decoder.insert(ibc_taddr(recv_info.receiver), addr);
+                    accum = apply_recv_msg(
+                        storage,
+                        accum,
+                        &msg,
+                        recv_info.ibc_traces,
+                        recv_info.amount,
+                        keys_changed,
+                    )?;
                 }
-            }
+                MsgEnvelope::Packet(PacketMsg::Ack(msg)) => {
+                    let refund_info = recv_info_from_packet(&msg.packet, true)
+                        .map_err(StorageError::new)?;
+                    accum = apply_refund_msg(
+                        accum,
+                        &msg.packet.port_id_on_a,
+                        &msg.packet.chan_id_on_a,
+                        refund_info.ibc_traces,
+                        refund_info.amount,
+                    )?;
+                }
+                MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => {
+                    let refund_info = recv_info_from_packet(&msg.packet, true)
+                        .map_err(StorageError::new)?;
+                    accum = apply_refund_msg(
+                        accum,
+                        &msg.packet.port_id_on_a,
+                        &msg.packet.chan_id_on_a,
+                        refund_info.ibc_traces,
+                        refund_info.amount,
+                    )?;
+                }
+                _ => {}
+            },
         }
         Ok(accum)
     }
@@ -567,6 +628,40 @@ where
     Ok(accum)
 }
 
+// Apply a refund to the changed balances structure
+fn apply_refund_msg(
+    mut accum: ChangedBalances,
+    src_port_id: &PortId,
+    src_channel_id: &ChannelId,
+    ibc_traces: Vec<String>,
+    amount: Amount,
+) -> StorageResult<ChangedBalances> {
+    // Shielded refund only happens if MsgAcknowledgement or MsgTimeout is
+    // successful
+    for ibc_trace in &ibc_traces {
+        // If there is a transfer to the IBC account, then deduplicate the
+        // balance increase since we already account for it below
+        let token = convert_to_address(ibc_trace).into_storage_result()?;
+        let delta = ValueSum::from_pair(token, amount);
+        if !is_sender_chain_source(ibc_trace, src_port_id, src_channel_id) {
+            // Enable funds to be taken from the IBC internal address and be
+            // deposited elsewhere
+            // Required for the IBC internal address to release funds
+            let ibc_taddr = addr_taddr(address::IBC);
+            let pre_entry = accum
+                .pre
+                .get(&ibc_taddr)
+                .cloned()
+                .unwrap_or(ValueSum::zero());
+            accum.pre.insert(
+                ibc_taddr,
+                checked!(pre_entry + &delta).map_err(StorageError::new)?,
+            );
+        }
+    }
+    Ok(accum)
+}
+
 /// IBC actions to handle IBC operations
 #[derive(Debug)]
 pub struct IbcActions<'a, C, Params, Token>
@@ -636,12 +731,26 @@ where
                 if msg.transfer.is_some() {
                     token_transfer_ctx.enable_shielded_transfer();
                 }
+                let port_id = msg.message.port_id_on_a.clone();
+                let channel_id = msg.message.chan_id_on_a.clone();
                 send_transfer_execute(
                     &mut self.ctx,
                     &mut token_transfer_ctx,
                     msg.message,
                 )
                 .map_err(Error::TokenTransfer)?;
+
+                if let Some((_, (epoch, refund_masp_tx))) =
+                    msg.transfer.as_ref().zip(msg.refund_masp_tx)
+                {
+                    self.save_refund_masp_tx(
+                        &port_id,
+                        &channel_id,
+                        epoch,
+                        refund_masp_tx,
+                    )?;
+                }
+
                 Ok((msg.transfer, None))
             }
             IbcMessage::NftTransfer(msg) => {
@@ -650,6 +759,8 @@ where
                 if msg.transfer.is_some() {
                     nft_transfer_ctx.enable_shielded_transfer();
                 }
+                let port_id = msg.message.port_id_on_a.clone();
+                let channel_id = msg.message.chan_id_on_a.clone();
                 // Add the source to the set of verifiers
                 self.verifiers.borrow_mut().insert(
                     Address::from_str(msg.message.packet_data.sender.as_ref())
@@ -669,6 +780,18 @@ where
                     msg.message,
                 )
                 .map_err(Error::NftTransfer)?;
+
+                if let Some((_, (epoch, refund_masp_tx))) =
+                    msg.transfer.as_ref().zip(msg.refund_masp_tx)
+                {
+                    self.save_refund_masp_tx(
+                        &port_id,
+                        &channel_id,
+                        epoch,
+                        refund_masp_tx,
+                    )?;
+                }
+
                 Ok((msg.transfer, None))
             }
             IbcMessage::Envelope(envelope) => {
@@ -690,16 +813,58 @@ where
                 // Extract MASP tx from the memo in the packet if needed
                 let masp_tx = match &*envelope {
                     MsgEnvelope::Packet(PacketMsg::Recv(msg))
-                        if self.is_receiving_success(msg)? =>
+                        if self
+                            .is_receiving_success(msg)?
+                            .is_some_and(|ack_succ| ack_succ) =>
                     {
                         extract_masp_tx_from_packet(&msg.packet)
                     }
-                    #[cfg(is_apple_silicon)]
+                    // Check if the refund masp tx is stored when the transfer
+                    // failed, i.e. ack with an error or timeout
                     MsgEnvelope::Packet(PacketMsg::Ack(msg)) => {
-                        // NOTE: This is unneeded but wasm compilation error
-                        // happened if deleted on macOS with Apple Silicon
-                        let _ = extract_masp_tx_from_packet(&msg.packet);
-                        None
+                        match serde_json::from_slice::<AcknowledgementStatus>(
+                            msg.acknowledgement.as_ref(),
+                        ) {
+                            Ok(ack) if !ack.is_successful() => {
+                                let masp_epoch = get_masp_epoch::<
+                                    <C as IbcStorageContext>::Storage,
+                                    Params,
+                                >(
+                                    self.ctx.inner.borrow().storage(),
+                                )
+                                .map_err(Error::Storage)?;
+                                self.ctx
+                                    .inner
+                                    .borrow()
+                                    .refund_masp_tx(
+                                        &msg.packet.port_id_on_a,
+                                        &msg.packet.chan_id_on_a,
+                                        msg.packet.seq_on_a,
+                                        masp_epoch,
+                                    )
+                                    .map_err(|e| Error::Context(Box::new(e)))?
+                            }
+                            _ => None,
+                        }
+                    }
+                    MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => {
+                        let masp_epoch = get_masp_epoch::<
+                            <C as IbcStorageContext>::Storage,
+                            Params,
+                        >(
+                            self.ctx.inner.borrow().storage()
+                        )
+                        .map_err(Error::Storage)?;
+                        self.ctx
+                            .inner
+                            .borrow()
+                            .refund_masp_tx(
+                                &msg.packet.port_id_on_a,
+                                &msg.packet.chan_id_on_a,
+                                msg.packet.seq_on_a,
+                                masp_epoch,
+                            )
+                            .map_err(|e| Error::Context(Box::new(e)))?
                     }
                     _ => None,
                 };
@@ -713,8 +878,8 @@ where
     pub fn is_receiving_success(
         &self,
         msg: &IbcMsgRecvPacket,
-    ) -> Result<bool, Error> {
-        let packet_ack = self
+    ) -> Result<Option<bool>, Error> {
+        let Some(packet_ack) = self
             .ctx
             .inner
             .borrow()
@@ -723,11 +888,14 @@ where
                 &msg.packet.chan_id_on_b,
                 msg.packet.seq_on_a,
             )
-            .map_err(|e| Error::Context(Box::new(e)))?;
+            .map_err(|e| Error::Context(Box::new(e)))?
+        else {
+            return Ok(None);
+        };
         let success_ack_commitment = compute_ack_commitment(
             &AcknowledgementStatus::success(ack_success_b64()).into(),
         );
-        Ok(packet_ack == success_ack_commitment)
+        Ok(Some(packet_ack == success_ack_commitment))
     }
 
     /// Validate according to the message in IBC VP
@@ -784,6 +952,36 @@ where
         }
         Ok(())
     }
+
+    fn save_refund_masp_tx(
+        &mut self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        epoch: MaspEpoch,
+        refund_masp_tx: MaspTransaction,
+    ) -> Result<(), Error> {
+        let sequence = get_last_sequence_send(
+            self.ctx.inner.borrow().storage(),
+            port_id,
+            channel_id,
+        )
+        .map_err(Error::Storage)?;
+        self.ctx
+            .inner
+            .borrow_mut()
+            .store_refund_masp_tx(
+                port_id,
+                channel_id,
+                sequence,
+                epoch,
+                refund_masp_tx,
+            )
+            .map_err(|e| Error::Context(Box::new(e)))
+    }
+}
+
+fn is_packet_forward(data: &PacketData) -> bool {
+    serde_json::from_str::<PacketMetadata>(data.memo.as_ref()).is_ok()
 }
 
 // Extract the involved namada address from the packet (either sender or
@@ -795,9 +993,14 @@ fn get_envelope_verifier(
         MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
             match msg.packet.port_id_on_b.as_str() {
                 FT_PORT_ID_STR => {
-                    serde_json::from_slice::<PacketData>(&msg.packet.data)
-                        .ok()
-                        .map(|packet_data| packet_data.receiver)
+                    let packet_data =
+                        serde_json::from_slice::<PacketData>(&msg.packet.data)
+                            .ok()?;
+                    if is_packet_forward(&packet_data) {
+                        None
+                    } else {
+                        Some(packet_data.receiver)
+                    }
                 }
                 NFT_PORT_ID_STR => {
                     serde_json::from_slice::<NftPacketData>(&msg.packet.data)
@@ -863,6 +1066,7 @@ pub fn decode_message<Transfer: BorshDeserialize>(
             let msg = MsgTransfer {
                 message,
                 transfer: None,
+                refund_masp_tx: None,
             };
             return Ok(IbcMessage::Transfer(Box::new(msg)));
         }
@@ -870,6 +1074,7 @@ pub fn decode_message<Transfer: BorshDeserialize>(
             let msg = MsgNftTransfer {
                 message,
                 transfer: None,
+                refund_masp_tx: None,
             };
             return Ok(IbcMessage::NftTransfer(msg));
         }
@@ -905,6 +1110,17 @@ pub fn get_last_sequence_send<S: StorageRead>(
         )));
     }
     Ok(checked!(next_seq - 1)?.into())
+}
+
+fn get_masp_epoch<S, Params>(storage: &S) -> Result<MaspEpoch, StorageError>
+where
+    S: StorageRead,
+    Params: namada_systems::parameters::Read<S>,
+{
+    let epoch = storage.get_block_epoch()?;
+    let masp_epoch_multiplier = Params::masp_epoch_multiplier(storage)?;
+    MaspEpoch::try_from_epoch(epoch, masp_epoch_multiplier)
+        .map_err(StorageError::new_const)
 }
 
 fn received_ibc_trace(
@@ -1025,6 +1241,50 @@ fn retrieve_nft_data<S: StorageRead>(
         message.packet_data.token_data = Some(token_data);
     }
     Ok(message)
+}
+
+/// Replace the sender address with the MASP address for a shielded refund
+fn try_replace_sender_for_shielded_refund<S, Params>(
+    storage: &S,
+    packet: &Packet,
+) -> Option<Packet>
+where
+    S: StorageRead,
+    Params: namada_systems::parameters::Read<S>,
+{
+    // Check if the refund MASP transaction for the current MASP epoch exists
+    let masp_epoch = get_masp_epoch::<S, Params>(storage).ok()?;
+    let refund_masp_tx_key = storage::refund_masp_tx_key(
+        &packet.port_id_on_a,
+        &packet.chan_id_on_a,
+        packet.seq_on_a,
+        masp_epoch,
+    );
+    if !storage.has_key(&refund_masp_tx_key).ok()? {
+        // The refund target is a transparent address or the MASP epoch in the
+        // MASP transaction is stale. The refund target is the sender.
+        return None;
+    }
+
+    let mut packet = packet.clone();
+    match packet.port_id_on_a.as_str() {
+        FT_PORT_ID_STR => {
+            let mut data: PacketData =
+                serde_json::from_slice(&packet.data).ok()?;
+            data.sender = address::MASP.to_string().into();
+            packet.data = serde_json::to_vec(&data)
+                .expect("Packet data should be encoded");
+        }
+        NFT_PORT_ID_STR => {
+            let mut data: NftPacketData =
+                serde_json::from_slice(&packet.data).ok()?;
+            data.sender = address::MASP.to_string().into();
+            packet.data = serde_json::to_vec(&data)
+                .expect("Packet data should be encoded");
+        }
+        _ => return None,
+    }
+    Some(packet)
 }
 
 /// Initialize storage in the genesis block.

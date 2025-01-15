@@ -614,6 +614,7 @@ pub fn msg_transfer(
     MsgTransfer {
         message,
         transfer: None,
+        refund_masp_tx: None,
     }
 }
 
