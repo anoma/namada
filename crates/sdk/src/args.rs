@@ -454,6 +454,18 @@ pub struct TxUnshieldingTransfer<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
+impl<C: NamadaTypes> TxBuilder<C> for TxUnshieldingTransfer<C> {
+    fn tx<F>(self, func: F) -> Self
+    where
+        F: FnOnce(Tx<C>) -> Tx<C>,
+    {
+        TxUnshieldingTransfer {
+            tx: func(self.tx),
+            ..self
+        }
+    }
+}
+
 impl TxUnshieldingTransfer {
     /// Build a transaction from this builder
     pub async fn build(
