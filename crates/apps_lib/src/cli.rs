@@ -296,7 +296,6 @@ pub mod cmds {
                 .subcommand(QueryEffNativeSupply::def().display_order(5))
                 .subcommand(QueryStakingRewardsRate::def().display_order(5))
                 // Actions
-                .subcommand(SignTx::def().display_order(6))
                 .subcommand(ShieldedSync::def().display_order(6))
                 .subcommand(GenIbcShieldingTransfer::def().display_order(6))
                 // Utils
@@ -1916,25 +1915,6 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about(wrap!("Query PoS bonded stake."))
                 .add_args::<args::QueryBondedStake<args::CliTypes>>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct SignTx(pub args::SignTx<args::CliTypes>);
-
-    impl SubCmd for SignTx {
-        const CMD: &'static str = "sign-tx";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| SignTx(args::SignTx::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about(wrap!("Sign a transaction offline."))
-                .add_args::<args::SignTx<args::CliTypes>>()
         }
     }
 
@@ -6758,47 +6738,6 @@ pub mod args {
                     .def()
                     .help(wrap!("The address of the validator to reactivate.")),
             )
-        }
-    }
-
-    impl CliToSdk<SignTx<SdkTypes>> for SignTx<CliTypes> {
-        type Error = std::io::Error;
-
-        fn to_sdk(
-            self,
-            ctx: &mut Context,
-        ) -> Result<SignTx<SdkTypes>, Self::Error> {
-            let tx = self.tx.to_sdk(ctx)?;
-            let tx_data = std::fs::read(self.tx_data)?;
-
-            Ok(SignTx::<SdkTypes> {
-                tx,
-                tx_data,
-                owner: ctx.borrow_chain_or_exit().get(&self.owner),
-            })
-        }
-    }
-
-    impl Args for SignTx<CliTypes> {
-        fn parse(matches: &ArgMatches) -> Self {
-            let tx = Tx::parse(matches);
-            let tx_path = TX_PATH.parse(matches);
-            let owner = OWNER.parse(matches);
-            Self {
-                tx,
-                tx_data: tx_path,
-                owner,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.add_args::<Tx<CliTypes>>()
-                .arg(TX_PATH.def().help(wrap!(
-                    "The path to the tx file with the serialized tx."
-                )))
-                .arg(
-                    OWNER.def().help(wrap!("The address of the account owner")),
-                )
         }
     }
 

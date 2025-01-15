@@ -2154,17 +2154,6 @@ impl TxReactivateValidator {
 }
 
 #[derive(Clone, Debug)]
-/// Sign a transaction offline
-pub struct SignTx<C: NamadaTypes = SdkTypes> {
-    /// Common tx arguments
-    pub tx: Tx<C>,
-    /// Transaction data
-    pub tx_data: C::Data,
-    /// The account address
-    pub owner: C::Address,
-}
-
-#[derive(Clone, Debug)]
 /// Sync notes from MASP owned by the provided spending /
 /// viewing keys. Syncing can be told to stop at a given
 /// block height.
