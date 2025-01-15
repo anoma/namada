@@ -24,6 +24,7 @@ use namada_governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
 use namada_ibc::IbcShieldingData;
+use namada_io::{display_line, Io};
 use namada_token::masp::utils::RetryStrategy;
 use namada_tx::data::GasLimit;
 use namada_tx::Memo;
@@ -38,7 +39,7 @@ use crate::rpc::{
     get_registry_from_xcs_osmosis_contract, osmosis_denom_from_namada_denom,
     query_osmosis_pool_routes,
 };
-use crate::signing::SigningTxData;
+use crate::signing::{gen_disposable_signing_key, SigningTxData};
 use crate::wallet::{DatedSpendingKey, DatedViewingKey};
 use crate::{rpc, tx, Namada};
 
@@ -543,7 +544,11 @@ pub struct TxOsmosisSwap<C: NamadaTypes = SdkTypes> {
     pub output_denom: String,
     /// Address of the recipient on Namada
     pub recipient: Either<C::Address, C::PaymentAddress>,
-    /// Address to receive funds exceeding the minimum amount
+    /// Address to receive funds exceeding the minimum amount,
+    /// in case of IBC shieldings
+    ///
+    /// If unspecified, a disposable address is generated to
+    /// receive funds with
     pub overflow: Option<C::Address>,
     ///  Constraints on the  osmosis swap
     pub slippage: Slippage,
@@ -616,16 +621,22 @@ impl TxOsmosisSwap<SdkTypes> {
             output_denom: namada_output_denom,
         } = self;
 
-        let recipient = recipient
-            .map_either(Some, |payment_addr| Some(payment_addr).zip(overflow))
-            .factor_none()
-            .ok_or_else(|| {
-                Error::Other(
-                    "Overflow receiver unspecified while attempting a fully \
-                     shielded swap"
-                        .to_owned(),
-                )
-            })?;
+        let recipient = recipient.map_either(
+            |addr| addr,
+            |payment_addr| async move {
+                let overflow_receiver = if let Some(overflow) = overflow {
+                    overflow
+                } else {
+                    let addr = (&gen_disposable_signing_key(ctx).await).into();
+                    display_line!(
+                        ctx.io(),
+                        "Sending unshielded funds to disposable address {addr}",
+                    );
+                    addr
+                };
+                (payment_addr, overflow_receiver)
+            },
+        );
 
         // validate `local_recovery_addr` and the contract addr
         if !bech32::decode(&local_recovery_addr)
@@ -684,7 +695,9 @@ impl TxOsmosisSwap<SdkTypes> {
             Either::Left(transparent_recipient) => {
                 (transparent_recipient.to_string(), slippage, None)
             }
-            Either::Right((payment_addr, overflow_receiver)) => {
+            Either::Right(fut) => {
+                let (payment_addr, overflow_receiver) = fut.await;
+
                 let amount_to_shield = match slippage {
                     Slippage::MinOutputAmount(amount_to_shield) => {
                         amount_to_shield

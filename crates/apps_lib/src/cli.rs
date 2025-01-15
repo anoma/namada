@@ -5174,6 +5174,7 @@ pub mod args {
                 .arg(
                     TARGET_OPT
                         .def()
+                        .conflicts_with(OVERFLOW_OPT.name)
                         .conflicts_with(PAYMENT_ADDRESS_TARGET_OPT.name)
                         .help(wrap!(
                             "The transparent Namada address that shall \
@@ -5183,7 +5184,6 @@ pub mod args {
                 .arg(
                     PAYMENT_ADDRESS_TARGET_OPT
                         .def()
-                        .requires(OVERFLOW_OPT.name)
                         .conflicts_with(TARGET_OPT.name)
                         .help(wrap!(
                             "The shielded Namada address that shall receive \
@@ -5191,10 +5191,13 @@ pub mod args {
                         )),
                 )
                 .arg(OVERFLOW_OPT.def().help(wrap!(
-                    "The transparent address that receives the amount of \
-                     target asset exceeding the minimum amount. If used in \
-                     conjunction with shielding, this address should not be \
-                     linkable to any of your transparent accounts."
+                    "Transparent address that receives the amount of target \
+                     asset exceeding the minimum trade amount. Only \
+                     applicable when shielding assets that have been swapped \
+                     on Osmosis. This address should not be linkable to any \
+                     of the user's personal accounts, to maximize the privacy \
+                     of the trade. If unspecified, a disposable address is \
+                     generated."
                 )))
                 .arg(SLIPPAGE.def().requires(WINDOW_SECONDS.name).help(wrap!(
                     "The slippage percentage as an integer between 0 and 100. \
