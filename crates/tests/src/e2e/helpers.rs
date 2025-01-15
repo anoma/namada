@@ -31,8 +31,8 @@ use namada_sdk::wallet::Wallet;
 use toml::Value;
 
 use super::setup::{
-    self, run_cosmos_cmd, sleep, NamadaBgCmd, NamadaCmd, Test, ENV_VAR_DEBUG,
-    ENV_VAR_USE_PREBUILT_BINARIES,
+    self, run_cosmos_cmd, sleep, NamadaBgCmd, NamadaCmd, Test, TestDir,
+    ENV_VAR_DEBUG, ENV_VAR_USE_PREBUILT_BINARIES,
 };
 use crate::e2e::setup::{constants, Bin, CosmosChainType, Who, APPS_PACKAGE};
 use crate::strings::{LEDGER_STARTED, TX_APPLIED_SUCCESS};
@@ -493,7 +493,11 @@ pub fn epochs_per_year_from_min_duration(min_duration: u64) -> u64 {
 }
 
 /// Make a Hermes config
-pub fn make_hermes_config(test_a: &Test, test_b: &Test) -> Result<()> {
+pub fn make_hermes_config(
+    hermes_dir: &TestDir,
+    test_a: &Test,
+    test_b: &Test,
+) -> Result<()> {
     let mut config = toml::map::Map::new();
 
     let mut global = toml::map::Map::new();
@@ -533,9 +537,9 @@ pub fn make_hermes_config(test_a: &Test, test_b: &Test) -> Result<()> {
     let chains = vec![
         make_hermes_chain_config(test_a),
         match CosmosChainType::chain_type(test_b.net.chain_id.as_str()) {
-            Ok(chain_type) => {
-                make_hermes_chain_config_for_cosmos(chain_type, test_b)
-            }
+            Ok(chain_type) => make_hermes_chain_config_for_cosmos(
+                hermes_dir, chain_type, test_b,
+            ),
             Err(_) => make_hermes_chain_config(test_b),
         },
     ];
@@ -543,16 +547,7 @@ pub fn make_hermes_config(test_a: &Test, test_b: &Test) -> Result<()> {
     config.insert("chains".to_owned(), Value::Array(chains));
 
     let toml_string = toml::to_string(&Value::Table(config)).unwrap();
-    let hermes_dir = test_a.test_dir.as_ref().join("hermes");
-    std::fs::create_dir_all(&hermes_dir).unwrap();
-    let config_path = hermes_dir.join("config.toml");
-    let mut file = File::create(config_path).unwrap();
-    file.write_all(toml_string.as_bytes()).map_err(|e| {
-        eyre!(format!("Writing a Hermes config failed: {}", e,))
-    })?;
-    // One Hermes config.toml is OK, but add one more config.toml to execute
-    // Hermes from test_b
-    let hermes_dir = test_b.test_dir.as_ref().join("hermes");
+    let hermes_dir = hermes_dir.as_ref().join("hermes");
     std::fs::create_dir_all(&hermes_dir).unwrap();
     let config_path = hermes_dir.join("config.toml");
     let mut file = File::create(config_path).unwrap();
@@ -607,12 +602,14 @@ fn make_hermes_chain_config(test: &Test) -> Value {
 }
 
 fn make_hermes_chain_config_for_cosmos(
+    hermes_dir: &TestDir,
     chain_type: CosmosChainType,
     test: &Test,
 ) -> Value {
     let mut table = toml::map::Map::new();
     table.insert("mode".to_owned(), Value::String("push".to_owned()));
-    let url = format!("ws://{}/websocket", setup::constants::COSMOS_RPC);
+    let offset = chain_type.get_offset();
+    let url = format!("ws://127.0.0.1:6416{}/websocket", offset);
     table.insert("url".to_owned(), Value::String(url));
     table.insert("batch_delay".to_owned(), Value::String("500ms".to_owned()));
     let event_source = Value::Table(table);
@@ -623,14 +620,16 @@ fn make_hermes_chain_config_for_cosmos(
         Value::String(test.net.chain_id.to_string()),
     );
     chain.insert("type".to_owned(), Value::String("CosmosSdk".to_owned()));
+
     chain.insert(
         "rpc_addr".to_owned(),
-        Value::String(format!("http://{}", setup::constants::COSMOS_RPC)),
+        Value::String(format!("http://127.0.0.1:6416{}", offset)),
     );
     chain.insert(
         "grpc_addr".to_owned(),
-        Value::String("http://127.0.0.1:9090".to_owned()),
+        Value::String(format!("http://127.0.0.1:{}", offset + 9090)),
     );
+
     chain.insert("event_source".to_owned(), event_source);
     chain.insert(
         "account_prefix".to_owned(),
@@ -640,7 +639,8 @@ fn make_hermes_chain_config_for_cosmos(
         "key_name".to_owned(),
         Value::String(setup::constants::COSMOS_RELAYER.to_string()),
     );
-    let key_dir = test.test_dir.as_ref().join("hermes/keys");
+    let hermes_dir: &Path = hermes_dir.as_ref();
+    let key_dir = hermes_dir.join("hermes/keys");
     chain.insert(
         "key_store_folder".to_owned(),
         Value::String(key_dir.to_string_lossy().to_string()),
@@ -672,6 +672,28 @@ pub fn update_cosmos_config(test: &Test) -> Result<()> {
             *timeout_propose = "1s".into();
         }
     }
+    let offset = CosmosChainType::chain_type(test.net.chain_id.as_str())
+        .unwrap()
+        .get_offset();
+    let p2p = values
+        .get_mut("p2p")
+        .expect("Test failed")
+        .as_table_mut()
+        .expect("Test failed");
+    let Some(laddr) = p2p.get_mut("laddr") else {
+        panic!("Test failed")
+    };
+    *laddr = format!("tcp://0.0.0.0:266{}{}", offset, offset).into();
+    let rpc = values
+        .get_mut("rpc")
+        .expect("Test failed")
+        .as_table_mut()
+        .expect("Test failed");
+    let Some(laddr) = rpc.get_mut("laddr") else {
+        panic!("Test failed")
+    };
+    *laddr = format!("tcp://0.0.0.0:6416{offset}").into();
+
     let mut file = OpenOptions::new()
         .write(true)
         .truncate(true)
@@ -738,6 +760,13 @@ pub fn update_cosmos_config(test: &Test) -> Result<()> {
     Ok(())
 }
 
+pub fn get_cosmos_rpc_address(test: &Test) -> String {
+    let offset = CosmosChainType::chain_type(test.net.chain_id.as_str())
+        .unwrap()
+        .get_offset();
+    format!("127.0.0.1:6416{offset}")
+}
+
 pub fn find_cosmos_address(
     test: &Test,
     alias: impl AsRef<str>,
@@ -759,7 +788,8 @@ pub fn find_cosmos_address(
 }
 
 pub fn get_cosmos_gov_address(test: &Test) -> Result<String> {
-    let args = ["query", "auth", "module-account", "gov"];
+    let rpc = format!("tcp://{}", get_cosmos_rpc_address(test));
+    let args = ["query", "auth", "module-account", "gov", "--node", &rpc];
     let mut cosmos = run_cosmos_cmd(test, args, Some(40))?;
     let (_, matched) = cosmos.exp_regex("cosmos[a-z0-9]+")?;
 

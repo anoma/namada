@@ -5,6 +5,7 @@ use ibc::core::channel::types::channel::ChannelEnd;
 use ibc::core::channel::types::commitment::{
     AcknowledgementCommitment, PacketCommitment,
 };
+use ibc::core::channel::types::error::PacketError;
 use ibc::core::channel::types::packet::Receipt;
 use ibc::core::client::context::{
     ClientValidationContext, ExtClientValidationContext,
@@ -253,11 +254,18 @@ where
         &self,
         path: &AckPath,
     ) -> Result<AcknowledgementCommitment, ContextError> {
-        self.inner.borrow().packet_ack(
+        let maybe_ack = self.inner.borrow().packet_ack(
             &path.port_id,
             &path.channel_id,
             path.sequence,
-        )
+        )?;
+
+        maybe_ack.ok_or_else(|| {
+            PacketError::PacketAcknowledgementNotFound {
+                sequence: path.sequence,
+            }
+            .into()
+        })
     }
 
     fn channel_counter(&self) -> Result<u64, ContextError> {
