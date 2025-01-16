@@ -17,6 +17,6 @@ fn main() {
     tonic_build::configure()
         .out_dir("src/proto/generated")
         .protoc_arg("--experimental_allow_proto3_optional")
-        .compile(&[format!("{}/types.proto", PROTO_SRC)], &[PROTO_SRC])
+        .compile_protos(&[format!("{}/types.proto", PROTO_SRC)], &[PROTO_SRC])
         .unwrap();
 }
