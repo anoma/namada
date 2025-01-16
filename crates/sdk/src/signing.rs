@@ -446,8 +446,13 @@ pub struct OfflineSignatures {
 /// Generates the transaction's signatures for offline signing purposes. This
 /// allows to sign both the inner transactions of the batch as well as the
 /// wrapper transaction and it supports multisignatures.
+///
+/// This function might need to modify the transaction by attaching the inner tx
+/// signatures to correctly produce the wrapper signature: since this change is
+/// only needed for the sake of this function and should not be propagated to
+/// the caller, this function consumes the actual tx.
 pub async fn generate_tx_signatures(
-    tx: &mut Tx,
+    mut tx: Tx,
     secret_keys: Vec<namada_core::key::common::SecretKey>,
     owner: Option<Address>,
     wrapper_signer: Option<namada_core::key::common::SecretKey>,

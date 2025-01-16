@@ -1052,19 +1052,21 @@ pub async fn sign_offline(
         safe_exit(1)
     };
 
-    let mut tx =
-        if let Ok(transaction) = Tx::try_from_json_bytes(tx_data.as_ref()) {
-            transaction
-        } else {
-            eprintln!("Couldn't decode the transaction.");
-            safe_exit(1)
-        };
+    let tx = if let Ok(transaction) = Tx::try_from_json_bytes(tx_data.as_ref())
+    {
+        transaction
+    } else {
+        eprintln!("Couldn't decode the transaction.");
+        safe_exit(1)
+    };
+    let raw_header_hash = tx.raw_header_hash();
+    let header_hash = tx.header_hash();
 
     let OfflineSignatures {
         signatures,
         wrapper_signature,
     } = match namada_sdk::signing::generate_tx_signatures(
-        &mut tx,
+        tx,
         secret_keys,
         owner,
         wrapper_signer,
@@ -1081,7 +1083,7 @@ pub async fn sign_offline(
     for signature in &signatures {
         let filename = format!(
             "offline_signature_{}_{}.sig",
-            tx.raw_header_hash().to_string().to_lowercase(),
+            raw_header_hash.to_string().to_lowercase(),
             signature.pubkey,
         );
 
@@ -1106,7 +1108,7 @@ pub async fn sign_offline(
     if let Some(wrapper_signature) = wrapper_signature {
         let filename = format!(
             "offline_wrapper_signature_{}.sig",
-            tx.header_hash().to_string().to_lowercase()
+            header_hash.to_string().to_lowercase()
         );
         let signature_path = match output_folder_path {
             Some(ref path) => path.join(filename).to_string_lossy().to_string(),
