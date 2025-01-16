@@ -18,6 +18,7 @@ use namada_sdk::borsh::BorshDeserialize;
 use namada_sdk::chain::{BlockHeight, Epoch};
 use namada_sdk::collections::{HashMap, HashSet};
 use namada_sdk::control_flow::time::{Duration, Instant};
+use namada_sdk::dec::Dec;
 use namada_sdk::events::Event;
 use namada_sdk::governance::parameters::GovernanceParameters;
 use namada_sdk::governance::pgf::parameters::PgfParameters;
@@ -41,7 +42,7 @@ use namada_sdk::proof_of_stake::types::{
     CommissionPair, Slash, ValidatorMetaData, ValidatorState,
     ValidatorStateInfo, WeightedValidator,
 };
-use namada_sdk::proof_of_stake::{OwnedPosParams, PosParams};
+use namada_sdk::proof_of_stake::{self, OwnedPosParams, PosParams};
 use namada_sdk::queries::RPC;
 use namada_sdk::rpc::{
     self, enriched_bonds_and_unbonds, format_denominated_amount, query_epoch,
@@ -1533,10 +1534,18 @@ pub async fn query_staking_rewards_rate<N: Namada>(context: &N) {
             .staking_rewards_rate(context.client())
             .await,
     );
+
+    let last_staked_ratio_key =
+        proof_of_stake::storage_key::last_staked_ratio_key();
+    let last_staked_ratio: Dec =
+        query_storage_value(context.client(), &last_staked_ratio_key)
+            .await
+            .unwrap();
+    display_line!(context.io(), "Last staked ratio: {last_staked_ratio}");
     if staking_rewards_rate.is_zero() && inflation_rate.is_zero() {
         display_line!(
             context.io(),
-            "PoS inflation and rewards are not currently enabled."
+            "No PoS inflation and rewards tokens were minted."
         );
     } else {
         display_line!(
