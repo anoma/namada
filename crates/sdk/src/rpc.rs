@@ -41,8 +41,9 @@ use namada_governance::utils::{
     compute_proposal_result, ProposalResult, ProposalVotes, Vote,
 };
 use namada_ibc::core::host::types::identifiers::PortId;
+use namada_ibc::parameters::IbcParameters;
 use namada_ibc::storage::{
-    ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key,
+    ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key, throughput_limit_key,
 };
 use namada_ibc::trace::calc_ibc_token_hash;
 use namada_io::{display_line, edisplay_line, Client, Io};
@@ -1489,6 +1490,7 @@ pub async fn query_ibc_tokens<N: Namada>(
 /// Look up the IBC denomination from a IbcToken.
 pub async fn query_ibc_denom<N: Namada>(
     context: &N,
+    // FIXME: look here in case I needed to use a string
     token: impl AsRef<str>,
     owner: Option<&Address>,
 ) -> String {
@@ -1897,4 +1899,28 @@ pub async fn query_osmosis_pool_routes(
         .into_iter()
         .map(|r| r.pools.into_iter().map(OsmosisPoolHop::from).collect())
         .collect())
+}
+
+// FIXME: the other functions rely on the rpc macro, should do the same in here?
+// In case remove this function from here and move it there
+/// Query the IBC rate limit for the provided token
+pub async fn query_ibc_rate_limit<C: Client + Sync>(
+    client: &C,
+    token: &Address,
+) -> Result<Amount, error::Error> {
+    match query_storage_value::<_, Amount>(client, &throughput_limit_key(token))
+        .await
+    {
+        Ok(limit) => Ok(limit),
+        Err(_) => {
+            // If no custom limit has been set for this token fallback to the
+            // default param
+            query_storage_value::<_, IbcParameters>(
+                client,
+                &namada_ibc::storage::params_key(),
+            )
+            .await
+            .map(|params| params.default_per_epoch_throughput_limit)
+        }
+    }
 }
