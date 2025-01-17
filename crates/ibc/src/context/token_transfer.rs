@@ -7,10 +7,8 @@ use std::rc::Rc;
 use ibc::apps::transfer::context::{
     TokenTransferExecutionContext, TokenTransferValidationContext,
 };
-use ibc::apps::transfer::types::error::TokenTransferError;
 use ibc::apps::transfer::types::{Memo, PrefixedCoin, PrefixedDenom};
-use ibc::core::channel::types::error::ChannelError;
-use ibc::core::handler::types::error::ContextError;
+use ibc::core::host::types::error::HostError;
 use ibc::core::host::types::identifiers::{ChannelId, PortId};
 use ibc::core::primitives::Signer;
 use namada_core::address::{Address, InternalAddress, MASP};
@@ -74,7 +72,7 @@ where
     fn get_token_amount(
         &self,
         coin: &PrefixedCoin,
-    ) -> Result<(Address, Amount), TokenTransferError> {
+    ) -> Result<(Address, Amount), HostError> {
         let token = match Address::decode(coin.denom.base_denom.as_str()) {
             Ok(token_addr) if coin.denom.trace_path.is_empty() => token_addr,
             _ => trace::ibc_token(coin.denom.to_string()),
@@ -83,14 +81,11 @@ where
         // Convert IBC amount to Namada amount for the token
         let uint_amount = Uint(primitive_types::U256::from(coin.amount).0);
         let amount = Amount::from_uint(uint_amount, 0).map_err(|e| {
-            TokenTransferError::ContextError(
-                ChannelError::Other {
-                    description: format!(
-                        "The IBC amount is invalid: Coin {coin}, Error {e}",
-                    ),
-                }
-                .into(),
-            )
+            HostError::Other {
+                description: format!(
+                    "The IBC amount is invalid: Coin {coin}, Error {e}",
+                ),
+            }
         })?;
 
         Ok((token, amount))
@@ -102,25 +97,20 @@ where
         token: &Address,
         amount: Amount,
         is_minted: bool,
-    ) -> Result<(), TokenTransferError> {
+    ) -> Result<(), HostError> {
         let mint = self.inner.borrow().mint_amount(token)?;
         let updated_mint = if is_minted {
-            mint.checked_add(amount).ok_or_else(|| {
-                TokenTransferError::Other(
-                    "The mint amount overflowed".to_string(),
-                )
+            mint.checked_add(amount).ok_or_else(|| HostError::Other {
+                description: "The mint amount overflowed".to_string(),
             })?
         } else {
-            mint.checked_sub(amount).ok_or_else(|| {
-                TokenTransferError::Other(
-                    "The mint amount underflowed".to_string(),
-                )
+            mint.checked_sub(amount).ok_or_else(|| HostError::Other {
+                description: "The mint amount underflowed".to_string(),
             })?
         };
         self.inner
             .borrow_mut()
             .store_mint_amount(token, updated_mint)
-            .map_err(TokenTransferError::from)
     }
 
     /// Add the amount to the per-epoch withdraw of the token
@@ -128,17 +118,15 @@ where
         &self,
         token: &Address,
         amount: Amount,
-    ) -> Result<(), TokenTransferError> {
+    ) -> Result<(), HostError> {
         let deposit = self.inner.borrow().deposit(token)?;
-        let added_deposit = deposit.checked_add(amount).ok_or_else(|| {
-            TokenTransferError::Other(
-                "The per-epoch deposit overflowed".to_string(),
-            )
-        })?;
-        self.inner
-            .borrow_mut()
-            .store_deposit(token, added_deposit)
-            .map_err(TokenTransferError::from)
+        let added_deposit =
+            deposit
+                .checked_add(amount)
+                .ok_or_else(|| HostError::Other {
+                    description: "The per-epoch deposit overflowed".to_string(),
+                })?;
+        self.inner.borrow_mut().store_deposit(token, added_deposit)
     }
 
     /// Add the amount to the per-epoch withdraw of the token
@@ -146,24 +134,25 @@ where
         &self,
         token: &Address,
         amount: Amount,
-    ) -> Result<(), TokenTransferError> {
+    ) -> Result<(), HostError> {
         let withdraw = self.inner.borrow().withdraw(token)?;
-        let added_withdraw = withdraw.checked_add(amount).ok_or_else(|| {
-            TokenTransferError::Other(
-                "The per-epoch withdraw overflowed".to_string(),
-            )
-        })?;
+        let added_withdraw =
+            withdraw
+                .checked_add(amount)
+                .ok_or_else(|| HostError::Other {
+                    description: "The per-epoch withdraw overflowed"
+                        .to_string(),
+                })?;
         self.inner
             .borrow_mut()
             .store_withdraw(token, added_withdraw)
-            .map_err(TokenTransferError::from)
     }
 
     fn maybe_store_ibc_denom(
         &self,
         owner: &Address,
         coin: &PrefixedCoin,
-    ) -> Result<(), TokenTransferError> {
+    ) -> Result<(), HostError> {
         if coin.denom.trace_path.is_empty() {
             // It isn't an IBC denom
             return Ok(());
@@ -171,18 +160,20 @@ where
         let ibc_denom = coin.denom.to_string();
         let trace_hash = trace::calc_hash(&ibc_denom);
 
-        self.inner
-            .borrow_mut()
-            .store_ibc_trace(owner.to_string(), &trace_hash, &ibc_denom)
-            .map_err(TokenTransferError::from)?;
+        self.inner.borrow_mut().store_ibc_trace(
+            owner.to_string(),
+            &trace_hash,
+            &ibc_denom,
+        )?;
 
         let base_token = Address::decode(coin.denom.base_denom.as_str())
             .map(|a| a.to_string())
             .unwrap_or(coin.denom.base_denom.to_string());
-        self.inner
-            .borrow_mut()
-            .store_ibc_trace(base_token, &trace_hash, &ibc_denom)
-            .map_err(TokenTransferError::from)
+        self.inner.borrow_mut().store_ibc_trace(
+            base_token,
+            &trace_hash,
+            &ibc_denom,
+        )
     }
 }
 
@@ -210,15 +201,15 @@ where
         }
     }
 
-    fn get_port(&self) -> Result<PortId, TokenTransferError> {
+    fn get_port(&self) -> Result<PortId, HostError> {
         Ok(PortId::transfer())
     }
 
-    fn can_send_coins(&self) -> Result<(), TokenTransferError> {
+    fn can_send_coins(&self) -> Result<(), HostError> {
         Ok(())
     }
 
-    fn can_receive_coins(&self) -> Result<(), TokenTransferError> {
+    fn can_receive_coins(&self) -> Result<(), HostError> {
         Ok(())
     }
 
@@ -229,7 +220,7 @@ where
         _channel_id: &ChannelId,
         _coin: &PrefixedCoin,
         _memo: &Memo,
-    ) -> Result<(), TokenTransferError> {
+    ) -> Result<(), HostError> {
         // validated by Multitoken VP
         Ok(())
     }
@@ -240,7 +231,7 @@ where
         _port_id: &PortId,
         _channel_id: &ChannelId,
         _coin: &PrefixedCoin,
-    ) -> Result<(), TokenTransferError> {
+    ) -> Result<(), HostError> {
         // validated by Multitoken VP
         Ok(())
     }
@@ -249,7 +240,7 @@ where
         &self,
         _account: &Self::AccountId,
         _coin: &PrefixedCoin,
-    ) -> Result<(), TokenTransferError> {
+    ) -> Result<(), HostError> {
         // validated by Multitoken VP
         Ok(())
     }
@@ -259,7 +250,7 @@ where
         _account: &Self::AccountId,
         _coin: &PrefixedCoin,
         _memo: &Memo,
-    ) -> Result<(), TokenTransferError> {
+    ) -> Result<(), HostError> {
         // validated by Multitoken VP
         Ok(())
     }
@@ -280,7 +271,7 @@ where
         _channel_id: &ChannelId,
         coin: &PrefixedCoin,
         _memo: &Memo,
-    ) -> Result<(), TokenTransferError> {
+    ) -> Result<(), HostError> {
         let (ibc_token, amount) = self.get_token_amount(coin)?;
 
         self.add_withdraw(&ibc_token, amount)?;
@@ -306,7 +297,7 @@ where
                 &ibc_token,
                 amount,
             )
-            .map_err(|e| ContextError::from(e).into())
+            .map_err(HostError::from)
     }
 
     fn unescrow_coins_execute(
@@ -315,7 +306,7 @@ where
         _port_id: &PortId,
         _channel_id: &ChannelId,
         coin: &PrefixedCoin,
-    ) -> Result<(), TokenTransferError> {
+    ) -> Result<(), HostError> {
         let (ibc_token, amount) = self.get_token_amount(coin)?;
 
         self.add_deposit(&ibc_token, amount)?;
@@ -323,14 +314,14 @@ where
         self.inner
             .borrow_mut()
             .transfer_token(&IBC_ESCROW_ADDRESS, to_account, &ibc_token, amount)
-            .map_err(|e| ContextError::from(e).into())
+            .map_err(HostError::from)
     }
 
     fn mint_coins_execute(
         &mut self,
         account: &Self::AccountId,
         coin: &PrefixedCoin,
-    ) -> Result<(), TokenTransferError> {
+    ) -> Result<(), HostError> {
         // The trace path of the denom is already updated if receiving the token
         let (ibc_token, amount) = self.get_token_amount(coin)?;
 
@@ -351,7 +342,7 @@ where
         self.inner
             .borrow_mut()
             .mint_token(account, &ibc_token, amount)
-            .map_err(|e| ContextError::from(e).into())
+            .map_err(HostError::from)
     }
 
     fn burn_coins_execute(
@@ -359,7 +350,7 @@ where
         account: &Self::AccountId,
         coin: &PrefixedCoin,
         _memo: &Memo,
-    ) -> Result<(), TokenTransferError> {
+    ) -> Result<(), HostError> {
         let (ibc_token, amount) = self.get_token_amount(coin)?;
 
         self.update_mint_amount(&ibc_token, amount, false)?;
@@ -378,6 +369,6 @@ where
         self.inner
             .borrow_mut()
             .burn_token(account, &ibc_token, amount)
-            .map_err(|e| ContextError::from(e).into())
+            .map_err(HostError::from)
     }
 }

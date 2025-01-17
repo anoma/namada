@@ -16,10 +16,12 @@ use namada_account::{AccountPublicKeysMap, InitAccount, UpdateAccount};
 use namada_core::address::{Address, ImplicitAddress, InternalAddress, MASP};
 use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
+use namada_core::ibc::primitives::IntoHostTime;
 use namada_core::key::*;
 use namada_core::masp::{
     AssetData, ExtendedViewingKey, MaspTxId, PaymentAddress,
 };
+use namada_core::tendermint::Time as TmTime;
 use namada_core::time::DateTimeUtc;
 use namada_core::token::{Amount, DenominatedAmount};
 use namada_governance::storage::proposal::{
@@ -1109,7 +1111,9 @@ fn format_timeout_timestamp(timestamp: &TimeoutTimestamp) -> String {
     match timestamp {
         TimeoutTimestamp::Never => "no timestamp".to_string(),
         TimeoutTimestamp::At(timestamp) => {
-            timestamp.into_tm_time().to_rfc3339()
+            let tm_time: TmTime =
+                timestamp.into_host_time().expect("invalid timestamp");
+            tm_time.to_rfc3339()
         }
     }
 }

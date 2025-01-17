@@ -7,24 +7,21 @@ use ibc::core::channel::types::channel::ChannelEnd;
 use ibc::core::channel::types::commitment::{
     AcknowledgementCommitment, PacketCommitment,
 };
-use ibc::core::channel::types::error::{ChannelError, PacketError};
 use ibc::core::channel::types::packet::Receipt;
-use ibc::core::client::types::error::ClientError;
 use ibc::core::client::types::Height;
-use ibc::core::connection::types::error::ConnectionError;
 use ibc::core::connection::types::ConnectionEnd;
-use ibc::core::handler::types::error::ContextError;
+use ibc::core::host::types::error::HostError;
 use ibc::core::host::types::identifiers::{
     ChannelId, ClientId, ConnectionId, PortId, Sequence,
 };
 use ibc::primitives::proto::{Any, Protobuf};
-use ibc::primitives::Timestamp;
+use ibc::primitives::{IntoHostTime, IntoTimestamp, Timestamp};
 use namada_core::address::Address;
 use namada_core::chain::BlockHeight;
 use namada_core::storage::Key;
 use namada_core::tendermint::Time as TmTime;
 use namada_core::token::Amount;
-use namada_state::{Error, StorageRead, StorageWrite};
+use namada_state::{Error as StorageError, StorageRead, StorageWrite};
 use namada_systems::trans_token;
 use prost::Message;
 
@@ -33,7 +30,7 @@ use super::storage::IbcStorageContext;
 use crate::{storage, trace, NftClass, NftMetadata};
 
 /// Result of IBC common function call
-pub type Result<T> = std::result::Result<T, ContextError>;
+pub type Result<T> = std::result::Result<T, HostError>;
 
 /// Context to handle typical IBC data
 pub trait IbcCommonContext: IbcStorageContext {
@@ -42,15 +39,16 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::client_state_key(client_id);
         match self.storage().read_bytes(&key)? {
             Some(value) => Any::decode(&value[..])
-                .map_err(|e| ClientError::Other {
-                    description: e.to_string(),
+                .map_err(|e| HostError::FailedToRetrieve {
+                    description: format!(
+                        "Decoding client state failed: ID {client_id}, error \
+                         {e}"
+                    ),
                 })?
-                .try_into()
-                .map_err(ContextError::from),
-            None => Err(ClientError::ClientStateNotFound {
-                client_id: client_id.clone(),
-            }
-            .into()),
+                .try_into(),
+            None => Err(HostError::FailedToRetrieve {
+                description: format!("No client state: ID {client_id}"),
+            }),
         }
     }
 
@@ -64,7 +62,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let bytes = Any::from(client_state).encode_to_vec();
         self.storage_mut()
             .write_bytes(&key, bytes)
-            .map_err(ContextError::from)
+            .map_err(HostError::from)
     }
 
     /// Get the ConsensusState
@@ -76,16 +74,18 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::consensus_state_key(client_id, height);
         match self.storage().read_bytes(&key)? {
             Some(value) => Any::decode(&value[..])
-                .map_err(|e| ClientError::Other {
-                    description: e.to_string(),
+                .map_err(|e| HostError::FailedToRetrieve {
+                    description: format!(
+                        "Decoding consensus state failed: ID {client_id}, \
+                         height {height} error {e}"
+                    ),
                 })?
-                .try_into()
-                .map_err(ContextError::from),
-            None => Err(ClientError::ConsensusStateNotFound {
-                client_id: client_id.clone(),
-                height,
-            }
-            .into()),
+                .try_into(),
+            None => Err(HostError::FailedToRetrieve {
+                description: format!(
+                    "No consensus state: ID {client_id}, height {height}"
+                ),
+            }),
         }
     }
 
@@ -100,7 +100,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let bytes = Any::from(consensus_state).encode_to_vec();
         self.storage_mut()
             .write_bytes(&key, bytes)
-            .map_err(ContextError::from)
+            .map_err(HostError::from)
     }
 
     /// Delete the ConsensusState
@@ -110,7 +110,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         height: Height,
     ) -> Result<()> {
         let key = storage::consensus_state_key(client_id, height);
-        self.storage_mut().delete(&key).map_err(ContextError::from)
+        self.storage_mut().delete(&key).map_err(HostError::from)
     }
 
     /// Decode ConsensusState from bytes
@@ -119,11 +119,10 @@ pub trait IbcCommonContext: IbcStorageContext {
         consensus_state: Vec<u8>,
     ) -> Result<AnyConsensusState> {
         Any::decode(&consensus_state[..])
-            .map_err(|e| ClientError::Other {
+            .map_err(|e| HostError::Other {
                 description: e.to_string(),
             })?
             .try_into()
-            .map_err(ContextError::from)
     }
 
     /// Get heights of all consensus states
@@ -137,8 +136,8 @@ pub trait IbcCommonContext: IbcStorageContext {
         while let Some((key, _)) = self.storage().iter_next(&mut iter)? {
             let key = Key::parse(key).expect("the key should be parsable");
             let height = storage::consensus_height(&key).map_err(|e| {
-                ClientError::Other {
-                    description: e.to_string(),
+                HostError::FailedToRetrieve {
+                    description: format!("Invalid key: key {key}, error {e}"),
                 }
             })?;
             heights.push(height);
@@ -170,7 +169,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             }
         }
         lowest_height_value
-            .map(|(_, value)| value.try_into().map_err(ContextError::from))
+            .map(|(_, value)| value.try_into().map_err(HostError::from))
             .transpose()
     }
 
@@ -199,7 +198,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             }
         }
         highest_height_value
-            .map(|(_, value)| value.try_into().map_err(ContextError::from))
+            .map(|(_, value)| value.try_into().map_err(HostError::from))
             .transpose()
     }
 
@@ -210,20 +209,20 @@ pub trait IbcCommonContext: IbcStorageContext {
     ) -> Result<(Timestamp, Height)> {
         let key = storage::client_update_timestamp_key(client_id);
         let value = self.storage().read_bytes(&key)?.ok_or(
-            ClientError::ClientSpecific {
+            HostError::FailedToRetrieve {
                 description: format!(
                     "The client update time doesn't exist: ID {client_id}",
                 ),
             },
         )?;
         let time = TmTime::decode_vec(&value)
-            .map_err(|_| ClientError::Other {
+            .map_err(|_| HostError::Other {
                 description: format!(
                     "Decoding the client update time failed: ID {client_id}",
                 ),
             })?
-            .try_into()
-            .map_err(|_| ClientError::Other {
+            .into_timestamp()
+            .map_err(|_| HostError::Other {
                 description: format!(
                     "Conversion of the client update time failed: ID \
                      {client_id}",
@@ -232,18 +231,18 @@ pub trait IbcCommonContext: IbcStorageContext {
 
         let key = storage::client_update_height_key(client_id);
         let value = self.storage().read_bytes(&key)?.ok_or({
-            ClientError::ClientSpecific {
+            HostError::FailedToRetrieve {
                 description: format!(
                     "The client update height doesn't exist: ID {client_id}",
                 ),
             }
         })?;
         let height = Height::decode_vec(&value).map_err(|_| {
-            ContextError::ClientError(ClientError::Other {
+            HostError::FailedToRetrieve {
                 description: format!(
                     "Decoding the client update height failed: ID {client_id}",
                 ),
-            })
+            }
         })?;
 
         Ok((time, height))
@@ -257,27 +256,31 @@ pub trait IbcCommonContext: IbcStorageContext {
         host_height: Height,
     ) -> Result<()> {
         let key = storage::client_update_timestamp_key(client_id);
-        let time = host_timestamp.into_tm_time();
+        let time: TmTime = host_timestamp.into_host_time().map_err(|e| {
+            HostError::FailedToStore {
+                description: format!(
+                    "Converting to tendermint Time failed: {e}"
+                ),
+            }
+        })?;
         self.storage_mut()
             .write_bytes(&key, time.encode_vec())
-            .map_err(ContextError::from)?;
+            .map_err(HostError::from)?;
 
         let key = storage::client_update_height_key(client_id);
         let bytes = host_height.encode_vec();
         self.storage_mut()
             .write_bytes(&key, bytes)
-            .map_err(ContextError::from)
+            .map_err(HostError::from)
     }
 
     /// Delete the client update time and height
     fn delete_update_meta(&mut self, client_id: &ClientId) -> Result<()> {
         let key = storage::client_update_timestamp_key(client_id);
-        self.storage_mut()
-            .delete(&key)
-            .map_err(ContextError::from)?;
+        self.storage_mut().delete(&key).map_err(HostError::from)?;
 
         let key = storage::client_update_height_key(client_id);
-        self.storage_mut().delete(&key).map_err(ContextError::from)
+        self.storage_mut().delete(&key).map_err(HostError::from)
     }
 
     /// Get the timestamp on this chain
@@ -298,20 +301,15 @@ pub trait IbcCommonContext: IbcStorageContext {
                     None
                 }
             })
-            .ok_or_else(|| {
-                ContextError::from(ClientError::Other {
-                    description: "No host block header".to_string(),
-                })
+            .ok_or_else(|| HostError::FailedToRetrieve {
+                description: "No host block header".to_string(),
             })?;
         let time = TmTime::try_from(header.time)
-            .map_err(|_| {
-                ContextError::ClientError(ClientError::Other {
-                    description: "Converting to Tendermint time failed"
-                        .to_string(),
-                })
+            .map_err(|_| HostError::FailedToRetrieve {
+                description: "Converting to Tendermint time failed".to_string(),
             })?
-            .try_into()
-            .map_err(|_| ClientError::Other {
+            .into_timestamp()
+            .map_err(|_| HostError::FailedToRetrieve {
                 description: "Converting to timestamp failed".to_string(),
             })?;
         Ok(time)
@@ -325,9 +323,9 @@ pub trait IbcCommonContext: IbcStorageContext {
         let height = BlockHeight(height.revision_height());
         let header =
             self.storage().get_block_header(height)?.ok_or_else(|| {
-                ContextError::from(ClientError::Other {
+                HostError::FailedToRetrieve {
                     description: "No host header".to_string(),
-                })
+                }
             })?;
         let commitment_root = header.hash.to_vec().into();
         let time = header
@@ -348,17 +346,16 @@ pub trait IbcCommonContext: IbcStorageContext {
     fn connection_end(&self, conn_id: &ConnectionId) -> Result<ConnectionEnd> {
         let key = storage::connection_key(conn_id);
         let value = self.storage().read_bytes(&key)?.ok_or(
-            ConnectionError::ConnectionNotFound {
-                connection_id: conn_id.clone(),
+            HostError::FailedToRetrieve {
+                description: format!("No connection end: ID {conn_id}"),
             },
         )?;
         ConnectionEnd::decode_vec(&value).map_err(|_| {
-            ConnectionError::Other {
+            HostError::FailedToRetrieve {
                 description: format!(
                     "Decoding the connection end failed: ID {conn_id}",
                 ),
             }
-            .into()
         })
     }
 
@@ -372,7 +369,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let bytes = connection_end.encode_vec();
         self.storage_mut()
             .write_bytes(&key, bytes)
-            .map_err(ContextError::from)
+            .map_err(HostError::from)
     }
 
     /// Append the connection ID to the connection list of the client
@@ -388,7 +385,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         };
         self.storage_mut()
             .write(&key, list)
-            .map_err(ContextError::from)
+            .map_err(HostError::from)
     }
 
     /// Get the ChannelEnd
@@ -399,18 +396,19 @@ pub trait IbcCommonContext: IbcStorageContext {
     ) -> Result<ChannelEnd> {
         let key = storage::channel_key(port_id, channel_id);
         let value = self.storage().read_bytes(&key)?.ok_or(
-            ChannelError::ChannelNotFound {
-                port_id: port_id.clone(),
-                channel_id: channel_id.clone(),
+            HostError::FailedToRetrieve {
+                description: format!(
+                    "No channel end: port {port_id}, channel {channel_id}"
+                ),
             },
         )?;
         ChannelEnd::decode_vec(&value).map_err(|_| {
-            ChannelError::Other {
+            HostError::FailedToRetrieve {
                 description: format!(
-                    "Decoding the channel end failed: Key {key}",
+                    "Decoding the channel end failed: port {port_id}, channel \
+                     {channel_id}",
                 ),
             }
-            .into()
         })
     }
 
@@ -425,7 +423,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let bytes = channel_end.encode_vec();
         self.storage_mut()
             .write_bytes(&key, bytes)
-            .map_err(ContextError::from)
+            .map_err(HostError::from)
     }
 
     /// Get the NextSequenceSend
@@ -435,7 +433,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         channel_id: &ChannelId,
     ) -> Result<Sequence> {
         let key = storage::next_sequence_send_key(port_id, channel_id);
-        read_sequence(self.storage(), &key).map_err(ContextError::from)
+        read_sequence(self.storage(), &key).map_err(HostError::from)
     }
 
     /// Store the NextSequenceSend
@@ -456,7 +454,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         channel_id: &ChannelId,
     ) -> Result<Sequence> {
         let key = storage::next_sequence_recv_key(port_id, channel_id);
-        read_sequence(self.storage(), &key).map_err(ContextError::from)
+        read_sequence(self.storage(), &key).map_err(HostError::from)
     }
 
     /// Store the NextSequenceRecv
@@ -477,7 +475,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         channel_id: &ChannelId,
     ) -> Result<Sequence> {
         let key = storage::next_sequence_ack_key(port_id, channel_id);
-        read_sequence(self.storage(), &key).map_err(ContextError::from)
+        read_sequence(self.storage(), &key).map_err(HostError::from)
     }
 
     /// Store the NextSequenceAck
@@ -496,7 +494,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let bytes = u64::from(sequence).to_be_bytes().to_vec();
         self.storage_mut()
             .write_bytes(key, bytes)
-            .map_err(ContextError::from)
+            .map_err(HostError::from)
     }
 
     /// Get the packet commitment
@@ -509,9 +507,12 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::commitment_key(port_id, channel_id, sequence);
         match self.storage().read_bytes(&key)? {
             Some(value) => Ok(value.into()),
-            None => {
-                Err(PacketError::PacketCommitmentNotFound { sequence }.into())
-            }
+            None => Err(HostError::FailedToRetrieve {
+                description: format!(
+                    "No packet commitment: port {port_id}, channel \
+                     {channel_id}, sequence {sequence}"
+                ),
+            }),
         }
     }
 
@@ -527,7 +528,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let bytes = commitment.into_vec();
         self.storage_mut()
             .write_bytes(&key, bytes)
-            .map_err(ContextError::from)
+            .map_err(HostError::from)
     }
 
     /// Delete the packet commitment
@@ -538,7 +539,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         sequence: Sequence,
     ) -> Result<()> {
         let key = storage::commitment_key(port_id, channel_id, sequence);
-        self.storage_mut().delete(&key).map_err(ContextError::from)
+        self.storage_mut().delete(&key).map_err(HostError::from)
     }
 
     /// Get the packet receipt
@@ -551,7 +552,12 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::receipt_key(port_id, channel_id, sequence);
         match self.storage().read_bytes(&key)? {
             Some(_) => Ok(Receipt::Ok),
-            None => Err(PacketError::PacketReceiptNotFound { sequence }.into()),
+            None => Err(HostError::FailedToRetrieve {
+                description: format!(
+                    "No packet receipt: port {port_id}, channel {channel_id}, \
+                     sequence {sequence}"
+                ),
+            }),
         }
     }
 
@@ -567,7 +573,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let bytes = [1_u8].to_vec();
         self.storage_mut()
             .write_bytes(&key, bytes)
-            .map_err(ContextError::from)
+            .map_err(HostError::from)
     }
 
     /// Get the packet acknowledgement
@@ -596,7 +602,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let bytes = ack_commitment.into_vec();
         self.storage_mut()
             .write_bytes(&key, bytes)
-            .map_err(ContextError::from)
+            .map_err(HostError::from)
     }
 
     /// Delete the packet acknowledgement
@@ -607,7 +613,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         sequence: Sequence,
     ) -> Result<()> {
         let key = storage::ack_key(port_id, channel_id, sequence);
-        self.storage_mut().delete(&key).map_err(ContextError::from)
+        self.storage_mut().delete(&key).map_err(HostError::from)
     }
 
     /// Read a counter
@@ -621,13 +627,14 @@ pub trait IbcCommonContext: IbcStorageContext {
     /// Increment the counter
     fn increment_counter(&mut self, key: &Key) -> Result<()> {
         let count = self.read_counter(key)?;
-        let count =
-            u64::checked_add(count, 1).ok_or_else(|| ClientError::Other {
+        let count = u64::checked_add(count, 1).ok_or_else(|| {
+            HostError::FailedToStore {
                 description: format!("The counter overflow: Key {key}"),
-            })?;
+            }
+        })?;
         self.storage_mut()
             .write(key, count)
-            .map_err(ContextError::from)
+            .map_err(HostError::from)
     }
 
     /// Write the IBC trace. The given address could be a non-Namada token.
@@ -638,22 +645,9 @@ pub trait IbcCommonContext: IbcStorageContext {
         trace: impl AsRef<str>,
     ) -> Result<()> {
         let key = storage::ibc_trace_key(addr, trace_hash.as_ref());
-        let has_key =
-            self.storage()
-                .has_key(&key)
-                .map_err(|_| ChannelError::Other {
-                    description: format!(
-                        "Reading the IBC trace failed: Key {key}"
-                    ),
-                })?;
+        let has_key = self.storage().has_key(&key)?;
         if !has_key {
-            self.storage_mut().write(&key, trace.as_ref()).map_err(|_| {
-                ChannelError::Other {
-                    description: format!(
-                        "Writing the trace failed: Key {key}",
-                    ),
-                }
-            })?;
+            self.storage_mut().write(&key, trace.as_ref())?;
         }
         Ok(())
     }
@@ -664,7 +658,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         class_id: &PrefixedClassId,
     ) -> Result<Option<NftClass>> {
         let key = storage::nft_class_key(class_id);
-        self.storage().read(&key).map_err(ContextError::from)
+        self.storage().read(&key).map_err(HostError::from)
     }
 
     /// Store the NFT class
@@ -672,7 +666,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::nft_class_key(&class.class_id);
         self.storage_mut()
             .write(&key, class)
-            .map_err(ContextError::from)
+            .map_err(HostError::from)
     }
 
     /// Get the NFT metadata
@@ -682,7 +676,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         token_id: &TokenId,
     ) -> Result<Option<NftMetadata>> {
         let key = storage::nft_metadata_key(class_id, token_id);
-        self.storage().read(&key).map_err(ContextError::from)
+        self.storage().read(&key).map_err(HostError::from)
     }
 
     /// Store the NFT metadata
@@ -691,7 +685,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             storage::nft_metadata_key(&metadata.class_id, &metadata.token_id);
         self.storage_mut()
             .write(&key, metadata)
-            .map_err(ContextError::from)
+            .map_err(HostError::from)
     }
 
     /// Return true if the NFT is owned by the owner
@@ -725,7 +719,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::mint_amount_key(token);
         self.storage_mut()
             .write(&key, amount)
-            .map_err(ContextError::from)
+            .map_err(HostError::from)
     }
 
     /// Read the per-epoch deposit of the given token
@@ -739,7 +733,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::deposit_key(token);
         self.storage_mut()
             .write(&key, amount)
-            .map_err(ContextError::from)
+            .map_err(HostError::from)
     }
 
     /// Read the per-epoch withdraw of the given token
@@ -757,7 +751,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::withdraw_key(token);
         self.storage_mut()
             .write(&key, amount)
-            .map_err(ContextError::from)
+            .map_err(HostError::from)
     }
 }
 
@@ -765,11 +759,11 @@ pub trait IbcCommonContext: IbcStorageContext {
 pub fn read_sequence<S: StorageRead + ?Sized>(
     storage: &S,
     key: &Key,
-) -> std::result::Result<Sequence, Error> {
+) -> std::result::Result<Sequence, StorageError> {
     match storage.read_bytes(key)? {
         Some(value) => {
             let value: [u8; 8] = value.try_into().map_err(|_| {
-                Error::new_alloc(format!(
+                StorageError::new_alloc(format!(
                     "The sequence value wasn't u64: Key {key}",
                 ))
             })?;

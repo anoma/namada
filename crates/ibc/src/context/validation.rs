@@ -14,7 +14,7 @@ use ibc::core::client::types::Height;
 use ibc::core::commitment_types::commitment::CommitmentPrefix;
 use ibc::core::commitment_types::specs::ProofSpecs;
 use ibc::core::connection::types::ConnectionEnd;
-use ibc::core::handler::types::error::ContextError;
+use ibc::core::host::types::error::HostError;
 use ibc::core::host::types::identifiers::{
     ChainId, ClientId, ConnectionId, Sequence,
 };
@@ -40,18 +40,18 @@ where
     C: IbcCommonContext,
     Params: parameters::Read<C::Storage>,
 {
-    fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
+    fn host_timestamp(&self) -> Result<Timestamp, HostError> {
         ValidationContext::host_timestamp(self)
     }
 
-    fn host_height(&self) -> Result<Height, ContextError> {
+    fn host_height(&self) -> Result<Height, HostError> {
         ValidationContext::host_height(self)
     }
 
     fn consensus_state_heights(
         &self,
         client_id: &ClientId,
-    ) -> Result<Vec<Height>, ContextError> {
+    ) -> Result<Vec<Height>, HostError> {
         self.inner.borrow().consensus_state_heights(client_id)
     }
 
@@ -59,7 +59,7 @@ where
         &self,
         client_id: &ClientId,
         height: &Height,
-    ) -> Result<Option<Self::ConsensusStateRef>, ContextError> {
+    ) -> Result<Option<Self::ConsensusStateRef>, HostError> {
         self.inner.borrow().next_consensus_state(client_id, height)
     }
 
@@ -67,7 +67,7 @@ where
         &self,
         client_id: &ClientId,
         height: &Height,
-    ) -> Result<Option<Self::ConsensusStateRef>, ContextError> {
+    ) -> Result<Option<Self::ConsensusStateRef>, HostError> {
         self.inner.borrow().prev_consensus_state(client_id, height)
     }
 }
@@ -80,11 +80,11 @@ where
     C: IbcCommonContext,
     Params: parameters::Read<<C as crate::IbcStorageContext>::Storage>,
 {
-    fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
+    fn host_timestamp(&self) -> Result<Timestamp, HostError> {
         ValidationContext::host_timestamp(self)
     }
 
-    fn host_height(&self) -> Result<Height, ContextError> {
+    fn host_height(&self) -> Result<Height, HostError> {
         ValidationContext::host_height(self)
     }
 }
@@ -100,18 +100,23 @@ where
     fn client_state(
         &self,
         client_id: &ClientId,
-    ) -> Result<Self::ClientStateRef, ContextError> {
+    ) -> Result<Self::ClientStateRef, HostError> {
         self.inner.borrow().client_state(client_id)
     }
 
     fn consensus_state(
         &self,
         client_cons_state_path: &ClientConsensusStatePath,
-    ) -> Result<Self::ConsensusStateRef, ContextError> {
+    ) -> Result<Self::ConsensusStateRef, HostError> {
         let height = Height::new(
             client_cons_state_path.revision_number,
             client_cons_state_path.revision_height,
-        )?;
+        )
+        .map_err(|_| HostError::FailedToRetrieve {
+            description: format!(
+                "Invalid consensus state path: {client_cons_state_path}"
+            ),
+        })?;
         self.inner
             .borrow()
             .consensus_state(&client_cons_state_path.client_id, height)
@@ -121,7 +126,7 @@ where
         &self,
         client_id: &ClientId,
         _height: &Height,
-    ) -> Result<(Timestamp, Height), ContextError> {
+    ) -> Result<(Timestamp, Height), HostError> {
         self.inner.borrow().client_update_meta(client_id)
     }
 }
@@ -139,24 +144,26 @@ where
         self
     }
 
-    fn host_height(&self) -> Result<Height, ContextError> {
+    fn host_height(&self) -> Result<Height, HostError> {
         let height = self.inner.borrow().storage().get_block_height()?;
         // the revision number is always 0
-        Height::new(0, height.0).map_err(ContextError::ClientError)
+        Height::new(0, height.0).map_err(|_| HostError::FailedToRetrieve {
+            description: format!("Invalid height {height}"),
+        })
     }
 
-    fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
+    fn host_timestamp(&self) -> Result<Timestamp, HostError> {
         self.inner.borrow().host_timestamp()
     }
 
     fn host_consensus_state(
         &self,
         height: &Height,
-    ) -> Result<Self::HostConsensusState, ContextError> {
+    ) -> Result<Self::HostConsensusState, HostError> {
         self.inner.borrow().host_consensus_state(height)
     }
 
-    fn client_counter(&self) -> Result<u64, ContextError> {
+    fn client_counter(&self) -> Result<u64, HostError> {
         let key = storage::client_counter_key();
         self.inner.borrow().read_counter(&key)
     }
@@ -164,14 +171,14 @@ where
     fn connection_end(
         &self,
         connection_id: &ConnectionId,
-    ) -> Result<ConnectionEnd, ContextError> {
+    ) -> Result<ConnectionEnd, HostError> {
         self.inner.borrow().connection_end(connection_id)
     }
 
     fn validate_self_client(
         &self,
         client_state_of_host_on_counterparty: Self::HostClientState,
-    ) -> Result<(), ContextError> {
+    ) -> Result<(), HostError> {
         #[cfg(any(test, feature = "testing"))]
         {
             if MockClientState::try_from(
@@ -195,7 +202,7 @@ where
         CommitmentPrefix::from(crate::COMMITMENT_PREFIX.as_bytes().to_vec())
     }
 
-    fn connection_counter(&self) -> Result<u64, ContextError> {
+    fn connection_counter(&self) -> Result<u64, HostError> {
         let key = storage::connection_counter_key();
         self.inner.borrow().read_counter(&key)
     }
@@ -203,35 +210,35 @@ where
     fn channel_end(
         &self,
         path: &ChannelEndPath,
-    ) -> Result<ChannelEnd, ContextError> {
+    ) -> Result<ChannelEnd, HostError> {
         self.inner.borrow().channel_end(&path.0, &path.1)
     }
 
     fn get_next_sequence_send(
         &self,
         path: &SeqSendPath,
-    ) -> Result<Sequence, ContextError> {
+    ) -> Result<Sequence, HostError> {
         self.inner.borrow().get_next_sequence_send(&path.0, &path.1)
     }
 
     fn get_next_sequence_recv(
         &self,
         path: &SeqRecvPath,
-    ) -> Result<Sequence, ContextError> {
+    ) -> Result<Sequence, HostError> {
         self.inner.borrow().get_next_sequence_recv(&path.0, &path.1)
     }
 
     fn get_next_sequence_ack(
         &self,
         path: &SeqAckPath,
-    ) -> Result<Sequence, ContextError> {
+    ) -> Result<Sequence, HostError> {
         self.inner.borrow().get_next_sequence_ack(&path.0, &path.1)
     }
 
     fn get_packet_commitment(
         &self,
         path: &CommitmentPath,
-    ) -> Result<PacketCommitment, ContextError> {
+    ) -> Result<PacketCommitment, HostError> {
         self.inner.borrow().packet_commitment(
             &path.port_id,
             &path.channel_id,
@@ -242,7 +249,7 @@ where
     fn get_packet_receipt(
         &self,
         path: &ReceiptPath,
-    ) -> Result<Receipt, ContextError> {
+    ) -> Result<Receipt, HostError> {
         self.inner.borrow().packet_receipt(
             &path.port_id,
             &path.channel_id,
@@ -253,7 +260,7 @@ where
     fn get_packet_acknowledgement(
         &self,
         path: &AckPath,
-    ) -> Result<AcknowledgementCommitment, ContextError> {
+    ) -> Result<AcknowledgementCommitment, HostError> {
         let maybe_ack = self.inner.borrow().packet_ack(
             &path.port_id,
             &path.channel_id,
@@ -261,14 +268,13 @@ where
         )?;
 
         maybe_ack.ok_or_else(|| {
-            PacketError::PacketAcknowledgementNotFound {
-                sequence: path.sequence,
+            HostError::Other {
+                description: format!("No packet acknowledgement: port {}, channel {}, sequence {}" path.port_id, path.channel_id, path.sequence)
             }
-            .into()
         })
     }
 
-    fn channel_counter(&self) -> Result<u64, ContextError> {
+    fn channel_counter(&self) -> Result<u64, HostError> {
         let key = storage::channel_counter_key();
         self.inner.borrow().read_counter(&key)
     }
@@ -301,7 +307,7 @@ where
     fn validate_message_signer(
         &self,
         _signer: &Signer,
-    ) -> Result<(), ContextError> {
+    ) -> Result<(), HostError> {
         // The signer of a transaction should be validated
         Ok(())
     }
