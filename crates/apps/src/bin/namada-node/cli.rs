@@ -28,11 +28,7 @@ pub fn main() -> Result<()> {
                     );
                     ScheduledMigration::from_path(p, hash, height).unwrap()
                 });
-                node::run(
-                    chain_ctx.config.ledger,
-                    wasm_dir,
-                    scheduled_migration,
-                );
+                node::run(chain_ctx.config, wasm_dir, scheduled_migration);
             }
             cmds::Ledger::RunUntil(cmds::LedgerRunUntil(args)) => {
                 let mut chain_ctx = ctx.take_chain_or_exit();
@@ -40,7 +36,7 @@ pub fn main() -> Result<()> {
                 sleep_until(args.time);
                 chain_ctx.config.ledger.shell.action_at_height =
                     Some(args.action_at_height);
-                node::run(chain_ctx.config.ledger, wasm_dir, None);
+                node::run(chain_ctx.config, wasm_dir, None);
             }
             cmds::Ledger::Reset(_) => {
                 let chain_ctx = ctx.take_chain_or_exit();
