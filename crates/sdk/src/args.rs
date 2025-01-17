@@ -2603,8 +2603,6 @@ pub struct QueryIbcRateLimit<C: NamadaTypes = SdkTypes> {
     /// Common query args
     pub query: Query<C>,
     /// Token address
-    // FIXME: actually, can we express an ibc address as an address or should
-    // we use a string?
     pub token: C::Address,
 }
 

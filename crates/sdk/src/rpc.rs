@@ -1490,7 +1490,6 @@ pub async fn query_ibc_tokens<N: Namada>(
 /// Look up the IBC denomination from a IbcToken.
 pub async fn query_ibc_denom<N: Namada>(
     context: &N,
-    // FIXME: look here in case I needed to use a string
     token: impl AsRef<str>,
     owner: Option<&Address>,
 ) -> String {
@@ -1901,8 +1900,6 @@ pub async fn query_osmosis_pool_routes(
         .collect())
 }
 
-// FIXME: the other functions rely on the rpc macro, should do the same in here?
-// In case remove this function from here and move it there
 /// Query the IBC rate limit for the provided token
 pub async fn query_ibc_rate_limit<C: Client + Sync>(
     client: &C,

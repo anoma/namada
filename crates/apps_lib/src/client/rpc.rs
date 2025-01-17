@@ -263,7 +263,7 @@ async fn query_transparent_balance(
         .address()
         .expect("Balance owner should have been a transparent address");
 
-    let token_alias = lookup_token_alias(context, &token, &owner).await;
+    let token_alias = lookup_token_alias(context, &token, Some(&owner)).await;
     let token_balance_result = namada_sdk::rpc::get_token_balance(
         context.client(),
         &token,
@@ -290,7 +290,7 @@ async fn query_transparent_balance(
 async fn lookup_token_alias(
     context: &impl Namada,
     token: &Address,
-    owner: &Address,
+    owner: Option<&Address>,
 ) -> String {
     match token {
         Address::Internal(InternalAddress::Erc20(eth_addr)) => {
@@ -298,8 +298,7 @@ async fn lookup_token_alias(
         }
         Address::Internal(InternalAddress::IbcToken(_)) => {
             let ibc_denom =
-                rpc::query_ibc_denom(context, token.to_string(), Some(owner))
-                    .await;
+                rpc::query_ibc_denom(context, token.to_string(), owner).await;
 
             context.wallet().await.lookup_ibc_token_alias(ibc_denom)
         }
@@ -499,7 +498,7 @@ async fn query_shielded_balance(
     let masp_epoch = query_and_print_masp_epoch(context).await;
 
     // Query the token alias in the wallet for pretty printing token balances
-    let token_alias = lookup_token_alias(context, &token, &MASP).await;
+    let token_alias = lookup_token_alias(context, &token, Some(&MASP)).await;
 
     // Query the multi-asset balance at the given spending key
     let mut shielded = context.shielded_mut().await;
@@ -2455,10 +2454,12 @@ pub async fn query_ibc_rate_limit(
     let limit = unwrap_sdk_result::<token::Amount>(
         rpc::query_ibc_rate_limit(context.client(), &args.token).await,
     );
+    let token_alias = lookup_token_alias(context, &args.token, None).await;
+
     display_line!(
         context.io(),
         "IBC rate limit for token {}: {}/epoch",
-        args.token,
+        token_alias,
         limit
     );
 }

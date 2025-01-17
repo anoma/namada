@@ -398,6 +398,8 @@ pub mod cmds {
             let query_commission =
                 Self::parse_with_ctx(matches, QueryCommissionRate);
             let query_metadata = Self::parse_with_ctx(matches, QueryMetaData);
+            let query_ibc_rate_limit =
+                Self::parse_with_ctx(matches, QueryIbcRateLimit);
             let add_to_eth_bridge_pool =
                 Self::parse_with_ctx(matches, AddToEthBridgePool);
             let shielded_sync = Self::parse_with_ctx(matches, ShieldedSync);
@@ -460,6 +462,7 @@ pub mod cmds {
                 .or(query_native_supply)
                 .or(query_staking_rewards_rate)
                 .or(query_account)
+                .or(query_ibc_rate_limit)
                 .or(shielded_sync)
                 .or(gen_ibc_shielding)
                 .or(utils)
@@ -3662,7 +3665,6 @@ pub mod args {
     pub const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     pub const TOKEN_STR_OPT: ArgOpt<String> = TOKEN_STR.opt();
     pub const TOKEN: Arg<WalletAddress> = arg("token");
-    // FIXME: I could use this if I can't use a normal address
     pub const TOKEN_STR: Arg<String> = arg("token");
     pub const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     pub const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
@@ -7126,7 +7128,6 @@ pub mod args {
             let query = Query::parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
             let target = TRANSFER_TARGET.parse(matches);
-            // FIXME: here we use the string for the token
             let token = TOKEN_STR.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let expiration = EXPIRATION_OPT.parse(matches);
@@ -7506,12 +7507,8 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query<CliTypes>>().arg(
-                TOKEN
-                    .def()
-                    .help(wrap!("The IBC token."))
-                    .conflicts_with(TOKEN.name),
-            )
+            app.add_args::<Query<CliTypes>>()
+                .arg(TOKEN.def().help(wrap!("The IBC token.")))
         }
     }
 
