@@ -20,7 +20,7 @@ use ibc::apps::nft_transfer::types::error::NftTransferError;
 use ibc::apps::nft_transfer::types::MODULE_ID_STR;
 use ibc::core::channel::types::acknowledgement::Acknowledgement;
 use ibc::core::channel::types::channel::{Counterparty, Order};
-use ibc::core::channel::types::error::{ChannelError, PacketError};
+use ibc::core::channel::types::error::ChannelError;
 use ibc::core::channel::types::packet::Packet;
 use ibc::core::channel::types::Version;
 use ibc::core::host::types::identifiers::{ChannelId, ConnectionId, PortId};
@@ -270,14 +270,14 @@ where
         packet: &Packet,
         acknowledgement: &Acknowledgement,
         relayer: &Signer,
-    ) -> Result<(), PacketError> {
+    ) -> Result<(), ChannelError> {
         on_acknowledgement_packet_validate(
             &self.ctx,
             packet,
             acknowledgement,
             relayer,
         )
-        .map_err(into_packet_error)
+        .map_err(into_channel_error)
     }
 
     fn on_acknowledgement_packet_execute(
@@ -285,44 +285,38 @@ where
         packet: &Packet,
         acknowledgement: &Acknowledgement,
         relayer: &Signer,
-    ) -> (ModuleExtras, Result<(), PacketError>) {
+    ) -> (ModuleExtras, Result<(), ChannelError>) {
         let (extras, result) = on_acknowledgement_packet_execute(
             &mut self.ctx,
             packet,
             acknowledgement,
             relayer,
         );
-        (extras, result.map_err(into_packet_error))
+        (extras, result.map_err(into_channel_error))
     }
 
     fn on_timeout_packet_validate(
         &self,
         packet: &Packet,
         relayer: &Signer,
-    ) -> Result<(), PacketError> {
+    ) -> Result<(), ChannelError> {
         on_timeout_packet_validate(&self.ctx, packet, relayer)
-            .map_err(into_packet_error)
+            .map_err(into_channel_error)
     }
 
     fn on_timeout_packet_execute(
         &mut self,
         packet: &Packet,
         relayer: &Signer,
-    ) -> (ModuleExtras, Result<(), PacketError>) {
+    ) -> (ModuleExtras, Result<(), ChannelError>) {
         let (extras, result) =
             on_timeout_packet_execute(&mut self.ctx, packet, relayer);
-        (extras, result.map_err(into_packet_error))
+        (extras, result.map_err(into_channel_error))
     }
 }
 
 fn into_channel_error(error: NftTransferError) -> ChannelError {
-    ChannelError::AppModule {
-        description: error.to_string(),
-    }
-}
-
-fn into_packet_error(error: NftTransferError) -> PacketError {
-    PacketError::AppModule {
+    ChannelError::AppSpecific {
         description: error.to_string(),
     }
 }
@@ -494,7 +488,7 @@ pub mod testing {
             _packet: &Packet,
             _acknowledgement: &Acknowledgement,
             _relayer: &Signer,
-        ) -> Result<(), PacketError> {
+        ) -> Result<(), ChannelError> {
             Ok(())
         }
 
@@ -503,7 +497,7 @@ pub mod testing {
             _packet: &Packet,
             _acknowledgement: &Acknowledgement,
             _relayer: &Signer,
-        ) -> (ModuleExtras, Result<(), PacketError>) {
+        ) -> (ModuleExtras, Result<(), ChannelError>) {
             (ModuleExtras::empty(), Ok(()))
         }
 
@@ -511,7 +505,7 @@ pub mod testing {
             &self,
             _packet: &Packet,
             _relayer: &Signer,
-        ) -> Result<(), PacketError> {
+        ) -> Result<(), ChannelError> {
             Ok(())
         }
 
@@ -519,7 +513,7 @@ pub mod testing {
             &mut self,
             _packet: &Packet,
             _relayer: &Signer,
-        ) -> (ModuleExtras, Result<(), PacketError>) {
+        ) -> (ModuleExtras, Result<(), ChannelError>) {
             (ModuleExtras::empty(), Ok(()))
         }
     }

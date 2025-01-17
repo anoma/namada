@@ -7,12 +7,11 @@ use std::rc::Rc;
 use ibc::apps::nft_transfer::context::{
     NftTransferExecutionContext, NftTransferValidationContext,
 };
-use ibc::apps::nft_transfer::types::error::NftTransferError;
 use ibc::apps::nft_transfer::types::{
     ClassData, ClassUri, Memo, PrefixedClassId, TokenData, TokenId, TokenUri,
     PORT_ID_STR,
 };
-use ibc::core::handler::types::error::ContextError;
+use ibc::core::host::types::error::HostError;
 use ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::address::{Address, MASP};
 use namada_core::token::Amount;
@@ -56,51 +55,44 @@ where
         &self,
         token: &Address,
         is_minted: bool,
-    ) -> Result<(), NftTransferError> {
+    ) -> Result<(), HostError> {
         let mint = self.inner.borrow().mint_amount(token)?;
         let updated_mint = if is_minted && mint.is_zero() {
             Amount::from_u64(1)
         } else if !is_minted && mint == Amount::from_u64(1) {
             Amount::zero()
         } else {
-            return Err(NftTransferError::Other(
-                "The mint amount was invalid".to_string(),
-            ));
+            return Err(HostError::Other {
+                description: "The mint amount was invalid".to_string(),
+            });
         };
         self.inner
             .borrow_mut()
             .store_mint_amount(token, updated_mint)
-            .map_err(NftTransferError::from)
     }
 
     /// Add the amount to the per-epoch withdraw of the token
-    fn add_deposit(&self, token: &Address) -> Result<(), NftTransferError> {
+    fn add_deposit(&self, token: &Address) -> Result<(), HostError> {
         let deposit = self.inner.borrow().deposit(token)?;
-        let added_deposit =
-            deposit.checked_add(Amount::from_u64(1)).ok_or_else(|| {
-                NftTransferError::Other(
-                    "The per-epoch deposit overflowed".to_string(),
-                )
+        let added_deposit = deposit
+            .checked_add(Amount::from_u64(1))
+            .ok_or_else(|| HostError::Other {
+                description: "The per-epoch deposit overflowed".to_string(),
             })?;
-        self.inner
-            .borrow_mut()
-            .store_deposit(token, added_deposit)
-            .map_err(NftTransferError::from)
+        self.inner.borrow_mut().store_deposit(token, added_deposit)
     }
 
     /// Add the amount to the per-epoch withdraw of the token
-    fn add_withdraw(&self, token: &Address) -> Result<(), NftTransferError> {
+    fn add_withdraw(&self, token: &Address) -> Result<(), HostError> {
         let withdraw = self.inner.borrow().withdraw(token)?;
-        let added_withdraw =
-            withdraw.checked_add(Amount::from_u64(1)).ok_or_else(|| {
-                NftTransferError::Other(
-                    "The per-epoch withdraw overflowed".to_string(),
-                )
+        let added_withdraw = withdraw
+            .checked_add(Amount::from_u64(1))
+            .ok_or_else(|| HostError::Other {
+                description: "The per-epoch withdraw overflowed".to_string(),
             })?;
         self.inner
             .borrow_mut()
             .store_withdraw(token, added_withdraw)
-            .map_err(NftTransferError::from)
     }
 
     fn store_ibc_trace(
@@ -108,19 +100,21 @@ where
         owner: &Address,
         class_id: &PrefixedClassId,
         token_id: &TokenId,
-    ) -> Result<(), NftTransferError> {
+    ) -> Result<(), HostError> {
         let ibc_trace = trace::ibc_trace_for_nft(class_id, token_id);
         let trace_hash = trace::calc_hash(&ibc_trace);
 
-        self.inner
-            .borrow_mut()
-            .store_ibc_trace(owner.to_string(), &trace_hash, &ibc_trace)
-            .map_err(NftTransferError::from)?;
+        self.inner.borrow_mut().store_ibc_trace(
+            owner.to_string(),
+            &trace_hash,
+            &ibc_trace,
+        )?;
 
-        self.inner
-            .borrow_mut()
-            .store_ibc_trace(token_id, &trace_hash, &ibc_trace)
-            .map_err(NftTransferError::from)
+        self.inner.borrow_mut().store_ibc_trace(
+            token_id,
+            &trace_hash,
+            &ibc_trace,
+        )
     }
 }
 
@@ -133,15 +127,15 @@ where
     type Nft = NftMetadata;
     type NftClass = NftClass;
 
-    fn get_port(&self) -> Result<PortId, NftTransferError> {
+    fn get_port(&self) -> Result<PortId, HostError> {
         Ok(PORT_ID_STR.parse().expect("the ID should be parsable"))
     }
 
-    fn can_send_nft(&self) -> Result<(), NftTransferError> {
+    fn can_send_nft(&self) -> Result<(), HostError> {
         Ok(())
     }
 
-    fn can_receive_nft(&self) -> Result<(), NftTransferError> {
+    fn can_receive_nft(&self) -> Result<(), HostError> {
         Ok(())
     }
 
@@ -151,9 +145,9 @@ where
         class_id: &PrefixedClassId,
         _class_uri: Option<&ClassUri>,
         _class_data: Option<&ClassData>,
-    ) -> Result<(), NftTransferError> {
+    ) -> Result<(), HostError> {
         match self.get_nft_class(class_id) {
-            Ok(_) | Err(NftTransferError::NftClassNotFound) => Ok(()),
+            Ok(_) | Err(HostError::MissingState { .. }) => Ok(()),
             Err(e) => Err(e),
         }
     }
@@ -166,7 +160,7 @@ where
         class_id: &PrefixedClassId,
         token_id: &TokenId,
         _memo: &Memo,
-    ) -> Result<(), NftTransferError> {
+    ) -> Result<(), HostError> {
         // The metadata should exist
         self.get_nft(class_id, token_id)?;
 
@@ -184,10 +178,12 @@ where
         )? {
             Ok(())
         } else {
-            Err(NftTransferError::Other(format!(
-                "The sender balance is invalid: sender {from_account}, \
-                 class_id {class_id}, token_id {token_id}"
-            )))
+            Err(HostError::InvalidState {
+                description: format!(
+                    "The sender balance is invalid: sender {from_account}, \
+                     class_id {class_id}, token_id {token_id}"
+                ),
+            })
         }
         // Balance changes will be validated by Multitoken VP
     }
@@ -199,7 +195,7 @@ where
         _channel_id: &ChannelId,
         class_id: &PrefixedClassId,
         token_id: &TokenId,
-    ) -> Result<(), NftTransferError> {
+    ) -> Result<(), HostError> {
         // The metadata should exist
         self.get_nft(class_id, token_id)?;
 
@@ -211,10 +207,12 @@ where
         )? {
             Ok(())
         } else {
-            Err(NftTransferError::Other(format!(
-                "The escrow balance is invalid: class_id {class_id}, token_id \
-                 {token_id}"
-            )))
+            Err(HostError::InvalidState {
+                description: format!(
+                    "The escrow balance is invalid: class_id {class_id}, \
+                     token_id {token_id}"
+                ),
+            })
         }
         // Balance changes will be validated by Multitoken VP
     }
@@ -226,7 +224,7 @@ where
         _token_id: &TokenId,
         _token_uri: Option<&TokenUri>,
         _token_data: Option<&TokenData>,
-    ) -> Result<(), NftTransferError> {
+    ) -> Result<(), HostError> {
         // Balance changes will be validated by Multitoken VP
         Ok(())
     }
@@ -237,7 +235,7 @@ where
         class_id: &PrefixedClassId,
         token_id: &TokenId,
         _memo: &Memo,
-    ) -> Result<(), NftTransferError> {
+    ) -> Result<(), HostError> {
         // Metadata should exist
         self.get_nft(class_id, token_id)?;
 
@@ -251,10 +249,12 @@ where
         {
             Ok(())
         } else {
-            Err(NftTransferError::Other(format!(
-                "The sender balance is invalid: sender {account}, class_id \
-                 {class_id}, token_id {token_id}"
-            )))
+            Err(HostError::InvalidState {
+                description: format!(
+                    "The sender balance is invalid: sender {account}, \
+                     class_id {class_id}, token_id {token_id}"
+                ),
+            })
         }
         // Balance changes will be validated by Multitoken VP
     }
@@ -272,11 +272,15 @@ where
         &self,
         class_id: &PrefixedClassId,
         token_id: &TokenId,
-    ) -> Result<Self::Nft, NftTransferError> {
+    ) -> Result<Self::Nft, HostError> {
         match self.inner.borrow().nft_metadata(class_id, token_id) {
             Ok(Some(nft)) => Ok(nft),
-            Ok(None) => Err(NftTransferError::NftNotFound),
-            Err(e) => Err(NftTransferError::ContextError(e)),
+            Ok(None) => Err(HostError::MissingState {
+                description: format!(
+                    "No NFT: class ID {class_id}, token ID {token_id}"
+                ),
+            }),
+            Err(e) => Err(e),
         }
     }
 
@@ -284,11 +288,13 @@ where
     fn get_nft_class(
         &self,
         class_id: &PrefixedClassId,
-    ) -> Result<Self::NftClass, NftTransferError> {
+    ) -> Result<Self::NftClass, HostError> {
         match self.inner.borrow().nft_class(class_id) {
             Ok(Some(class)) => Ok(class),
-            Ok(None) => Err(NftTransferError::NftClassNotFound),
-            Err(e) => Err(NftTransferError::ContextError(e)),
+            Ok(None) => Err(HostError::MissingState {
+                description: format!("No NFT class: class ID {class_id}"),
+            }),
+            Err(e) => Err(e),
         }
     }
 }
@@ -303,16 +309,13 @@ where
         class_id: &PrefixedClassId,
         class_uri: Option<&ClassUri>,
         class_data: Option<&ClassData>,
-    ) -> Result<(), NftTransferError> {
+    ) -> Result<(), HostError> {
         let class = NftClass {
             class_id: class_id.clone(),
             class_uri: class_uri.cloned(),
             class_data: class_data.cloned(),
         };
-        self.inner
-            .borrow_mut()
-            .store_nft_class(class)
-            .map_err(|e| e.into())
+        self.inner.borrow_mut().store_nft_class(class)
     }
 
     fn escrow_nft_execute(
@@ -323,7 +326,7 @@ where
         class_id: &PrefixedClassId,
         token_id: &TokenId,
         _memo: &Memo,
-    ) -> Result<(), NftTransferError> {
+    ) -> Result<(), HostError> {
         let ibc_token = trace::ibc_token_for_nft(class_id, token_id);
 
         self.add_withdraw(&ibc_token)?;
@@ -342,7 +345,7 @@ where
                 &ibc_token,
                 Amount::from_u64(1),
             )
-            .map_err(|e| ContextError::from(e).into())
+            .map_err(HostError::from)
     }
 
     /// Executes the unescrow of the NFT in a user account.
@@ -353,7 +356,7 @@ where
         _channel_id: &ChannelId,
         class_id: &PrefixedClassId,
         token_id: &TokenId,
-    ) -> Result<(), NftTransferError> {
+    ) -> Result<(), HostError> {
         let ibc_token = trace::ibc_token_for_nft(class_id, token_id);
 
         self.add_deposit(&ibc_token)?;
@@ -366,7 +369,7 @@ where
                 &ibc_token,
                 Amount::from_u64(1),
             )
-            .map_err(|e| ContextError::from(e).into())
+            .map_err(HostError::from)
     }
 
     fn mint_nft_execute(
@@ -376,7 +379,7 @@ where
         token_id: &TokenId,
         token_uri: Option<&TokenUri>,
         token_data: Option<&TokenData>,
-    ) -> Result<(), NftTransferError> {
+    ) -> Result<(), HostError> {
         let ibc_token = trace::ibc_token_for_nft(class_id, token_id);
 
         // create or update the metadata
@@ -398,7 +401,7 @@ where
         self.inner
             .borrow_mut()
             .mint_token(account, &ibc_token, Amount::from_u64(1))
-            .map_err(|e| ContextError::from(e).into())
+            .map_err(HostError::from)
     }
 
     fn burn_nft_execute(
@@ -407,7 +410,7 @@ where
         class_id: &PrefixedClassId,
         token_id: &TokenId,
         _memo: &Memo,
-    ) -> Result<(), NftTransferError> {
+    ) -> Result<(), HostError> {
         let ibc_token = trace::ibc_token_for_nft(class_id, token_id);
 
         self.update_mint_amount(&ibc_token, false)?;
@@ -418,6 +421,6 @@ where
         self.inner
             .borrow_mut()
             .burn_token(account, &ibc_token, Amount::from_u64(1))
-            .map_err(|e| ContextError::from(e).into())
+            .map_err(HostError::from)
     }
 }
