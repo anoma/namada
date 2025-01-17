@@ -2597,6 +2597,17 @@ pub struct QueryRawBytes<C: NamadaTypes = SdkTypes> {
     pub query: Query<C>,
 }
 
+/// Query the IBC rate limit for the specified token
+#[derive(Clone, Debug)]
+pub struct QueryIbcRateLimit<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+    /// Token address
+    // FIXME: actually, can we express an ibc address as an address or should
+    // we use a string?
+    pub token: C::Address,
+}
+
 /// The possible values for the tx expiration
 #[derive(Clone, Debug, Default)]
 pub enum TxExpiration {

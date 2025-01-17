@@ -2447,15 +2447,18 @@ pub async fn compute_proposal_votes<C: Client + Sync>(
     }
 }
 
-// FIXME: I need a new cli command to call this function and print the result
-// (mention that the limit is for epoch) FIXME: shuld we display line directly
-// from here? No do that in the caller
-/// Query the IBC rate limit for the provided token
-pub async fn query_ibc_rate_limit<C: Client + Sync>(
-    client: &C,
-    token: &Address,
-) -> token::Amount {
-    unwrap_sdk_result::<token::Amount>(
-        rpc::query_ibc_rate_limit(client, token).await,
-    )
+/// Query and display the IBC rate limit for the provided token
+pub async fn query_ibc_rate_limit(
+    context: &impl Namada,
+    args: args::QueryIbcRateLimit,
+) {
+    let limit = unwrap_sdk_result::<token::Amount>(
+        rpc::query_ibc_rate_limit(context.client(), &args.token).await,
+    );
+    display_line!(
+        context.io(),
+        "IBC rate limit for token {}: {}/epoch",
+        args.token,
+        limit
+    );
 }

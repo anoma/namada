@@ -287,6 +287,7 @@ pub mod cmds {
                 .subcommand(QuerySlashes::def().display_order(5))
                 .subcommand(QueryDelegations::def().display_order(5))
                 .subcommand(QueryFindValidator::def().display_order(5))
+                .subcommand(QueryIbcRateLimit::def().display_order(5))
                 .subcommand(QueryResult::def().display_order(5))
                 .subcommand(QueryRawBytes::def().display_order(5))
                 .subcommand(QueryProposal::def().display_order(5))
@@ -554,6 +555,7 @@ pub mod cmds {
         QueryPgf(QueryPgf),
         QueryValidatorState(QueryValidatorState),
         QueryRewards(QueryRewards),
+        QueryIbcRateLimit(QueryIbcRateLimit),
         ShieldedSync(ShieldedSync),
         GenIbcShieldingTransfer(GenIbcShieldingTransfer),
     }
@@ -2187,6 +2189,27 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct QueryIbcRateLimit(pub args::QueryIbcRateLimit<args::CliTypes>);
+
+    impl SubCmd for QueryIbcRateLimit {
+        const CMD: &'static str = "query-ibc-rate-limit";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryIbcRateLimit(args::QueryIbcRateLimit::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!(
+                    "Query the IBC rate limit for the provided token."
+                ))
+                .add_args::<args::QueryIbcRateLimit<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct QueryRawBytes(pub args::QueryRawBytes<args::CliTypes>);
 
     impl SubCmd for QueryRawBytes {
@@ -3639,6 +3662,7 @@ pub mod args {
     pub const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     pub const TOKEN_STR_OPT: ArgOpt<String> = TOKEN_STR.opt();
     pub const TOKEN: Arg<WalletAddress> = arg("token");
+    // FIXME: I could use this if I can't use a normal address
     pub const TOKEN_STR: Arg<String> = arg("token");
     pub const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     pub const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
@@ -7102,6 +7126,7 @@ pub mod args {
             let query = Query::parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
             let target = TRANSFER_TARGET.parse(matches);
+            // FIXME: here we use the string for the token
             let token = TOKEN_STR.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let expiration = EXPIRATION_OPT.parse(matches);
@@ -7468,6 +7493,38 @@ pub mod args {
                 addr: self.addr.map_right(|validator_addr| {
                     ctx.borrow_chain_or_exit().get(&validator_addr)
                 }),
+            })
+        }
+    }
+
+    impl Args for QueryIbcRateLimit<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let token = TOKEN.parse(matches);
+
+            Self { query, token }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>().arg(
+                TOKEN
+                    .def()
+                    .help(wrap!("The IBC token."))
+                    .conflicts_with(TOKEN.name),
+            )
+        }
+    }
+
+    impl CliToSdk<QueryIbcRateLimit<SdkTypes>> for QueryIbcRateLimit<CliTypes> {
+        type Error = std::convert::Infallible;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryIbcRateLimit<SdkTypes>, Self::Error> {
+            Ok(QueryIbcRateLimit::<SdkTypes> {
+                query: self.query.to_sdk(ctx)?,
+                token: ctx.borrow_chain_or_exit().get(&self.token),
             })
         }
     }
