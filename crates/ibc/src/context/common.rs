@@ -552,12 +552,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::receipt_key(port_id, channel_id, sequence);
         match self.storage().read_bytes(&key)? {
             Some(_) => Ok(Receipt::Ok),
-            None => Err(HostError::FailedToRetrieve {
-                description: format!(
-                    "No packet receipt: port {port_id}, channel {channel_id}, \
-                     sequence {sequence}"
-                ),
-            }),
+            None => Ok(Receipt::None),
         }
     }
 

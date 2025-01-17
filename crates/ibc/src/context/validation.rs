@@ -5,7 +5,6 @@ use ibc::core::channel::types::channel::ChannelEnd;
 use ibc::core::channel::types::commitment::{
     AcknowledgementCommitment, PacketCommitment,
 };
-use ibc::core::channel::types::error::PacketError;
 use ibc::core::channel::types::packet::Receipt;
 use ibc::core::client::context::{
     ClientValidationContext, ExtClientValidationContext,
@@ -267,10 +266,11 @@ where
             path.sequence,
         )?;
 
-        maybe_ack.ok_or_else(|| {
-            HostError::Other {
-                description: format!("No packet acknowledgement: port {}, channel {}, sequence {}" path.port_id, path.channel_id, path.sequence)
-            }
+        maybe_ack.ok_or_else(|| HostError::Other {
+            description: format!(
+                "No packet acknowledgement: port {}, channel {}, sequence {}",
+                path.port_id, path.channel_id, path.sequence
+            ),
         })
     }
 
