@@ -1104,7 +1104,12 @@ fn ibc_rate_limit() -> Result<()> {
     // Query the IBC rate limits
     let ibc_denom =
         format!("{port_id_namada}/{channel_id_namada}/{COSMOS_COIN}");
-    for token in [NAM, &ibc_denom] {
+    // Need the raw address because the token won't be received later in this
+    // test
+    let cosmos_token_addr = ibc_token(&ibc_denom).to_string();
+    for (token, token_alias) in
+        [(NAM, &NAM.to_lowercase()), (&ibc_denom, &cosmos_token_addr)]
+    {
         let tx_args = apply_use_device(vec![
             "query-ibc-rate-limit",
             "--token",
@@ -1115,7 +1120,7 @@ fn ibc_rate_limit() -> Result<()> {
         let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
         client.exp_string(&format!(
             "IBC rate limit for token {}: 1000000/epoch",
-            token.to_lowercase()
+            token_alias
         ))?;
         client.assert_success();
     }
@@ -1214,10 +1219,7 @@ fn ibc_rate_limit() -> Result<()> {
     wait_for_packet_relay(&hermes_dir, &port_id_gaia, &channel_id_gaia, &test)?;
 
     // Check if Namada hasn't receive it
-    // Need the raw address to check the balance because the token shouldn't be
-    // received
-    let token_addr = ibc_token(ibc_denom).to_string();
-    check_balance(&test, ALBERT, token_addr, 0)?;
+    check_balance(&test, ALBERT, cosmos_token_addr, 0)?;
 
     Ok(())
 }
