@@ -2195,7 +2195,7 @@ pub mod cmds {
     pub struct QueryIbcRateLimit(pub args::QueryIbcRateLimit<args::CliTypes>);
 
     impl SubCmd for QueryIbcRateLimit {
-        const CMD: &'static str = "query-ibc-rate-limit";
+        const CMD: &'static str = "query-ibc-rate-limits";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {

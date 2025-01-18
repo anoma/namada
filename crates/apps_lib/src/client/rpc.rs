@@ -2472,20 +2472,62 @@ pub async fn query_ibc_rate_limits(
     context: &impl Namada,
     args: args::QueryIbcRateLimit,
 ) {
-    let IbcTokenRateLimits {
-        mint_limit,
-        throughput_per_epoch_limit,
-    } = unwrap_sdk_result::<IbcTokenRateLimits>(
-        rpc::query_ibc_rate_limits(context.client(), &args.token).await,
-    );
     let token_alias = lookup_token_alias(context, &args.token, None).await;
+    let native_token = context.native_token();
 
-    display_line!(
-        context.io(),
-        "IBC rate limits for token {}:\nGlobal mint limit: {}\nThroughput \
-         limit: {} per epoch",
-        token_alias,
-        mint_limit,
-        throughput_per_epoch_limit
-    );
+    match rpc::query_ibc_rate_limits(context.client(), &args.token).await {
+        Ok(IbcTokenRateLimits {
+            mint_limit,
+            throughput_per_epoch_limit,
+        }) => {
+            let (mint_str, throughput_str) = if args.token == native_token {
+                (
+                    mint_limit.to_string_native(),
+                    throughput_per_epoch_limit.to_string_native(),
+                )
+            } else {
+                (
+                    mint_limit.to_string(),
+                    throughput_per_epoch_limit.to_string(),
+                )
+            };
+            display_line!(
+                context.io(),
+                "IBC rate limits for token {}:\nGlobal mint limit: \
+                 {}\nThroughput limit: {} per epoch",
+                token_alias,
+                mint_str,
+                throughput_str
+            );
+        }
+        Err(_) => {
+            let IbcParameters {
+                default_mint_limit,
+                default_per_epoch_throughput_limit,
+            } = query_ibc_params(context.client())
+                .await
+                .expect("Error querying the global IBC parameters");
+
+            let (mint_str, throughput_str) = if args.token == native_token {
+                (
+                    default_mint_limit.to_string_native(),
+                    default_per_epoch_throughput_limit.to_string_native(),
+                )
+            } else {
+                (
+                    default_mint_limit.to_string(),
+                    default_per_epoch_throughput_limit.to_string(),
+                )
+            };
+            display_line!(
+                context.io(),
+                "Could not find IBC rate limits for token {}, returning \
+                 default IBC rate limits instead:\nDefault global mint limit: \
+                 {}\nDefault throughput limit: {} per epoch",
+                token_alias,
+                mint_str,
+                throughput_str
+            );
+        }
+    }
 }

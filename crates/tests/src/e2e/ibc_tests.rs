@@ -1111,7 +1111,7 @@ fn ibc_rate_limit() -> Result<()> {
         [(NAM, &NAM.to_lowercase()), (&ibc_denom, &cosmos_token_addr)]
     {
         let tx_args = apply_use_device(vec![
-            "query-ibc-rate-limit",
+            "query-ibc-rate-limits",
             "--token",
             token,
             "--node",
@@ -1119,7 +1119,8 @@ fn ibc_rate_limit() -> Result<()> {
         ]);
         let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
         client.exp_string(&format!(
-            "IBC rate limit for token {}: 1000000/epoch",
+            "IBC rate limits for token {}:\nGlobal mint limit: \
+             1000000\nThroughput limit: 1000000 per epoch",
             token_alias
         ))?;
         client.assert_success();
