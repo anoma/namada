@@ -832,7 +832,7 @@ impl CliApi {
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx)?;
                         let namada = ctx.to_sdk(client, io);
-                        rpc::query_ibc_rate_limit(&namada, args).await;
+                        rpc::query_ibc_rate_limits(&namada, args).await;
                     }
                 }
             }

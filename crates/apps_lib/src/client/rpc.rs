@@ -30,6 +30,7 @@ use namada_sdk::governance::storage::proposal::{
 use namada_sdk::governance::utils::{ProposalVotes, VotePower};
 use namada_sdk::governance::ProposalVote;
 use namada_sdk::hash::Hash;
+use namada_sdk::ibc::parameters::{IbcParameters, IbcTokenRateLimits};
 use namada_sdk::io::{display, display_line, edisplay_line, Client, Io};
 use namada_sdk::key::*;
 use namada_sdk::masp::shielded_wallet::ShieldedApi;
@@ -46,7 +47,7 @@ use namada_sdk::proof_of_stake::{self, OwnedPosParams, PosParams};
 use namada_sdk::queries::RPC;
 use namada_sdk::rpc::{
     self, enriched_bonds_and_unbonds, format_denominated_amount, query_epoch,
-    TxResponse,
+    query_ibc_params, TxResponse,
 };
 use namada_sdk::state::LastBlock;
 use namada_sdk::storage::BlockResults;
@@ -1087,6 +1088,26 @@ pub async fn query_protocol_parameters(
         "{:4}Votes per raw native token: {}",
         "",
         tm_votes_per_token
+    );
+
+    display_line!(context.io(), "\nIBC parameters");
+    let IbcParameters {
+        default_mint_limit,
+        default_per_epoch_throughput_limit,
+    } = query_ibc_params(context.client())
+        .await
+        .expect("Failed to query the IBC parameters");
+    display_line!(
+        context.io(),
+        "{:4}Default mint limit: {}",
+        "",
+        default_mint_limit
+    );
+    display_line!(
+        context.io(),
+        "{:4}Default per epoch throughput limit: {}",
+        "",
+        default_per_epoch_throughput_limit
     );
 }
 
@@ -2447,19 +2468,24 @@ pub async fn compute_proposal_votes<C: Client + Sync>(
 }
 
 /// Query and display the IBC rate limit for the provided token
-pub async fn query_ibc_rate_limit(
+pub async fn query_ibc_rate_limits(
     context: &impl Namada,
     args: args::QueryIbcRateLimit,
 ) {
-    let limit = unwrap_sdk_result::<token::Amount>(
-        rpc::query_ibc_rate_limit(context.client(), &args.token).await,
+    let IbcTokenRateLimits {
+        mint_limit,
+        throughput_per_epoch_limit,
+    } = unwrap_sdk_result::<IbcTokenRateLimits>(
+        rpc::query_ibc_rate_limits(context.client(), &args.token).await,
     );
     let token_alias = lookup_token_alias(context, &args.token, None).await;
 
     display_line!(
         context.io(),
-        "IBC rate limit for token {}: {}/epoch",
+        "IBC rate limits for token {}:\nGlobal mint limit: {}\nThroughput \
+         limit: {} per epoch",
         token_alias,
-        limit
+        mint_limit,
+        throughput_per_epoch_limit
     );
 }

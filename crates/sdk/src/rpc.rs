@@ -41,9 +41,10 @@ use namada_governance::utils::{
     compute_proposal_result, ProposalResult, ProposalVotes, Vote,
 };
 use namada_ibc::core::host::types::identifiers::PortId;
-use namada_ibc::parameters::IbcParameters;
+use namada_ibc::parameters::{IbcParameters, IbcTokenRateLimits};
 use namada_ibc::storage::{
-    ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key, throughput_limit_key,
+    ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key, mint_limit_key,
+    throughput_limit_key,
 };
 use namada_ibc::trace::calc_ibc_token_hash;
 use namada_io::{display_line, edisplay_line, Client, Io};
@@ -1901,23 +1902,46 @@ pub async fn query_osmosis_pool_routes(
 }
 
 /// Query the IBC rate limit for the provided token
-pub async fn query_ibc_rate_limit<C: Client + Sync>(
+pub async fn query_ibc_rate_limits<C: Client + Sync>(
     client: &C,
     token: &Address,
-) -> Result<Amount, error::Error> {
-    match query_storage_value::<_, Amount>(client, &throughput_limit_key(token))
-        .await
-    {
-        Ok(limit) => Ok(limit),
-        Err(_) => {
-            // If no custom limit has been set for this token fallback to the
-            // default param
-            query_storage_value::<_, IbcParameters>(
-                client,
-                &namada_ibc::storage::params_key(),
-            )
-            .await
-            .map(|params| params.default_per_epoch_throughput_limit)
+) -> Result<IbcTokenRateLimits, error::Error> {
+    let throughput_limit =
+        query_storage_value::<_, Amount>(client, &throughput_limit_key(token))
+            .await;
+    let mint_limit =
+        query_storage_value::<_, Amount>(client, &mint_limit_key(token)).await;
+
+    match (mint_limit, throughput_limit) {
+        (Ok(mint_limit), Ok(throughput_per_epoch_limit)) => {
+            Ok(IbcTokenRateLimits {
+                mint_limit,
+                throughput_per_epoch_limit,
+            })
         }
+        (Ok(_mint_limit), Err(_)) => Err(QueryError::NoSuchKey(
+            throughput_limit_key(token).to_string(),
+        )
+        .into()),
+        (Err(_), Ok(_throughput_limit)) => {
+            Err(QueryError::NoSuchKey(mint_limit_key(token).to_string()).into())
+        }
+        _ => Err(QueryError::General(format!(
+            "Error querying IBC rate limits for the token {} - no rate limits \
+             found",
+            token
+        ))
+        .into()),
     }
+}
+
+/// Query the global IBC parameters
+pub async fn query_ibc_params<C: Client + Sync>(
+    client: &C,
+) -> Result<IbcParameters, error::Error> {
+    query_storage_value::<_, IbcParameters>(
+        client,
+        &namada_ibc::storage::params_key(),
+    )
+    .await
 }
