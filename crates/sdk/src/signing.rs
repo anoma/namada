@@ -1123,7 +1123,7 @@ pub async fn to_ledger_vector(
         blob: HEXLOWER.encode(&tx.serialize_to_vec()),
         index: 0,
         valid: true,
-        name: "Custom_0".to_string(),
+        name: "__".to_string(),
         ..Default::default()
     };
 
@@ -1154,7 +1154,7 @@ pub async fn to_ledger_vector(
             .map_err(|err| {
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
-            tv.name = "Init_Account_0".to_string();
+            tv.name.push_str("Init_Account__");
 
             let extra = tx
                 .get_section(&init_account.vp_code_hash)
@@ -1198,7 +1198,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Become_Validator_0".to_string();
+            tv.name.push_str("Become_Validator__");
 
             tv.output
                 .extend(vec!["Type : Become Validator".to_string()]);
@@ -1271,7 +1271,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Init_Proposal_0".to_string();
+            tv.name.push_str("Init_Proposal__");
 
             let extra = tx
                 .get_section(&init_proposal_data.content)
@@ -1333,7 +1333,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Vote_Proposal_0".to_string();
+            tv.name.push_str("Vote_Proposal__");
 
             tv.output.extend(vec![
                 format!("Type : Vote Proposal"),
@@ -1356,7 +1356,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Reveal_Pubkey_0".to_string();
+            tv.name.push_str("Reveal_Pubkey__");
 
             tv.output.extend(vec![
                 format!("Type : Reveal Pubkey"),
@@ -1374,7 +1374,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Update_Account_0".to_string();
+            tv.name.push_str("Update_Account__");
             tv.output.extend(vec![
                 format!("Type : Update Account"),
                 format!("Address : {}", update_account.addr),
@@ -1439,7 +1439,7 @@ pub async fn to_ledger_vector(
             .map_err(|err| {
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
-            tv.name = "Transfer_0".to_string();
+            tv.name.push_str("Transfer__");
             tv.output.push("Type : Transfer".to_string());
 
             // To facilitate lookups of MASP AssetTypes
@@ -1474,7 +1474,7 @@ pub async fn to_ledger_vector(
             if let Ok(transfer) =
                 MsgTransfer::<token::Transfer>::try_from_slice(data.as_ref())
             {
-                tv.name = "IBC_Transfer_0".to_string();
+                tv.name.push_str("IBC_Transfer__");
                 tv.output.push("Type : IBC Transfer".to_string());
                 let transfer_token = format!(
                     "{} {}",
@@ -1568,7 +1568,7 @@ pub async fn to_ledger_vector(
             } else if let Ok(transfer) =
                 MsgNftTransfer::<token::Transfer>::try_from_slice(data.as_ref())
             {
-                tv.name = "IBC_NFT_Transfer_0".to_string();
+                tv.name.push_str("IBC_NFT_Transfer__");
                 tv.output.push("Type : IBC NFT Transfer".to_string());
                 tv.output.extend(vec![
                     format!("Source port : {}", transfer.message.port_id_on_a),
@@ -1746,7 +1746,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Bond_0".to_string();
+            tv.name.push_str("Bond__");
 
             tv.output.push("Type : Bond".to_string());
             if let Some(source) = bond.source.as_ref() {
@@ -1779,7 +1779,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Unbond_0".to_string();
+            tv.name.push_str("Unbond__");
 
             tv.output.push("Type : Unbond".to_string());
             if let Some(source) = unbond.source.as_ref() {
@@ -1812,7 +1812,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Withdraw_0".to_string();
+            tv.name.push_str("Withdraw__");
 
             tv.output.push("Type : Withdraw".to_string());
             if let Some(source) = withdraw.source.as_ref() {
@@ -1835,7 +1835,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Claim_Rewards_0".to_string();
+            tv.name.push_str("Claim_Rewards__");
 
             tv.output.push("Type : Claim Rewards".to_string());
             if let Some(source) = claim.source.as_ref() {
@@ -1857,7 +1857,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Change_Commission_0".to_string();
+            tv.name.push_str("Change_Commission__");
 
             tv.output.extend(vec![
                 format!("Type : Change commission"),
@@ -1878,7 +1878,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Change_MetaData_0".to_string();
+            tv.name.push_str("Change_MetaData__");
 
             tv.output.extend(vec!["Type : Change metadata".to_string()]);
 
@@ -1921,7 +1921,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Change_Consensus_Key_0".to_string();
+            tv.name.push_str("Change_Consensus_Key__");
 
             tv.output.extend(vec![
                 format!("Type : Change consensus key"),
@@ -1948,7 +1948,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Unjail_Validator_0".to_string();
+            tv.name.push_str("Unjail_Validator__");
 
             tv.output.extend(vec![
                 format!("Type : Unjail Validator"),
@@ -1966,7 +1966,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Deactivate_Validator_0".to_string();
+            tv.name.push_str("Deactivate_Validator__");
 
             tv.output.extend(vec![
                 format!("Type : Deactivate Validator"),
@@ -1984,7 +1984,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Reactivate_Validator_0".to_string();
+            tv.name.push_str("Reactivate_Validator__");
 
             tv.output.extend(vec![
                 format!("Type : Reactivate Validator"),
@@ -2001,7 +2001,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Redelegate_0".to_string();
+            tv.name.push_str("Redelegate__");
 
             tv.output.extend(vec![
                 format!("Type : Redelegate"),
@@ -2039,7 +2039,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Update_Steward_Commission_0".to_string();
+            tv.name.push_str("Update_Steward_Commission__");
             tv.output.extend(vec![
                 format!("Type : Update Steward Commission"),
                 format!("Steward : {}", update.steward),
@@ -2064,7 +2064,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Resign_Steward_0".to_string();
+            tv.name.push_str("Resign_Steward__");
 
             tv.output.extend(vec![
                 format!("Type : Resign Steward"),
@@ -2081,7 +2081,7 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Bridge_Pool_Transfer_0".to_string();
+            tv.name.push_str("Bridge_Pool_Transfer__");
 
             tv.output.extend(vec![
                 format!("Type : Bridge Pool Transfer"),
@@ -2106,7 +2106,7 @@ pub async fn to_ledger_vector(
                 format!("Gas Amount : {}", transfer.gas_fee.amount),
             ]);
         } else {
-            tv.name = "Custom_0".to_string();
+            tv.name.push_str("Custom__");
             tv.output.push("Type : Custom".to_string());
         }
 
