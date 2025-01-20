@@ -1404,14 +1404,30 @@ where
         .chain(args.gas_spending_key.iter_mut());
     let shielded_hw_keys =
         augment_masp_hardware_keys(namada, &args.tx, sources).await?;
-    let mut bparams = generate_masp_build_params(
+    // Try to generate MASP build parameters. This might fail when using a
+    // hardware wallet if it does not support MASP operations.
+    let bparams_result = generate_masp_build_params(
         MAX_HW_SPEND,
         MAX_HW_CONVERT,
         MAX_HW_OUTPUT,
         &args.tx,
     )
-    .await?;
-    let (mut tx, signing_data, _) = args.build(namada, &mut bparams).await?;
+    .await;
+    // If MASP build parameter generation failed for any reason, then try to
+    // build the transaction with no parameters. Remember the error though.
+    let (mut bparams, bparams_err) = bparams_result.map_or_else(
+        |e| (Box::new(StoredBuildParams::default()) as _, Some(e)),
+        |bparams| (bparams, None),
+    );
+    // If transaction building fails for any reason, then abort the process
+    // blaming MASP build parameter generation if that had also failed.
+    let (mut tx, signing_data, _) = args
+        .build(namada, &mut bparams)
+        .await
+        .map_err(|e| bparams_err.unwrap_or(e))?;
+    // Any effects of a MASP build parameter generation failure would have
+    // manifested during transaction building. So we discount that as a root
+    // cause from now on.
     masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
 
     let opt_masp_section =
