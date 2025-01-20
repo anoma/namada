@@ -51,7 +51,7 @@ pub struct NodeLocalConfig {
     pub recheck_process_proposal: bool,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TendermintMode {
     Full,
     Validator,
@@ -101,7 +101,6 @@ pub struct Ledger {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Shell {
     pub base_dir: PathBuf,
-    // pub ledger_address: SocketAddr,
     /// RocksDB block cache maximum size in bytes.
     /// When not set, defaults to 1/3 of the available memory.
     pub block_cache_bytes: Option<u64>,
@@ -122,6 +121,8 @@ pub struct Shell {
     pub action_at_height: Option<ActionAtHeight>,
     /// Specify if tendermint is started as validator, fullnode or seednode
     pub tendermint_mode: TendermintMode,
+    /// A `tendermint_mode` set on the last node start-up, if any.
+    pub last_tendermint_mode: Option<TendermintMode>,
     /// When set, indicates after how many blocks a new snapshot
     /// will be taken (counting from the first block)
     pub blocks_between_snapshots: Option<NonZeroU64>,
@@ -155,6 +156,7 @@ impl Ledger {
                 cometbft_dir: COMETBFT_DIR.into(),
                 action_at_height: None,
                 tendermint_mode: mode,
+                last_tendermint_mode: None,
                 blocks_between_snapshots: None,
                 snapshots_to_keep: None,
             },

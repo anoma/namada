@@ -1,7 +1,9 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use namada_sdk::borsh::BorshSerializeExt;
 use namada_sdk::key::*;
+use rand_core::OsRng;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -98,6 +100,32 @@ pub fn write_validator_state(home_dir: impl AsRef<Path>) -> Result<()> {
     write_validator(validator_state(home_dir), STATE_DIR, STATE_FILE, state)
 }
 
+/// Move the current validator key and state into a backup file (adds ".bk"
+/// extension), if any.
+pub fn backup_validator_key_and_state(home_dir: impl AsRef<Path>) {
+    let key_path = validator_key(&home_dir);
+    let state_path = validator_state(&home_dir);
+    for path in [key_path, state_path] {
+        if path.exists() {
+            fs::rename(&path, path.with_extension("json.bk")).expect(
+                "Must be able to backup existing CometBFT validator key and \
+                 state",
+            );
+        }
+    }
+}
+
+/// Write a dummy validator key and empty state file.
+pub fn write_dummy_validator_key_and_state(home_dir: impl AsRef<Path>) {
+    let dummy_key: common::SecretKey = ed25519::SigScheme::generate(&mut OsRng)
+        .try_to_sk()
+        .unwrap();
+    write_validator_key(&home_dir, &dummy_key)
+        .expect("Must be able to write dummy validator key.");
+    write_validator_state(&home_dir)
+        .expect("Must be able to write dummy validator state.");
+}
+
 /// Abstract over the initialization of validator data for Tendermint
 pub fn write_validator(
     path: PathBuf,
@@ -107,7 +135,7 @@ pub fn write_validator(
 ) -> Result<()> {
     let parent_dir = path.parent().unwrap();
     // Make sure the dir exists
-    std::fs::create_dir_all(parent_dir).map_err(|err| {
+    fs::create_dir_all(parent_dir).map_err(|err| {
         Error::CantCreate(format!(
             "{} at {}. Caused by {err}",
             err_dir,
@@ -152,8 +180,8 @@ pub fn id_from_pk(pk: &common::PublicKey) -> TendermintNodeId {
     TendermintNodeId::new(bytes)
 }
 
-fn ensure_empty(path: &PathBuf) -> std::io::Result<std::fs::File> {
-    std::fs::OpenOptions::new()
+fn ensure_empty(path: &PathBuf) -> std::io::Result<fs::File> {
+    fs::OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(true)

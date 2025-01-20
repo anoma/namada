@@ -284,10 +284,12 @@ fn emit_warning_on_non_64bit_cpu() {
 
 /// Run the ledger with an async runtime
 pub fn run(
-    config: config::Ledger,
+    config: config::Config,
     wasm_dir: PathBuf,
     scheduled_migration: Option<ScheduledMigration>,
 ) {
+    handle_tendermint_mode_change(&config);
+
     emit_warning_on_non_64bit_cpu();
 
     let logical_cores = num_cpus::get();
@@ -323,7 +325,54 @@ pub fn run(
         .enable_all()
         .build()
         .unwrap()
-        .block_on(run_aux(config, wasm_dir, scheduled_migration));
+        .block_on(run_aux(config.ledger, wasm_dir, scheduled_migration));
+}
+
+/// Check the `tendermint_mode` has changed from validator to non-validator
+/// mode, in which case we replace and backup the validator keys and state to
+/// avoid CometBFT running as a validator. We also persist the
+/// `last_tendermint_node` in the config for the next run.
+fn handle_tendermint_mode_change(config: &config::Config) {
+    // Check if the node was previously ran as a Validator, but isn't anymore
+    if !matches!(
+        config.ledger.shell.tendermint_mode,
+        TendermintMode::Validator
+    ) && matches!(
+        config.ledger.shell.last_tendermint_mode,
+        Some(TendermintMode::Validator)
+    ) {
+        // Backup and replace CometBFT validator key and state
+        let cometbft_dir = config.ledger.cometbft_dir();
+        namada_apps_lib::tendermint_node::backup_validator_key_and_state(
+            &cometbft_dir,
+        );
+        namada_apps_lib::tendermint_node::write_dummy_validator_key_and_state(
+            &cometbft_dir,
+        );
+    }
+
+    if config.ledger.shell.last_tendermint_mode.is_none()
+        || config.ledger.shell.last_tendermint_mode
+            != Some(config.ledger.shell.tendermint_mode)
+    {
+        let mut config = config.clone();
+        config.ledger.shell.last_tendermint_mode =
+            Some(config.ledger.shell.tendermint_mode);
+        // Remove this field in case it's set from running `ledger run-until` -
+        // it shouldn't be persisted
+        config.ledger.shell.action_at_height = None;
+        let replace = true;
+        config
+            .write(
+                &config.ledger.shell.base_dir,
+                &config.ledger.chain_id,
+                replace,
+            )
+            .expect(
+                "Must be able to persist config with changed \
+                 `last_tendermint_mode`.",
+            );
+    }
 }
 
 /// Resets the tendermint_node state and removes database files
@@ -600,7 +649,7 @@ fn start_abci_broadcaster_shell(
     );
 
     // Construct our ABCI application.
-    let tendermint_mode = config.shell.tendermint_mode.clone();
+    let tendermint_mode = config.shell.tendermint_mode;
     let proxy_app_address =
         convert_tm_addr_to_socket_addr(&config.cometbft.proxy_app);
 
