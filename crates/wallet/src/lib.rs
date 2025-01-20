@@ -1228,6 +1228,12 @@ impl<U: WalletIo> Wallet<U> {
             .map(Into::into)
     }
 
+    /// Insert an FMD secret into the wallet under the alias associated
+    /// with the corresponding payment address.
+    pub fn insert_fmd_key(&mut self, alias: &str, fmd_key: fmd::SecretKey) {
+        self.store.insert_fmd_key::<U>(alias.into(), fmd_key);
+    }
+
     /// Extend this wallet from another wallet (typically pre-genesis).
     /// Note that this method ignores `store.validator_data` if any.
     pub fn extend(&mut self, wallet: Self) {

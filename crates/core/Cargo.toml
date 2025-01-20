@@ -53,6 +53,7 @@ ed25519-consensus.workspace = true
 ethabi.workspace = true
 ethbridge-structs.workspace = true
 eyre.workspace = true
+fmd.workspace = true
 ibc.workspace = true
 ics23.workspace = true
 impl-num-traits = "0.1.2"

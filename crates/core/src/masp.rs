@@ -1,7 +1,8 @@
 //! MASP types
 
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 use std::num::ParseIntError;
 use std::str::FromStr;
 
@@ -439,6 +440,70 @@ impl<'de> serde::Deserialize<'de> for PaymentAddress {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+        let encoded: String = serde::Deserialize::deserialize(deserializer)?;
+        Self::from_str(&encoded).map_err(D::Error::custom)
+    }
+}
+
+/// Wrapper for [`fmd::SecretKey`]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FmdSecretKey(pub fmd::SecretKey);
+
+impl Display for FmdSecretKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(
+            &data_encoding::HEXUPPER.encode(&self.0.to_bytes_flattened()),
+        )
+    }
+}
+
+impl FromStr for FmdSecretKey {
+    type Err = DecodeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        fmd::SecretKey::from_bytes_mod_order_flattened(
+            &data_encoding::HEXUPPER.decode(s.as_bytes()).map_err(|e| {
+                DecodeError::InvalidInnerEncoding(e.to_string())
+            })?,
+        )
+        .map(Self)
+        .ok_or_else(|| {
+            DecodeError::InvalidInnerEncoding(
+                "Secret key bytes should be a multiple of 32".to_string(),
+            )
+        })
+    }
+}
+
+impl PartialOrd for FmdSecretKey {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for FmdSecretKey {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0
+            .to_bytes_flattened()
+            .cmp(&other.0.to_bytes_flattened())
+    }
+}
+
+impl Serialize for FmdSecretKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for FmdSecretKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
     {
         use serde::de::Error;
         let encoded: String = serde::Deserialize::deserialize(deserializer)?;
@@ -1161,5 +1226,44 @@ mod test {
         let (_diversifier, pa) = sk.0.default_address();
         let pa = PaymentAddress::from(pa);
         string_encoding::testing::test_string_formatting(&pa);
+    }
+
+    #[test]
+    fn test_fmd_key_serializations() {
+        let mut serialized = ['0'; 64].into_iter().collect::<String>();
+        serialized.push_str(
+            "243D1BB4F6ADFEB83A74196E321732FC10111111111111111111111111111101",
+        );
+        let fmd_key = FmdSecretKey::from_str(&serialized).expect("Test failed");
+        let first_key = fmd_key.0.0[0].to_bytes();
+        assert_eq!(first_key, [0; 32]);
+        let second_key = fmd_key.0.0[1].to_bytes();
+        assert_eq!(
+            second_key,
+            [
+                36, 61, 27, 180, 246, 173, 254, 184, 58, 116, 25, 110, 50, 23,
+                50, 252, 16, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17,
+                17, 17, 1
+            ]
+        );
+        assert_eq!(fmd_key.to_string(), serialized);
+        assert_eq!(
+            serde_json::to_string(&fmd_key).expect("Test failed"),
+            format!(r#""{serialized}""#)
+        );
+        let fmd_key: FmdSecretKey =
+            serde_json::from_str(&format!(r#""{serialized}""#))
+                .expect("Test failed");
+        let first_key = fmd_key.0.0[0].to_bytes();
+        assert_eq!(first_key, [0; 32]);
+        let second_key = fmd_key.0.0[1].to_bytes();
+        assert_eq!(
+            second_key,
+            [
+                36, 61, 27, 180, 246, 173, 254, 184, 58, 116, 25, 110, 50, 23,
+                50, 252, 16, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17,
+                17, 17, 1
+            ]
+        );
     }
 }

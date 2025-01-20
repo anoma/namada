@@ -30,11 +30,13 @@ itertools.workspace = true
 derivation-path.workspace = true
 data-encoding.workspace = true
 fd-lock = {workspace = true, optional = true}
+fmd.workspace = true
 masp_primitives.workspace = true
 orion.workspace = true
 rand.workspace = true
 rand_core.workspace = true
 serde.workspace = true
+sha2.workspace = true
 slip10_ed25519.workspace = true
 smooth-operator.workspace = true
 thiserror.workspace = true

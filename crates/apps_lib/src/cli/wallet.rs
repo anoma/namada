@@ -20,6 +20,7 @@ use namada_sdk::masp::find_valid_diversifier;
 use namada_sdk::wallet::{
     DecryptionError, DerivationPath, DerivationPathError, FindKeyError, Wallet,
 };
+use namada_wallet::store::derive_fmd_secret_key;
 use rand_core::OsRng;
 
 use crate::cli;
@@ -394,6 +395,8 @@ fn payment_address_gen(
             edisplay_line!(io, "Payment address not added");
             cli::safe_exit(1);
         });
+    let fmd_key = derive_fmd_secret_key(&viewing_key.to_bytes(), &div.0);
+    wallet.insert_fmd_key(&alias, fmd_key);
     wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
     display_line!(
         io,

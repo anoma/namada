@@ -14,9 +14,10 @@ use namada_core::chain::BlockHeight;
 use namada_core::collections::HashSet;
 use namada_core::key::*;
 use namada_core::masp::{
-    ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
+    ExtendedSpendingKey, ExtendedViewingKey, FmdSecretKey, PaymentAddress,
 };
 use serde::{Deserialize, Serialize};
+use sha2::Digest;
 use zeroize::Zeroizing;
 
 use super::alias::{self, Alias};
@@ -70,6 +71,8 @@ pub struct Store {
     spend_keys: BTreeMap<Alias, StoredKeypair<StoreSpendingKey>>,
     /// Payment address book
     payment_addrs: BiBTreeMap<Alias, PaymentAddress>,
+    /// FMD key book
+    fmd_keys: BiBTreeMap<Alias, FmdSecretKey>,
     /// Cryptographic keypairs
     secret_keys: BTreeMap<Alias, StoredKeypair<common::SecretKey>>,
     /// Known public keys
@@ -434,6 +437,15 @@ impl Store {
         Some(alias)
     }
 
+    /// Insert FMD keys similarly to how it's done for keypairs
+    pub fn insert_fmd_key<U: WalletIo>(
+        &mut self,
+        alias: Alias,
+        fmd_key: fmd::SecretKey,
+    ) {
+        self.fmd_keys.insert(alias.clone(), FmdSecretKey(fmd_key));
+    }
+
     /// Insert viewing keys similarly to how it's done for keypairs
     pub fn insert_viewing_key<U: WalletIo>(
         &mut self,
@@ -640,11 +652,13 @@ impl Store {
             pkhs,
             validator_data: _,
             address_vp_types,
+            fmd_keys,
         } = self;
         birthdays.extend(store.birthdays);
         view_keys.extend(store.view_keys);
         spend_keys.extend(store.spend_keys);
         payment_addrs.extend(store.payment_addrs);
+        fmd_keys.extend(store.fmd_keys);
         secret_keys.extend(store.secret_keys);
         public_keys.extend(store.public_keys);
         derivation_paths.extend(store.derivation_paths);
@@ -799,6 +813,20 @@ pub fn derive_hd_spending_key(
         &zip32_path,
     )
     .into()
+}
+
+/// Generate a new FMD secret key from the seed and security parameter `gamma`.
+pub fn derive_fmd_secret_key(seed: &[u8], div: &[u8]) -> fmd::SecretKey {
+    // TODO: Choose a good value for this
+    const GAMMA: u8 = 20u8;
+    fmd::SecretKey::from_bytes_mod_order((0..GAMMA).map(|ix| {
+        let mut hasher = sha2::Sha256::default();
+        hasher.update("FMD".as_bytes());
+        hasher.update([ix]);
+        hasher.update(seed);
+        hasher.update(div);
+        hasher.finalize().into()
+    }))
 }
 
 impl Display for AddressVpType {

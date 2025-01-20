@@ -115,6 +115,7 @@ eyre = "0.6.12"
 fd-lock = "3.0.12"
 flate2 = "1.0.22"
 flume = "0.11.1"
+fmd = {package = "fuzzy-message-detection", git = "https://github.com/anoma/shielded-state-sync/", rev = "8c16489469d93924102f268bb438bed37a77007d"}
 fs_extra = "1.2.0"
 futures = "0.3"
 git2 = { version = "0.18.1", default-features = false }
