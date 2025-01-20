@@ -1711,9 +1711,89 @@ dependencies = [
 ]
 
 [[package]]
+name = "ibc-middleware-module"
+version = "0.1.0"
+source = "git+https://github.com/heliaxdev/ibc-middleware?tag=module/v0.1.0#3d3b436f7c58000c7498d68e88c15a955433a619"
+dependencies = [
+ "ibc-core-channel-types",
+ "ibc-core-host-types",
+ "ibc-core-router",
+ "ibc-core-router-types",
+ "ibc-primitives",
+]
+
+[[package]]
+name = "ibc-middleware-module"
+version = "0.1.0"
+source = "git+https://github.com/heliaxdev/ibc-middleware?tag=orm/v0.4.0#8d341de14ff5e2a637699796cffbf0fbbaee001f"
+dependencies = [
+ "ibc-core-channel-types",
+ "ibc-core-host-types",
+ "ibc-core-router",
+ "ibc-core-router-types",
+ "ibc-primitives",
+]
+
+[[package]]
+name = "ibc-middleware-module"
+version = "0.1.0"
+source = "git+https://github.com/heliaxdev/ibc-middleware?tag=pfm/v0.9.0#3d3b436f7c58000c7498d68e88c15a955433a619"
+dependencies = [
+ "ibc-core-channel-types",
+ "ibc-core-host-types",
+ "ibc-core-router",
+ "ibc-core-router-types",
+ "ibc-primitives",
+]
+
+[[package]]
+name = "ibc-middleware-module-macros"
+version = "0.1.0"
+source = "git+https://github.com/heliaxdev/ibc-middleware?tag=module-macros/v0.1.0#3d3b436f7c58000c7498d68e88c15a955433a619"
+dependencies = [
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "ibc-middleware-module-macros"
+version = "0.1.0"
+source = "git+https://github.com/heliaxdev/ibc-middleware?tag=orm/v0.4.0#8d341de14ff5e2a637699796cffbf0fbbaee001f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "ibc-middleware-module-macros"
+version = "0.1.0"
+source = "git+https://github.com/heliaxdev/ibc-middleware?tag=pfm/v0.9.0#3d3b436f7c58000c7498d68e88c15a955433a619"
+dependencies = [
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "ibc-middleware-overflow-receive"
+version = "0.4.0"
+source = "git+https://github.com/heliaxdev/ibc-middleware?tag=orm/v0.4.0#8d341de14ff5e2a637699796cffbf0fbbaee001f"
+dependencies = [
+ "ibc-app-transfer-types",
+ "ibc-core-channel-types",
+ "ibc-core-host-types",
+ "ibc-core-router",
+ "ibc-core-router-types",
+ "ibc-middleware-module 0.1.0 (git+https://github.com/heliaxdev/ibc-middleware?tag=orm/v0.4.0)",
+ "ibc-middleware-module-macros 0.1.0 (git+https://github.com/heliaxdev/ibc-middleware?tag=orm/v0.4.0)",
+ "ibc-primitives",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ibc-middleware-packet-forward"
-version = "0.8.0"
-source = "git+https://github.com/heliaxdev/ibc-middleware?tag=pfm/v0.8.0#9c4a410063df8562c726c76009ff08b4e5a1894a"
+version = "0.9.0"
+source = "git+https://github.com/heliaxdev/ibc-middleware?tag=pfm/v0.9.0#3d3b436f7c58000c7498d68e88c15a955433a619"
 dependencies = [
  "borsh",
  "dur",
@@ -1724,6 +1804,8 @@ dependencies = [
  "ibc-core-host-types",
  "ibc-core-router",
  "ibc-core-router-types",
+ "ibc-middleware-module 0.1.0 (git+https://github.com/heliaxdev/ibc-middleware?tag=pfm/v0.9.0)",
+ "ibc-middleware-module-macros 0.1.0 (git+https://github.com/heliaxdev/ibc-middleware?tag=pfm/v0.9.0)",
  "ibc-primitives",
  "serde",
  "serde_json",
@@ -2363,6 +2445,9 @@ dependencies = [
  "dur",
  "ibc",
  "ibc-derive",
+ "ibc-middleware-module 0.1.0 (git+https://github.com/heliaxdev/ibc-middleware?tag=module/v0.1.0)",
+ "ibc-middleware-module-macros 0.1.0 (git+https://github.com/heliaxdev/ibc-middleware?tag=module-macros/v0.1.0)",
+ "ibc-middleware-overflow-receive",
  "ibc-middleware-packet-forward",
  "ics23",
  "konst",
@@ -3222,9 +3307,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.36"
+version = "1.0.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fa76aaf39101c457836aec0ce2316dbdc3ab723cdda1c6bd4e6ad4208acaca7"
+checksum = "0e4dccaaaf89514f546c693ddc140f729f958c247918a13380cccc6078391acc"
 dependencies = [
  "proc-macro2",
 ]

@@ -91,6 +91,7 @@ namada_wallet = {path = "../wallet" }
 
 arbitrary = { workspace = true, optional = true }
 async-trait.workspace = true
+bech32.workspace = true
 bimap.workspace = true
 borsh.workspace = true
 circular-queue.workspace = true
