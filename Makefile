@@ -83,6 +83,12 @@ build-release:
 		--features jemalloc \
 		--features migrations
 
+build-release-no-jemalloc:
+	$(cargo) build $(jobs) --release --timings --package namada_apps \
+		--manifest-path Cargo.toml \
+		--no-default-features \
+		--features migrations
+
 build-debug:
 	$(cargo) build --package namada_apps --manifest-path Cargo.toml
 
@@ -93,6 +99,9 @@ check-release:
 	$(cargo) check --release --package namada_apps
 
 package: build-release
+	scripts/make-package.sh
+
+package-no-jemalloc: build-release-no-jemalloc
 	scripts/make-package.sh
 
 check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wasm)/Cargo.toml
