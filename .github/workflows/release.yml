@@ -83,8 +83,12 @@ jobs:
         with:
           name: wasm-${{ github.sha }}
           path: wasm
-      - name: Build release package for ${{ matrix.os }}
+      - name: Build release package for ${{ matrix.os }} (non-Windows)
+        if: ${{ !startsWith(runner.os, 'Windows') }}
         run: make package
+      - name: Build release package for ${{ matrix.os }} (Windows)
+        if: ${{ startsWith(runner.os, 'Windows') }}
+        run: make package-no-jemalloc
       - name: Upload binaries package
         uses: actions/upload-artifact@v4
         with:
