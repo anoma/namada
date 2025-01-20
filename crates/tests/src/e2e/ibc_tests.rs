@@ -1127,16 +1127,12 @@ fn ibc_rate_limit() -> Result<()> {
             vec!["query-ibc-rate-limits", "--token", token, "--node", &rpc];
         let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
         client.exp_string(&format!(
-            "Could not find IBC rate limits for token {}, returning default \
-             IBC rate limits instead:",
+            "IBC rate limits for token {}:",
             token_alias
         ))?;
+        client.exp_string(&format!("Global mint limit: {}", mint_limit))?;
         client.exp_string(&format!(
-            "Default global mint limit: {}",
-            mint_limit
-        ))?;
-        client.exp_string(&format!(
-            "Default throughput limit: {} per epoch",
+            "Throughput limit: {} per epoch",
             rate_limit
         ))?;
         client.assert_success();

@@ -1908,31 +1908,29 @@ pub async fn query_ibc_rate_limits<C: Client + Sync>(
 ) -> Result<IbcTokenRateLimits, error::Error> {
     let throughput_limit =
         query_storage_value::<_, Amount>(client, &throughput_limit_key(token))
-            .await;
+            .await
+            .ok();
     let mint_limit =
-        query_storage_value::<_, Amount>(client, &mint_limit_key(token)).await;
+        query_storage_value::<_, Amount>(client, &mint_limit_key(token))
+            .await
+            .ok();
 
-    match (mint_limit, throughput_limit) {
-        (Ok(mint_limit), Ok(throughput_per_epoch_limit)) => {
-            Ok(IbcTokenRateLimits {
+    Ok(match (mint_limit, throughput_limit) {
+        (Some(mint_limit), Some(throughput_per_epoch_limit)) => {
+            IbcTokenRateLimits {
                 mint_limit,
                 throughput_per_epoch_limit,
-            })
+            }
         }
-        (Ok(_mint_limit), Err(_)) => Err(QueryError::NoSuchKey(
-            throughput_limit_key(token).to_string(),
-        )
-        .into()),
-        (Err(_), Ok(_throughput_limit)) => {
-            Err(QueryError::NoSuchKey(mint_limit_key(token).to_string()).into())
+        _ => {
+            let params = query_ibc_params(client).await?;
+            IbcTokenRateLimits {
+                mint_limit: mint_limit.unwrap_or(params.default_mint_limit),
+                throughput_per_epoch_limit: throughput_limit
+                    .unwrap_or(params.default_per_epoch_throughput_limit),
+            }
         }
-        _ => Err(QueryError::General(format!(
-            "Error querying IBC rate limits for the token {} - no rate limits \
-             found",
-            token
-        ))
-        .into()),
-    }
+    })
 }
 
 /// Query the global IBC parameters
