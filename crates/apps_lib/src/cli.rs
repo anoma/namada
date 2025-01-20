@@ -63,6 +63,7 @@ pub mod cmds {
         TxShieldingTransfer(TxShieldingTransfer),
         TxUnshieldingTransfer(TxUnshieldingTransfer),
         TxIbcTransfer(TxIbcTransfer),
+        TxOsmosisSwap(TxOsmosisSwap),
         TxUpdateAccount(TxUpdateAccount),
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
@@ -84,6 +85,7 @@ pub mod cmds {
                 .subcommand(TxShieldingTransfer::def().display_order(2))
                 .subcommand(TxUnshieldingTransfer::def().display_order(2))
                 .subcommand(TxIbcTransfer::def().display_order(2))
+                .subcommand(TxOsmosisSwap::def().display_order(2))
                 .subcommand(TxUpdateAccount::def().display_order(2))
                 .subcommand(TxInitProposal::def().display_order(2))
                 .subcommand(TxVoteProposal::def().display_order(2))
@@ -107,6 +109,8 @@ pub mod cmds {
                 SubCmd::parse(matches).map(Self::TxUnshieldingTransfer);
             let tx_ibc_transfer =
                 SubCmd::parse(matches).map(Self::TxIbcTransfer);
+            let tx_osmosis_swap =
+                SubCmd::parse(matches).map(Self::TxOsmosisSwap);
             let tx_update_account =
                 SubCmd::parse(matches).map(Self::TxUpdateAccount);
             let tx_init_proposal =
@@ -124,6 +128,7 @@ pub mod cmds {
                 .or(tx_shielding_transfer)
                 .or(tx_unshielding_transfer)
                 .or(tx_ibc_transfer)
+                .or(tx_osmosis_swap)
                 .or(tx_update_account)
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
@@ -239,6 +244,7 @@ pub mod cmds {
                 .subcommand(TxShieldingTransfer::def().display_order(1))
                 .subcommand(TxUnshieldingTransfer::def().display_order(1))
                 .subcommand(TxIbcTransfer::def().display_order(1))
+                .subcommand(TxOsmosisSwap::def().display_order(1))
                 .subcommand(TxUpdateAccount::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
                 .subcommand(TxRevealPk::def().display_order(1))
@@ -314,6 +320,7 @@ pub mod cmds {
             let tx_unshielding_transfer =
                 Self::parse_with_ctx(matches, TxUnshieldingTransfer);
             let tx_ibc_transfer = Self::parse_with_ctx(matches, TxIbcTransfer);
+            let tx_osmosis_swap = Self::parse_with_ctx(matches, TxOsmosisSwap);
             let tx_update_account =
                 Self::parse_with_ctx(matches, TxUpdateAccount);
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
@@ -402,6 +409,7 @@ pub mod cmds {
                 .or(tx_shielding_transfer)
                 .or(tx_unshielding_transfer)
                 .or(tx_ibc_transfer)
+                .or(tx_osmosis_swap)
                 .or(tx_update_account)
                 .or(tx_init_account)
                 .or(tx_reveal_pk)
@@ -496,6 +504,7 @@ pub mod cmds {
         TxShieldingTransfer(TxShieldingTransfer),
         TxUnshieldingTransfer(TxUnshieldingTransfer),
         TxIbcTransfer(TxIbcTransfer),
+        TxOsmosisSwap(TxOsmosisSwap),
         QueryResult(QueryResult),
         TxUpdateAccount(TxUpdateAccount),
         TxInitAccount(TxInitAccount),
@@ -1404,6 +1413,25 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about(wrap!("Send a signed IBC transfer transaction."))
                 .add_args::<args::TxIbcTransfer<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TxOsmosisSwap(pub args::TxOsmosisSwap<args::CliTypes>);
+
+    impl SubCmd for TxOsmosisSwap {
+        const CMD: &'static str = "osmosis-swap";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxOsmosisSwap(args::TxOsmosisSwap::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!("Swap two asset kinds using Osmosis."))
+                .add_args::<args::TxOsmosisSwap<args::CliTypes>>()
         }
     }
 
@@ -3356,6 +3384,7 @@ pub mod args {
     use crate::wrap;
 
     pub const ADDRESS: Arg<WalletAddress> = arg("address");
+    pub const ADDRESS_OPT: ArgOpt<WalletAddress> = arg_opt("address");
     pub const ADD_PERSISTENT_PEERS: ArgFlag = flag("add-persistent-peers");
     pub const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
     pub const ALIAS: Arg<String> = arg("alias");
@@ -3508,6 +3537,7 @@ pub mod args {
     pub const LIST_FIND_ADDRESSES_ONLY: ArgFlag = flag("addr");
     pub const LIST_FIND_KEYS_ONLY: ArgFlag = flag("keys");
     pub const LOCALHOST: ArgFlag = flag("localhost");
+    pub const LOCAL_RECOVERY_ADDR: Arg<String> = arg("local-recovery-addr");
     pub const MASP_EPOCH: ArgOpt<MaspEpoch> = arg_opt("masp-epoch");
     pub const MAX_COMMISSION_RATE_CHANGE: Arg<Dec> =
         arg("max-commission-rate-change");
@@ -3516,21 +3546,30 @@ pub mod args {
     pub const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
     pub const MEMO_OPT: ArgOpt<String> = arg_opt("memo");
     pub const MIGRATION_PATH: ArgOpt<PathBuf> = arg_opt("migration-path");
+    pub const MINIMUM_AMOUNT: ArgOpt<token::DenominatedAmount> =
+        arg_opt("minimum-amount");
     pub const MODE: ArgOpt<String> = arg_opt("mode");
     pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
     pub const NO_EXPIRATION: ArgFlag = flag("no-expiration");
     pub const NUT: ArgFlag = flag("nut");
+    pub const OSMOSIS_REST_RPC: Arg<String> = arg("osmosis-rest-rpc");
     pub const OUT_FILE_PATH_OPT: ArgOpt<PathBuf> = arg_opt("out-file-path");
     pub const OUTPUT: ArgOpt<PathBuf> = arg_opt("output");
+    pub const OUTPUT_DENOM: Arg<String> = arg("output-denom");
     pub const OUTPUT_FOLDER_PATH: ArgOpt<PathBuf> =
         arg_opt("output-folder-path");
+    pub const OSMOSIS_POOL_HOP: ArgMulti<OsmosisPoolHop, GlobStar> =
+        arg_multi("pool-hop");
+    pub const OVERFLOW_OPT: ArgOpt<WalletAddress> = arg_opt("overflow-addr");
     pub const OWNER: Arg<WalletAddress> = arg("owner");
     pub const OWNER_OPT: ArgOpt<WalletAddress> = OWNER.opt();
     pub const PATH: Arg<PathBuf> = arg("path");
     pub const PATH_OPT: ArgOpt<PathBuf> = arg_opt("path");
     pub const PAYMENT_ADDRESS_TARGET: Arg<WalletPaymentAddr> = arg("target");
+    pub const PAYMENT_ADDRESS_TARGET_OPT: ArgOpt<WalletPaymentAddr> =
+        arg_opt("target-pa");
     pub const PORT_ID: ArgDefault<PortId> = arg_default(
         "port-id",
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
@@ -3578,6 +3617,7 @@ pub mod args {
     pub const SHIELDED: ArgFlag = flag("shielded");
     pub const SHOW_IBC_TOKENS: ArgFlag = flag("show-ibc-tokens");
     pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
+    pub const SLIPPAGE: ArgOpt<f64> = arg_opt("slippage-percentage");
     pub const SIGNING_KEYS: ArgMulti<WalletPublicKey, GlobStar> =
         arg_multi("signing-keys");
     pub const SIGNATURES: ArgMulti<PathBuf, GlobStar> = arg_multi("signatures");
@@ -3591,6 +3631,7 @@ pub mod args {
     pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     pub const SUSPEND_ACTION: ArgFlag = flag("suspend");
     pub const TARGET: Arg<WalletAddress> = arg("target");
+    pub const TARGET_OPT: ArgOpt<WalletAddress> = arg_opt("target");
     pub const TEMPLATES_PATH: Arg<PathBuf> = arg("templates-path");
     pub const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     pub const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
@@ -3634,6 +3675,7 @@ pub mod args {
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
     pub const WEBSITE_OPT: ArgOpt<String> = arg_opt("website");
+    pub const WINDOW_SECONDS: ArgOpt<u64> = arg_opt("window-seconds");
     pub const WITH_INDEXER: ArgOpt<String> = arg_opt("with-indexer");
     pub const WRAPPER_SIGNATURE_OPT: ArgOpt<PathBuf> = arg_opt("gas-signature");
     pub const TX_PATH: Arg<PathBuf> = arg("tx-path");
@@ -5025,6 +5067,184 @@ pub mod args {
                         .requires(GAS_SPENDING_KEY.name)
                         .conflicts_with(FEE_PAYER_OPT.name),
                 )
+        }
+    }
+
+    impl CliToSdk<TxOsmosisSwap<SdkTypes>> for TxOsmosisSwap<CliTypes> {
+        type Error = std::io::Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<TxOsmosisSwap<SdkTypes>, Self::Error> {
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            let recipient = match self.recipient {
+                Either::Left(r) => Either::Left(chain_ctx.get(&r)),
+                Either::Right(r) => Either::Right(chain_ctx.get(&r)),
+            };
+            let overflow = self.overflow.map(|r| chain_ctx.get(&r));
+            Ok(TxOsmosisSwap {
+                transfer: self.transfer.to_sdk(ctx)?,
+                output_denom: self.output_denom,
+                recipient,
+                overflow,
+                slippage: self.slippage,
+                local_recovery_addr: self.local_recovery_addr,
+                route: self.route,
+                osmosis_rest_rpc: self.osmosis_rest_rpc,
+            })
+        }
+    }
+
+    impl Args for TxOsmosisSwap<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let transfer = TxIbcTransfer::parse(matches);
+            let osmosis_rest_rpc = OSMOSIS_REST_RPC.parse(matches);
+            let output_denom = OUTPUT_DENOM.parse(matches);
+            let maybe_trans_recipient = TARGET_OPT.parse(matches);
+            let maybe_shielded_recipient =
+                PAYMENT_ADDRESS_TARGET_OPT.parse(matches);
+            let maybe_overflow = OVERFLOW_OPT.parse(matches);
+            let slippage_percent = SLIPPAGE.parse(matches);
+            if slippage_percent
+                .is_some_and(|percent| !(0.0..=100.0).contains(&percent))
+            {
+                panic!(
+                    "The slippage percent must be a number between 0 and 100."
+                )
+            }
+            let window_seconds = WINDOW_SECONDS.parse(matches);
+            let minimum_amount = MINIMUM_AMOUNT.parse(matches);
+            let slippage = minimum_amount
+                .map(|d| Slippage::MinOutputAmount(d.redenominate(0).amount()))
+                .or_else(|| {
+                    Some(Slippage::Twap {
+                        slippage_percentage: slippage_percent
+                            .expect(
+                                "If a minimum amount was not provided, \
+                                 slippage-percentage and window-seconds must \
+                                 be specified.",
+                            )
+                            .to_string(),
+                        window_seconds: window_seconds.expect(
+                            "If a minimum amount was not provided, \
+                             slippage-percentage and window-seconds must be \
+                             specified.",
+                        ),
+                    })
+                })
+                .unwrap();
+            let local_recovery_addr = LOCAL_RECOVERY_ADDR.parse(matches);
+            let route = match OSMOSIS_POOL_HOP.parse(matches) {
+                r if r.is_empty() => None,
+                r => Some(r),
+            };
+            Self {
+                transfer,
+                output_denom,
+                recipient: if let Some(target) = maybe_trans_recipient {
+                    Either::Left(target)
+                } else {
+                    Either::Right(maybe_shielded_recipient.unwrap())
+                },
+                overflow: maybe_overflow,
+                slippage,
+                local_recovery_addr,
+                route,
+                osmosis_rest_rpc,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<TxIbcTransfer<CliTypes>>()
+                .arg(
+                    OSMOSIS_REST_RPC
+                        .def()
+                        .help(wrap!("A url pointing to an Osmosis REST rpc.")),
+                )
+                .arg(OSMOSIS_POOL_HOP.def().help(wrap!(
+                    "Individual hop of the route to take through Osmosis \
+                     pools. This value takes the form \
+                     <osmosis-pool-id>:<pool-output-denom>. When unspecified, \
+                     the optimal route is queried on the fly."
+                )))
+                .arg(OUTPUT_DENOM.def().help(wrap!(
+                    "IBC trace path (on Namada) of the desired asset. This is \
+                     a string of the form \
+                     `transfer/<channel-X>/<base-denom>`, where `<channel-X>` \
+                     is the channel that connects Namada to some counterparty \
+                     chain."
+                )))
+                .arg(
+                    TARGET_OPT
+                        .def()
+                        .conflicts_with(OVERFLOW_OPT.name)
+                        .conflicts_with(PAYMENT_ADDRESS_TARGET_OPT.name)
+                        .help(wrap!(
+                            "Transparent Namada address that shall receive \
+                             the swapped tokens."
+                        )),
+                )
+                .arg(
+                    PAYMENT_ADDRESS_TARGET_OPT
+                        .def()
+                        .conflicts_with(TARGET_OPT.name)
+                        .help(wrap!(
+                            "Namada payment address that shall receive the \
+                             minimum amount of tokens swapped on Osmosis."
+                        )),
+                )
+                .arg(OVERFLOW_OPT.def().help(wrap!(
+                    "Transparent address that receives the amount of target \
+                     asset exceeding the minimum trade amount. Only \
+                     applicable when shielding assets that have been swapped \
+                     on Osmosis. This address should not be linkable to any \
+                     of the user's personal accounts, to maximize the privacy \
+                     of the trade. If unspecified, a disposable address is \
+                     generated."
+                )))
+                .arg(SLIPPAGE.def().requires(WINDOW_SECONDS.name).help(wrap!(
+                    "Slippage percentage, as a number between 0 and 100. \
+                     Represents the maximum acceptable deviation from the \
+                     expected price during a trade."
+                )))
+                .arg(WINDOW_SECONDS.def().requires(SLIPPAGE.name).help(wrap!(
+                    "Time period (in seconds) over which the average price is \
+                     calculated."
+                )))
+                .arg(
+                    MINIMUM_AMOUNT
+                        .def()
+                        .conflicts_with(SLIPPAGE.name)
+                        .conflicts_with(WINDOW_SECONDS.name)
+                        .help(wrap!(
+                            "Minimum amount of target asset that the trade \
+                             should produce."
+                        )),
+                )
+                .arg(LOCAL_RECOVERY_ADDR.def().help(wrap!(
+                    "Address on Osmosis from which to recover funds in case \
+                     of failure."
+                )))
+                .group(
+                    ArgGroup::new("slippage")
+                        .args([SLIPPAGE.name, MINIMUM_AMOUNT.name])
+                        .required(true),
+                )
+                .group(
+                    ArgGroup::new("transfer-target")
+                        .args([
+                            TARGET_OPT.name,
+                            PAYMENT_ADDRESS_TARGET_OPT.name,
+                        ])
+                        .required(true),
+                )
+                .mut_arg(RECEIVER.name, |arg| {
+                    arg.long("swap-contract").help(wrap!(
+                        "Address of the Osmosis contract performing the swap. \
+                         It will be the receiver of the IBC transfer."
+                    ))
+                })
         }
     }
 
@@ -6857,11 +7077,22 @@ pub mod args {
                 query,
                 output_folder: self.output_folder,
                 target: chain_ctx.get(&self.target),
-                token: self.token,
                 amount: self.amount,
                 expiration: self.expiration,
-                port_id: self.port_id,
-                channel_id: self.channel_id,
+                asset: match self.asset {
+                    IbcShieldingTransferAsset::LookupNamadaAddress {
+                        port_id,
+                        channel_id,
+                        token,
+                    } => IbcShieldingTransferAsset::LookupNamadaAddress {
+                        port_id,
+                        channel_id,
+                        token,
+                    },
+                    IbcShieldingTransferAsset::Address(addr) => {
+                        IbcShieldingTransferAsset::Address(chain_ctx.get(&addr))
+                    }
+                },
             })
         }
     }
@@ -6890,11 +7121,13 @@ pub mod args {
                 query,
                 output_folder,
                 target,
-                token,
                 amount,
                 expiration,
-                port_id,
-                channel_id,
+                asset: IbcShieldingTransferAsset::LookupNamadaAddress {
+                    port_id,
+                    channel_id,
+                    token,
+                },
             }
         }
 

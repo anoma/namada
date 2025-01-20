@@ -410,11 +410,7 @@ pub async fn aux_signing_data(
     };
 
     let fee_payer = if disposable_signing_key {
-        context
-            .wallet_mut()
-            .await
-            .gen_disposable_signing_key(&mut OsRng)
-            .to_public()
+        gen_disposable_signing_key(context).await
     } else {
         match &args.wrapper_fee_payer {
             Some(keypair) => keypair.clone(),
@@ -495,6 +491,17 @@ pub async fn generate_tx_signatures(
         signatures,
         wrapper_signature,
     })
+}
+
+/// Generate a disposable signing key.
+pub async fn gen_disposable_signing_key(
+    context: &impl Namada,
+) -> common::PublicKey {
+    context
+        .wallet_mut()
+        .await
+        .gen_disposable_signing_key(&mut OsRng)
+        .to_public()
 }
 
 /// Information about the post-fee balance of the tx's source. Used to correctly
