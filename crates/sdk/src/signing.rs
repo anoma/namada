@@ -682,7 +682,7 @@ fn make_ledger_amount_addr(
             "{}Amount : {} {}",
             prefix,
             token.to_uppercase(),
-            to_ledger_decimal(&amount.to_string()),
+            to_ledger_decimal_variable_token(amount),
         ));
     } else {
         output.extend(vec![
@@ -690,7 +690,7 @@ fn make_ledger_amount_addr(
             format!(
                 "{}Amount : {}",
                 prefix,
-                to_ledger_decimal(&amount.to_string())
+                to_ledger_decimal_variable_token(amount)
             ),
         ]);
     }
@@ -707,19 +707,17 @@ async fn make_ledger_amount_asset(
     prefix: &str,
 ) {
     if let Some(decoded) = assets.get(token) {
+        let amount = DenominatedAmount::new(
+            token::Amount::from_masp_denominated(amount, decoded.position),
+            decoded.denom,
+        );
         // If the AssetType can be decoded, then at least display Addressees
         if let Some(token) = tokens.get(&decoded.token) {
             output.push(format!(
                 "{}Amount : {} {}",
                 prefix,
                 token.to_uppercase(),
-                DenominatedAmount::new(
-                    token::Amount::from_masp_denominated(
-                        amount,
-                        decoded.position
-                    ),
-                    decoded.denom,
-                ),
+                to_ledger_decimal_variable_token(amount),
             ));
         } else {
             output.extend(vec![
@@ -727,13 +725,7 @@ async fn make_ledger_amount_asset(
                 format!(
                     "{}Amount : {}",
                     prefix,
-                    DenominatedAmount::new(
-                        token::Amount::from_masp_denominated(
-                            amount,
-                            decoded.position
-                        ),
-                        decoded.denom,
-                    ),
+                    to_ledger_decimal_variable_token(amount),
                 ),
             ]);
         }
@@ -741,11 +733,7 @@ async fn make_ledger_amount_asset(
         // Otherwise display the raw AssetTypes
         output.extend(vec![
             format!("{}Token : {}", prefix, token),
-            format!(
-                "{}Amount : {}",
-                prefix,
-                to_ledger_decimal(&amount.to_string())
-            ),
+            format!("{}Amount : {}.0", prefix, amount,),
         ]);
     }
 }
@@ -880,9 +868,10 @@ async fn make_ledger_token_transfer_endpoints(
     Ok(())
 }
 
-/// Convert decimal numbers into the format used by Ledger. Specifically remove
-/// all insignificant zeros occurring after decimal point.
-fn to_ledger_decimal(amount: &str) -> String {
+/// Convert decimal numbers into the format used by Ledger when the token is
+/// known to it. Specifically remove all insignificant zeros occurring after
+/// decimal point.
+fn to_ledger_decimal_whitelisted_token(amount: &str) -> String {
     if amount.contains('.') {
         let mut amount = amount.trim_end_matches('0').to_string();
         if amount.ends_with('.') {
@@ -891,6 +880,26 @@ fn to_ledger_decimal(amount: &str) -> String {
         amount
     } else {
         amount.to_string()
+    }
+}
+
+/// Convert decimal numbers into the format used by Ledger when the token is
+/// unknown to it. Specifically remove all insignificant zeros occurring after
+/// decimal point. But unless the denomination is zero, always leave at least a
+/// ".0" to indicate that the smallest unit representation is not being used.
+fn to_ledger_decimal_variable_token(amount: DenominatedAmount) -> String {
+    let mut amount_str = amount.to_string();
+    if amount_str.contains('.') {
+        let mut amount = amount_str.trim_end_matches('0').to_string();
+        if amount.ends_with('.') {
+            amount.push('0');
+        }
+        amount
+    } else if u8::from(amount.denom()) > 0 {
+        amount_str.push_str(".0");
+        amount_str
+    } else {
+        amount_str
     }
 }
 
@@ -959,7 +968,7 @@ fn proposal_type_to_ledger_vector(
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
                             "Amount: NAM {}",
-                            to_ledger_decimal(
+                            to_ledger_decimal_whitelisted_token(
                                 &target.amount.to_string_native()
                             )
                         ));
@@ -973,7 +982,7 @@ fn proposal_type_to_ledger_vector(
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
                             "Amount: NAM {}",
-                            to_ledger_decimal(
+                            to_ledger_decimal_whitelisted_token(
                                 &target.amount.to_string_native()
                             )
                         ));
@@ -991,7 +1000,7 @@ fn proposal_type_to_ledger_vector(
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
                             "Amount: NAM {}",
-                            to_ledger_decimal(
+                            to_ledger_decimal_whitelisted_token(
                                 &target.amount.to_string_native()
                             )
                         ));
@@ -1006,7 +1015,7 @@ fn proposal_type_to_ledger_vector(
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
                             "Amount: NAM {}",
-                            to_ledger_decimal(
+                            to_ledger_decimal_whitelisted_token(
                                 &target.amount.to_string_native()
                             )
                         ));
@@ -1019,7 +1028,7 @@ fn proposal_type_to_ledger_vector(
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
                             "Amount: NAM {}",
-                            to_ledger_decimal(
+                            to_ledger_decimal_whitelisted_token(
                                 &target.amount.to_string_native()
                             )
                         ));
@@ -1029,7 +1038,7 @@ fn proposal_type_to_ledger_vector(
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
                             "Amount: NAM {}",
-                            to_ledger_decimal(
+                            to_ledger_decimal_whitelisted_token(
                                 &target.amount.to_string_native()
                             )
                         ));
@@ -1756,7 +1765,9 @@ pub async fn to_ledger_vector(
                 format!("Validator : {}", bond.validator),
                 format!(
                     "Amount : NAM {}",
-                    to_ledger_decimal(&bond.amount.to_string_native())
+                    to_ledger_decimal_whitelisted_token(
+                        &bond.amount.to_string_native()
+                    )
                 ),
             ]);
 
@@ -1767,7 +1778,9 @@ pub async fn to_ledger_vector(
                 format!("Validator : {}", bond.validator),
                 format!(
                     "Amount : NAM {}",
-                    to_ledger_decimal(&bond.amount.to_string_native())
+                    to_ledger_decimal_whitelisted_token(
+                        &bond.amount.to_string_native()
+                    )
                 ),
             ]);
         } else if code_sec.tag == Some(TX_UNBOND_WASM.to_string()) {
@@ -1789,7 +1802,9 @@ pub async fn to_ledger_vector(
                 format!("Validator : {}", unbond.validator),
                 format!(
                     "Amount : NAM {}",
-                    to_ledger_decimal(&unbond.amount.to_string_native())
+                    to_ledger_decimal_whitelisted_token(
+                        &unbond.amount.to_string_native()
+                    )
                 ),
             ]);
 
@@ -1800,7 +1815,9 @@ pub async fn to_ledger_vector(
                 format!("Validator : {}", unbond.validator),
                 format!(
                     "Amount : NAM {}",
-                    to_ledger_decimal(&unbond.amount.to_string_native())
+                    to_ledger_decimal_whitelisted_token(
+                        &unbond.amount.to_string_native()
+                    )
                 ),
             ]);
         } else if code_sec.tag == Some(TX_WITHDRAW_WASM.to_string()) {
@@ -2013,7 +2030,9 @@ pub async fn to_ledger_vector(
                 format!("Owner : {}", redelegation.owner),
                 format!(
                     "Amount : {}",
-                    to_ledger_decimal(&redelegation.amount.to_string_native())
+                    to_ledger_decimal_whitelisted_token(
+                        &redelegation.amount.to_string_native()
+                    )
                 ),
             ]);
 
@@ -2026,7 +2045,9 @@ pub async fn to_ledger_vector(
                 format!("Owner : {}", redelegation.owner),
                 format!(
                     "Amount : {}",
-                    to_ledger_decimal(&redelegation.amount.to_string_native())
+                    to_ledger_decimal_whitelisted_token(
+                        &redelegation.amount.to_string_native()
+                    )
                 ),
             ]);
         } else if code_sec.tag == Some(TX_UPDATE_STEWARD_COMMISSION.to_string())
@@ -2132,15 +2153,18 @@ pub async fn to_ledger_vector(
                     let memo = String::from_utf8(id).map_err(|err| {
                         Error::from(EncodingError::Conversion(err.to_string()))
                     })?;
-                    tv.output.push(format!("Memo : {}", memo));
-                    tv.output_expert.push(format!("Memo : {}", memo));
+                    if !memo.is_empty() {
+                        tv.output.push(format!("Memo : {}", memo));
+                        tv.output_expert.push(format!("Memo : {}", memo));
+                    }
                 }
             }
         }
 
         if let Some(wrapper) = tx.header.wrapper() {
-            let fee_amount_per_gas_unit =
-                to_ledger_decimal(&wrapper.fee.amount_per_gas_unit.to_string());
+            let fee_amount_per_gas_unit = to_ledger_decimal_variable_token(
+                wrapper.fee.amount_per_gas_unit,
+            );
             tv.output_expert.extend(vec![
                 format!(
                     "Timestamp : {}",
@@ -2852,15 +2876,24 @@ mod test_signing {
     /// the decimal point before displaying on Ledger device
     #[test]
     fn test_to_ledger_decimal() {
-        assert_eq!(to_ledger_decimal("1.2"), "1.2".to_string(),);
+        assert_eq!(
+            to_ledger_decimal_whitelisted_token("1.2"),
+            "1.2".to_string(),
+        );
 
-        assert_eq!(to_ledger_decimal("10"), "10".to_string(),);
+        assert_eq!(to_ledger_decimal_whitelisted_token("10"), "10".to_string(),);
 
-        assert_eq!(to_ledger_decimal("10.10"), "10.1".to_string(),);
+        assert_eq!(
+            to_ledger_decimal_whitelisted_token("10.10"),
+            "10.1".to_string(),
+        );
 
-        assert_eq!(to_ledger_decimal("2.000"), "2".to_string(),);
+        assert_eq!(
+            to_ledger_decimal_whitelisted_token("2.000"),
+            "2".to_string(),
+        );
 
-        assert_eq!(to_ledger_decimal("2."), "2".to_string(),)
+        assert_eq!(to_ledger_decimal_whitelisted_token("2."), "2".to_string(),)
     }
 
     /// Test the validation of the `proposal_type_to_ledger_vector` function.

@@ -15,7 +15,7 @@ async fn main() -> Result<(), Reason> {
     let mut debug_vectors = vec![];
     let mut test_vectors = vec![];
     let mut serialized_txs = vec![];
-    for i in 0..1000 {
+    for i in 0..10000 {
         let (tx, tx_data) = arb_signed_tx().new_tree(&mut runner)?.current();
         let mut ledger_vector = to_ledger_vector(&wallet, &tx)
             .await
