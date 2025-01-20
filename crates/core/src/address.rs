@@ -393,11 +393,10 @@ impl Debug for Address {
     }
 }
 
-// compute an Address from an IBC signer
-impl TryFrom<Signer> for Address {
+impl TryFrom<&Signer> for Address {
     type Error = DecodeError;
 
-    fn try_from(signer: Signer) -> Result<Self> {
+    fn try_from(signer: &Signer) -> Result<Self> {
         // The given address should be an address or payment address. When
         // sending a token from a spending key, it has been already
         // replaced with the MASP address.
@@ -409,6 +408,14 @@ impl TryFrom<Signer> for Address {
                 ))),
             },
         )
+    }
+}
+
+impl TryFrom<Signer> for Address {
+    type Error = DecodeError;
+
+    fn try_from(signer: Signer) -> Result<Self> {
+        (&signer).try_into()
     }
 }
 
