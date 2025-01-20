@@ -1066,20 +1066,22 @@ fn ibc_upgrade_client() -> Result<()> {
 ///   - Receiving 2 samoleans from Gaia will fail
 #[test]
 fn ibc_rate_limit() -> Result<()> {
+    const DEFAULT_RATE_LIMIT: Amount = Amount::from_u64(1_000_000);
+    const DEFAULT_MINT_LIMIT: Amount = Amount::from_u64(1);
+
     // Mint limit 2 transfer/channel-0/nam, per-epoch throughput limit 1 NAM
-    let update_genesis = |mut genesis: templates::All<
-        templates::Unvalidated,
-    >,
-                          base_dir: &_| {
-        genesis.parameters.parameters.epochs_per_year =
-            epochs_per_year_from_min_duration(50);
-        genesis.parameters.ibc_params.default_mint_limit = Amount::from_u64(1);
-        genesis
-            .parameters
-            .ibc_params
-            .default_per_epoch_throughput_limit = Amount::from_u64(1_000_000);
-        setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
-    };
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(50);
+            genesis.parameters.ibc_params.default_mint_limit =
+                DEFAULT_MINT_LIMIT;
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit = DEFAULT_RATE_LIMIT;
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
+        };
     let (ledger, gaia, test, test_gaia) =
         run_namada_cosmos(CosmosChainType::Gaia(None), update_genesis)?;
     let _bg_ledger = ledger.background();
@@ -1107,21 +1109,35 @@ fn ibc_rate_limit() -> Result<()> {
     // Need the raw address because the token won't be received later in this
     // test
     let cosmos_token_addr = ibc_token(&ibc_denom).to_string();
-    for (token, token_alias) in
-        [(NAM, &NAM.to_lowercase()), (&ibc_denom, &cosmos_token_addr)]
-    {
-        let tx_args = apply_use_device(vec![
-            "query-ibc-rate-limits",
-            "--token",
-            token,
-            "--node",
-            &rpc,
-        ]);
+    for (token, token_alias, mint_limit, rate_limit) in [
+        (
+            NAM,
+            &NAM.to_lowercase(),
+            DEFAULT_MINT_LIMIT.to_string_native(),
+            DEFAULT_RATE_LIMIT.to_string_native(),
+        ),
+        (
+            &ibc_denom,
+            &cosmos_token_addr,
+            DEFAULT_MINT_LIMIT.to_string(),
+            DEFAULT_RATE_LIMIT.to_string(),
+        ),
+    ] {
+        let tx_args =
+            vec!["query-ibc-rate-limits", "--token", token, "--node", &rpc];
         let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
         client.exp_string(&format!(
-            "IBC rate limits for token {}:\nGlobal mint limit: \
-             1000000\nThroughput limit: 1000000 per epoch",
+            "Could not find IBC rate limits for token {}, returning default \
+             IBC rate limits instead:",
             token_alias
+        ))?;
+        client.exp_string(&format!(
+            "Default global mint limit: {}",
+            mint_limit
+        ))?;
+        client.exp_string(&format!(
+            "Default throughput limit: {} per epoch",
+            rate_limit
         ))?;
         client.assert_success();
     }
