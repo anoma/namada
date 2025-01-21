@@ -26,10 +26,12 @@ namada_migrations = {path = "../migrations", optional = true }
 
 bimap.workspace = true
 borsh.workspace = true
-itertools.workspace = true
-derivation-path.workspace = true
 data-encoding.workspace = true
+derivation-path.workspace = true
 fd-lock = {workspace = true, optional = true}
+fmd.workspace = true
+hd-wallet.workspace = true
+itertools.workspace = true
 masp_primitives.workspace = true
 orion.workspace = true
 rand.workspace = true

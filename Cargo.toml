@@ -115,9 +115,13 @@ eyre = "0.6.12"
 fd-lock = "3.0.12"
 flate2 = "1.0.22"
 flume = "0.11.1"
+# branch tiago/serialization
+fmd = { package = "fuzzy-message-detection", git = "https://github.com/anoma/shielded-state-sync", rev = "d1fcd69c81d1c9d489ac5b2407a761b572a95098", features = ["borsh", "serde"] }
 fs_extra = "1.2.0"
 futures = "0.3"
+generic-ec = { version = "0.4.5", features = ["curve-ed25519"] }
 git2 = { version = "0.18.1", default-features = false }
+hd-wallet = { version = "0.6.1", features = ["curve-ed25519"] }
 # branch tiago/optional-ack
 ibc = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "38489943c4e75206eaffeeeec6153c039c2499d1", features = ["serde"] }
 ibc-derive = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "38489943c4e75206eaffeeeec6153c039c2499d1" }
