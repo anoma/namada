@@ -3,6 +3,7 @@
 //! Provides functionality for managing keys and addresses for a user
 pub mod alias;
 mod derivation_path;
+pub mod fmd_scheme;
 mod keys;
 pub mod pre_genesis;
 pub mod store;
