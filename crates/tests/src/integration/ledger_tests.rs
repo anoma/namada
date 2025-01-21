@@ -395,7 +395,10 @@ fn invalid_transactions() -> Result<()> {
     // There should be state now
     {
         let locked = node.shell.lock().unwrap();
-        assert_ne!(locked.last_state().last_block_app_hash, Default::default());
+        assert_ne!(
+            locked.last_state("").last_block_app_hash,
+            Default::default()
+        );
     }
 
     let daewon_lower = DAEWON.to_lowercase();

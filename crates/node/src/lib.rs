@@ -94,7 +94,11 @@ const ENV_VAR_RAYON_THREADS: &str = "NAMADA_RAYON_THREADS";
 //     }
 //```
 impl Shell {
-    fn call(&mut self, req: Request) -> Result<Response, Error> {
+    fn call(
+        &mut self,
+        req: Request,
+        namada_version: &str,
+    ) -> Result<Response, Error> {
         match req {
             Request::InitChain(init) => {
                 tracing::debug!("Request InitChain");
@@ -109,7 +113,9 @@ impl Shell {
                 )
                 .map(Response::InitChain)
             }
-            Request::Info(_) => Ok(Response::Info(self.last_state())),
+            Request::Info(_) => {
+                Ok(Response::Info(self.last_state(namada_version)))
+            }
             Request::Query(query) => Ok(Response::Query(self.query(query))),
             Request::PrepareProposal(block) => {
                 tracing::debug!("Request PrepareProposal");
@@ -493,6 +499,7 @@ async fn run_aux(
         wasm_dir,
         setup_data,
         config,
+        namada_version,
     );
 
     spawner.run_to_completion().await;
@@ -616,6 +623,7 @@ fn start_abci_broadcaster_shell(
     wasm_dir: PathBuf,
     setup_data: RunAuxSetup,
     config: config::Ledger,
+    namada_version: &'static str,
 ) {
     let rpc_address =
         convert_tm_addr_to_socket_addr(&config.cometbft.rpc.laddr);
@@ -675,6 +683,7 @@ fn start_abci_broadcaster_shell(
         scheduled_migration,
         vp_wasm_compilation_cache,
         tx_wasm_compilation_cache,
+        namada_version.to_string(),
     );
 
     // Channel for signalling shut down to ABCI server
