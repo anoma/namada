@@ -8005,12 +8005,16 @@ pub mod args {
                 "Use an additional passphrase for HD-key generation."
             )))
             .arg(
-                UNSAFE_PURE_ZIP32.def().requires(SHIELDED.name).help(wrap!(
-                    "Use the deprecated pure ZIP 32 algorithm to derive \
-                     shielded keys. This flag is necessary if importing a \
-                     mnemonic code that was generated on Namada 1.0.0 or \
-                     before."
-                )),
+                UNSAFE_PURE_ZIP32
+                    .def()
+                    .requires(SHIELDED.name)
+                    .conflicts_with(USE_DEVICE.name)
+                    .help(wrap!(
+                        "Use the deprecated pure ZIP 32 algorithm to derive \
+                         shielded keys. This flag is necessary if importing a \
+                         mnemonic code that was generated on Namada 1.0.0 or \
+                         before."
+                    )),
             )
         }
     }
