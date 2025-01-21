@@ -617,7 +617,7 @@ where
         tx_data: &[u8],
     ) -> Result<(Option<Transfer>, Option<MaspTransaction>), Error> {
         let message = decode_message::<Transfer>(tx_data)?;
-        let result = match message {
+        match message {
             IbcMessage::Transfer(msg) => {
                 let mut token_transfer_ctx = TokenTransferContext::new(
                     self.ctx.inner.clone(),
@@ -635,6 +635,7 @@ where
                             ))
                         })?,
                 );
+                self.insert_verifiers()?;
                 if msg.transfer.is_some() {
                     token_transfer_ctx.enable_shielded_transfer();
                 }
@@ -664,6 +665,7 @@ where
                             ))
                         })?,
                 );
+                self.insert_verifiers()?;
                 send_nft_transfer_execute(
                     &mut self.ctx,
                     &mut nft_transfer_ctx,
@@ -683,6 +685,7 @@ where
                             ))
                         })?,
                     );
+                    self.insert_verifiers()?;
                 }
                 execute(&mut self.ctx, &mut self.router, *envelope.clone())
                     .map_err(|e| Error::Context(Box::new(e)))?;
@@ -707,9 +710,7 @@ where
                 };
                 Ok((None, masp_tx))
             }
-        };
-        self.insert_verifiers()?;
-        result
+        }
     }
 
     /// Check the result of receiving the packet by checking the packet
@@ -747,12 +748,13 @@ where
         let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
 
         let message = decode_message::<Transfer>(tx_data)?;
-        let result = match message {
+        match message {
             IbcMessage::Transfer(msg) => {
                 let mut token_transfer_ctx = TokenTransferContext::new(
                     self.ctx.inner.clone(),
                     verifiers.clone(),
                 );
+                self.insert_verifiers()?;
                 if msg.transfer.is_some() {
                     token_transfer_ctx.enable_shielded_transfer();
                 }
@@ -780,9 +782,7 @@ where
                 validate(&self.ctx, &self.router, *envelope)
                     .map_err(|e| Error::Context(Box::new(e)))
             }
-        };
-        self.insert_verifiers()?;
-        result
+        }
     }
 
     fn insert_verifiers(&self) -> Result<(), Error> {

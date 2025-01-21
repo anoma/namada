@@ -8,7 +8,7 @@ use std::time::Duration as StdDuration;
 use either::Either;
 use masp_primitives::transaction::components::sapling::builder::BuildParams;
 use masp_primitives::zip32::PseudoExtendedKey;
-use namada_core::address::{Address, MASP};
+use namada_core::address::Address;
 use namada_core::chain::{BlockHeight, ChainId, Epoch};
 use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
@@ -16,30 +16,21 @@ use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;
 use namada_core::key::{common, SchemeType};
 use namada_core::masp::{MaspEpoch, PaymentAddress};
-use namada_core::string_encoding::StringEncoded;
 use namada_core::time::DateTimeUtc;
-use namada_core::token::Amount;
 use namada_core::{storage, token};
 use namada_governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
 use namada_ibc::IbcShieldingData;
-use namada_io::{display_line, Io};
 use namada_token::masp::utils::RetryStrategy;
 use namada_tx::data::GasLimit;
 use namada_tx::Memo;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
-use crate::error::Error;
 use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use crate::ibc::{NamadaMemo, NamadaMemoData};
-use crate::rpc::{
-    get_registry_from_xcs_osmosis_contract, osmosis_denom_from_namada_denom,
-    query_osmosis_pool_routes,
-};
-use crate::signing::{gen_disposable_signing_key, SigningTxData};
+use crate::signing::SigningTxData;
 use crate::wallet::{DatedSpendingKey, DatedViewingKey};
 use crate::{rpc, tx, Namada};
 
@@ -483,321 +474,6 @@ impl TxUnshieldingTransfer {
         bparams: &mut impl BuildParams,
     ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
         tx::build_unshielding_transfer(context, self, bparams).await
-    }
-}
-
-/// Individual hop of some route to take through Osmosis pools.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct OsmosisPoolHop {
-    /// The id of the pool to use on Osmosis.
-    pub pool_id: String,
-    /// The output denomination expected from the
-    /// pool on Osmosis.
-    pub token_out_denom: String,
-}
-
-impl FromStr for OsmosisPoolHop {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.split_once(':').map_or_else(
-            || {
-                Err(format!(
-                    "Expected <pool-id>:<output-denom> string, but found \
-                     {s:?} instead"
-                ))
-            },
-            |(pool_id, token_out_denom)| {
-                Ok(OsmosisPoolHop {
-                    pool_id: pool_id.to_owned(),
-                    token_out_denom: token_out_denom.to_owned(),
-                })
-            },
-        )
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-/// Constraints on the  osmosis swap
-pub enum Slippage {
-    /// Specifies the minimum amount to be received
-    MinOutputAmount(Amount),
-    /// A time-weighted average price
-    Twap {
-        /// The maximum percentage difference allowed between the estimated and
-        /// actual trade price. This must be a decimal number in the range
-        /// `[0, 100]`.
-        slippage_percentage: String,
-        /// The time period (in seconds) over which the average price is
-        /// calculated
-        window_seconds: u64,
-    },
-}
-
-/// An token swap on Osmosis
-#[derive(Debug, Clone)]
-pub struct TxOsmosisSwap<C: NamadaTypes = SdkTypes> {
-    /// The IBC transfer data
-    pub transfer: TxIbcTransfer<C>,
-    /// The token we wish to receive (on Namada)
-    pub output_denom: String,
-    /// Address of the recipient on Namada
-    pub recipient: Either<C::Address, C::PaymentAddress>,
-    /// Address to receive funds exceeding the minimum amount,
-    /// in case of IBC shieldings
-    ///
-    /// If unspecified, a disposable address is generated to
-    /// receive funds with
-    pub overflow: Option<C::Address>,
-    ///  Constraints on the  osmosis swap
-    pub slippage: Slippage,
-    /// Recovery address (on Osmosis) in case of failure
-    pub local_recovery_addr: String,
-    /// The route to take through Osmosis pools
-    pub route: Option<Vec<OsmosisPoolHop>>,
-    /// A REST rpc endpoint to Osmosis
-    pub osmosis_rest_rpc: String,
-}
-
-impl TxOsmosisSwap<SdkTypes> {
-    /// Create an IBC transfer from the input arguments
-    pub async fn into_ibc_transfer(
-        self,
-        ctx: &impl Namada,
-    ) -> crate::error::Result<TxIbcTransfer<SdkTypes>> {
-        #[derive(Serialize)]
-        struct Memo {
-            wasm: Wasm,
-        }
-
-        #[derive(Serialize)]
-        struct Wasm {
-            contract: String,
-            msg: Message,
-        }
-
-        #[derive(Serialize)]
-        struct Message {
-            osmosis_swap: OsmosisSwap,
-        }
-
-        #[derive(Serialize)]
-        struct OsmosisSwap {
-            receiver: String,
-            output_denom: String,
-            slippage: Slippage,
-            on_failed_delivery: LocalRecoveryAddr,
-            route: Vec<OsmosisPoolHop>,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            final_memo: Option<serde_json::Map<String, serde_json::Value>>,
-        }
-
-        #[derive(Serialize)]
-        struct LocalRecoveryAddr {
-            local_recovery_addr: String,
-        }
-
-        #[inline]
-        fn assert_json_obj(
-            value: serde_json::Value,
-        ) -> serde_json::Map<String, serde_json::Value> {
-            match value {
-                serde_json::Value::Object(x) => x,
-                _ => unreachable!(),
-            }
-        }
-
-        const OSMOSIS_SQS_SERVER: &str = "https://sqsprod.osmosis.zone";
-
-        let Self {
-            mut transfer,
-            recipient,
-            slippage,
-            local_recovery_addr,
-            route,
-            overflow,
-            osmosis_rest_rpc,
-            output_denom: namada_output_denom,
-        } = self;
-
-        let recipient = recipient.map_either(
-            |addr| addr,
-            |payment_addr| async move {
-                let overflow_receiver = if let Some(overflow) = overflow {
-                    overflow
-                } else {
-                    let addr = (&gen_disposable_signing_key(ctx).await).into();
-                    display_line!(
-                        ctx.io(),
-                        "Sending unshielded funds to disposable address {addr}",
-                    );
-                    addr
-                };
-                (payment_addr, overflow_receiver)
-            },
-        );
-
-        // validate `local_recovery_addr` and the contract addr
-        if !bech32::decode(&local_recovery_addr)
-            .is_ok_and(|(hrp, _, _)| hrp == "osmo")
-        {
-            // TODO: validate that addr has 20 bytes?
-            return Err(Error::Other(format!(
-                "Invalid Osmosis recovery address {local_recovery_addr:?}"
-            )));
-        }
-        if !bech32::decode(&transfer.receiver)
-            .is_ok_and(|(hrp, _, _)| hrp == "osmo")
-        {
-            // TODO: validate that addr has 32 bytes?
-            return Err(Error::Other(format!(
-                "Invalid Osmosis contract address {local_recovery_addr:?}"
-            )));
-        }
-
-        let registry_xcs_addr = get_registry_from_xcs_osmosis_contract(
-            &osmosis_rest_rpc,
-            &transfer.receiver,
-        )
-        .await?;
-
-        let (osmosis_output_denom, namada_output_addr) =
-            osmosis_denom_from_namada_denom(
-                &osmosis_rest_rpc,
-                &registry_xcs_addr,
-                &namada_output_denom,
-            )
-            .await?;
-
-        let route = if let Some(route) = route {
-            route
-        } else {
-            query_osmosis_pool_routes(
-                ctx,
-                &transfer.token,
-                transfer.amount,
-                transfer.channel_id.clone(),
-                &osmosis_output_denom,
-                OSMOSIS_SQS_SERVER,
-            )
-            .await?
-            .pop()
-            .ok_or_else(|| {
-                Error::Other(format!(
-                    "No route found to swap {:?} of {} with {}",
-                    transfer.amount, transfer.token, namada_output_addr,
-                ))
-            })?
-        };
-
-        let (receiver, slippage, final_memo) = match recipient {
-            Either::Left(transparent_recipient) => {
-                (transparent_recipient.to_string(), slippage, None)
-            }
-            Either::Right(fut) => {
-                let (payment_addr, overflow_receiver) = fut.await;
-
-                let amount_to_shield = match slippage {
-                    Slippage::MinOutputAmount(amount_to_shield) => {
-                        amount_to_shield
-                    }
-                    Slippage::Twap { .. } => todo!(
-                        "Cannot compute min output amount from slippage TWAP \
-                         yet"
-                    ),
-                };
-
-                let shielding_tx = tx::gen_ibc_shielding_transfer(
-                    ctx,
-                    GenIbcShieldingTransfer {
-                        query: Query {
-                            ledger_address: transfer.tx.ledger_address.clone(),
-                        },
-                        output_folder: None,
-                        target:
-                            namada_core::masp::TransferTarget::PaymentAddress(
-                                payment_addr,
-                            ),
-                        asset: IbcShieldingTransferAsset::Address(
-                            namada_output_addr,
-                        ),
-                        amount: InputAmount::Validated(
-                            token::DenominatedAmount::new(
-                                amount_to_shield,
-                                0u8.into(),
-                            ),
-                        ),
-                        expiration: transfer.tx.expiration.clone(),
-                    },
-                )
-                .await?
-                .ok_or_else(|| {
-                    Error::Other(
-                        "Failed to generate IBC shielding transfer".to_owned(),
-                    )
-                })?;
-
-                let memo = assert_json_obj(
-                    serde_json::to_value(&NamadaMemo {
-                        namada: NamadaMemoData::OsmosisSwap {
-                            shielding_data: StringEncoded::new(
-                                IbcShieldingData(shielding_tx),
-                            ),
-                            shielded_amount: amount_to_shield,
-                            overflow_receiver,
-                        },
-                    })
-                    .unwrap(),
-                );
-
-                (
-                    MASP.to_string(),
-                    Slippage::MinOutputAmount(amount_to_shield),
-                    Some(memo),
-                )
-            }
-        };
-
-        let cosmwasm_memo = Memo {
-            wasm: Wasm {
-                contract: transfer.receiver.clone(),
-                msg: Message {
-                    osmosis_swap: OsmosisSwap {
-                        output_denom: osmosis_output_denom,
-                        slippage,
-                        final_memo,
-                        receiver,
-                        on_failed_delivery: LocalRecoveryAddr {
-                            local_recovery_addr,
-                        },
-                        route,
-                    },
-                },
-            },
-        };
-        let namada_memo = transfer.ibc_memo.take().map(|memo| {
-            assert_json_obj(
-                serde_json::to_value(&NamadaMemo {
-                    namada: NamadaMemoData::Memo(memo),
-                })
-                .unwrap(),
-            )
-        });
-
-        let memo = {
-            let mut m = serde_json::to_value(&cosmwasm_memo).unwrap();
-            let m_obj = m.as_object_mut().unwrap();
-
-            if let Some(mut namada_memo) = namada_memo {
-                m_obj.append(&mut namada_memo);
-            }
-
-            m
-        };
-
-        transfer.ibc_memo = Some(serde_json::to_string(&memo).unwrap());
-        Ok(transfer)
     }
 }
 
@@ -3242,26 +2918,14 @@ pub struct GenIbcShieldingTransfer<C: NamadaTypes = SdkTypes> {
     pub output_folder: Option<PathBuf>,
     /// The target address
     pub target: C::TransferTarget,
+    /// The token address which could be a non-namada address
+    pub token: String,
     /// Transferred token amount
     pub amount: InputAmount,
     /// The optional expiration of the masp shielding transaction
     pub expiration: TxExpiration,
-    /// Asset to shield over IBC to Namada
-    pub asset: IbcShieldingTransferAsset<C>,
-}
-
-/// IBC shielding transfer asset, to be used by [`GenIbcShieldingTransfer`]
-#[derive(Clone, Debug)]
-pub enum IbcShieldingTransferAsset<C: NamadaTypes = SdkTypes> {
-    /// Attempt to look-up the address of the asset to shield on Namada
-    LookupNamadaAddress {
-        /// The token address which could be a non-namada address
-        token: String,
-        /// Port ID via which the token is received
-        port_id: PortId,
-        /// Channel ID via which the token is received
-        channel_id: ChannelId,
-    },
-    /// Namada address of the token that will be received.
-    Address(C::Address),
+    /// Port ID via which the token is received
+    pub port_id: PortId,
+    /// Channel ID via which the token is received
+    pub channel_id: ChannelId,
 }

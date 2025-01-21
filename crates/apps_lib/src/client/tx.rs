@@ -1909,13 +1909,12 @@ pub async fn gen_ibc_shielding_transfer(
     context: &impl Namada,
     args: args::GenIbcShieldingTransfer,
 ) -> Result<(), error::Error> {
-    let output_folder = args.output_folder.clone();
-
-    if let Some(masp_tx) = tx::gen_ibc_shielding_transfer(context, args).await?
+    if let Some(masp_tx) =
+        tx::gen_ibc_shielding_transfer(context, args.clone()).await?
     {
         let tx_id = masp_tx.txid().to_string();
         let filename = format!("ibc_masp_tx_{}.memo", tx_id);
-        let output_path = match output_folder {
+        let output_path = match &args.output_folder {
             Some(path) => path.join(filename),
             None => filename.into(),
         };
