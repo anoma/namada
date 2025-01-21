@@ -687,17 +687,20 @@ where
     /// Load the Merkle root hash and the height of the last committed block, if
     /// any. This is returned when ABCI sends an `info` request.
     pub fn last_state(&self) -> response::Info {
+        let version = namada_apps_lib::cli::namada_version().to_string();
         if crate::migrating_state().is_some() {
             // When migrating state, return a height of 0, such
             // that CometBFT calls InitChain and subsequently
             // updates the apphash in its state.
             return response::Info {
                 last_block_height: 0u32.into(),
+                version,
                 ..response::Info::default()
             };
         }
         let mut response = response::Info {
             last_block_height: tendermint::block::Height::from(0_u32),
+            version,
             ..Default::default()
         };
         let result = self.state.in_mem().get_state();
