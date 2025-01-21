@@ -497,7 +497,6 @@ pub fn make_hermes_config(
     hermes_dir: &TestDir,
     test_a: &Test,
     test_b: &Test,
-    relayer: Option<&str>,
 ) -> Result<()> {
     let mut config = toml::map::Map::new();
 
@@ -536,17 +535,12 @@ pub fn make_hermes_config(
     config.insert("telemetry".to_owned(), Value::Table(telemetry));
 
     let chains = vec![
-        match CosmosChainType::chain_type(test_a.net.chain_id.as_str()) {
-            Ok(chain_type) => make_hermes_chain_config_for_cosmos(
-                hermes_dir, chain_type, test_a, relayer,
-            ),
-            Err(_) => make_hermes_chain_config(hermes_dir, test_a),
-        },
+        make_hermes_chain_config(test_a),
         match CosmosChainType::chain_type(test_b.net.chain_id.as_str()) {
             Ok(chain_type) => make_hermes_chain_config_for_cosmos(
-                hermes_dir, chain_type, test_b, relayer,
+                hermes_dir, chain_type, test_b,
             ),
-            Err(_) => make_hermes_chain_config(hermes_dir, test_b),
+            Err(_) => make_hermes_chain_config(test_b),
         },
     ];
 
@@ -564,7 +558,7 @@ pub fn make_hermes_config(
     Ok(())
 }
 
-fn make_hermes_chain_config(hermes_dir: &TestDir, test: &Test) -> Value {
+fn make_hermes_chain_config(test: &Test) -> Value {
     let chain_id = test.net.chain_id.as_str();
     let rpc_addr = get_actor_rpc(test, Who::Validator(0));
     let rpc_addr = rpc_addr.strip_prefix("http://").unwrap();
@@ -604,13 +598,6 @@ fn make_hermes_chain_config(hermes_dir: &TestDir, test: &Test) -> Value {
 
     chain.insert("max_block_time".to_owned(), Value::String("60s".to_owned()));
 
-    let hermes_dir: &Path = hermes_dir.as_ref();
-    let key_dir = hermes_dir.join("hermes/keys");
-    chain.insert(
-        "key_store_folder".to_owned(),
-        Value::String(key_dir.to_string_lossy().to_string()),
-    );
-
     Value::Table(chain)
 }
 
@@ -618,14 +605,11 @@ fn make_hermes_chain_config_for_cosmos(
     hermes_dir: &TestDir,
     chain_type: CosmosChainType,
     test: &Test,
-    relayer: Option<&str>,
 ) -> Value {
     let mut table = toml::map::Map::new();
     table.insert("mode".to_owned(), Value::String("push".to_owned()));
-    let url = format!(
-        "ws://127.0.0.1:{}/websocket",
-        chain_type.get_rpc_port_number()
-    );
+    let offset = chain_type.get_offset();
+    let url = format!("ws://127.0.0.1:6416{}/websocket", offset);
     table.insert("url".to_owned(), Value::String(url));
     table.insert("batch_delay".to_owned(), Value::String("500ms".to_owned()));
     let event_source = Value::Table(table);
@@ -639,17 +623,11 @@ fn make_hermes_chain_config_for_cosmos(
 
     chain.insert(
         "rpc_addr".to_owned(),
-        Value::String(format!(
-            "http://127.0.0.1:{}",
-            chain_type.get_rpc_port_number()
-        )),
+        Value::String(format!("http://127.0.0.1:6416{}", offset)),
     );
     chain.insert(
         "grpc_addr".to_owned(),
-        Value::String(format!(
-            "http://127.0.0.1:{}",
-            chain_type.get_grpc_port_number()
-        )),
+        Value::String(format!("http://127.0.0.1:{}", offset + 9090)),
     );
 
     chain.insert("event_source".to_owned(), event_source);
@@ -659,7 +637,7 @@ fn make_hermes_chain_config_for_cosmos(
     );
     chain.insert(
         "key_name".to_owned(),
-        Value::String(relayer.unwrap_or(constants::COSMOS_RELAYER).to_string()),
+        Value::String(setup::constants::COSMOS_RELAYER.to_string()),
     );
     let hermes_dir: &Path = hermes_dir.as_ref();
     let key_dir = hermes_dir.join("hermes/keys");
@@ -668,14 +646,10 @@ fn make_hermes_chain_config_for_cosmos(
         Value::String(key_dir.to_string_lossy().to_string()),
     );
     chain.insert("store_prefix".to_owned(), Value::String("ibc".to_owned()));
-    chain.insert("max_gas".to_owned(), Value::Integer(500_000_000));
-    chain.insert("gas_multiplier".to_owned(), Value::Float(2.3));
+    chain.insert("max_gas".to_owned(), Value::Integer(500_000));
+    chain.insert("gas_multiplier".to_owned(), Value::Float(1.3));
     let mut table = toml::map::Map::new();
-    if let CosmosChainType::Osmosis = chain_type {
-        table.insert("price".to_owned(), Value::Float(0.01));
-    } else {
-        table.insert("price".to_owned(), Value::Float(0.001));
-    }
+    table.insert("price".to_owned(), Value::Float(0.001));
     table.insert("denom".to_owned(), Value::String("stake".to_string()));
     chain.insert("gas_price".to_owned(), Value::Table(table));
 
@@ -698,8 +672,9 @@ pub fn update_cosmos_config(test: &Test) -> Result<()> {
             *timeout_propose = "1s".into();
         }
     }
-    let chain_type =
-        CosmosChainType::chain_type(test.net.chain_id.as_str()).unwrap();
+    let offset = CosmosChainType::chain_type(test.net.chain_id.as_str())
+        .unwrap()
+        .get_offset();
     let p2p = values
         .get_mut("p2p")
         .expect("Test failed")
@@ -708,8 +683,7 @@ pub fn update_cosmos_config(test: &Test) -> Result<()> {
     let Some(laddr) = p2p.get_mut("laddr") else {
         panic!("Test failed")
     };
-    *laddr =
-        format!("tcp://0.0.0.0:{}", chain_type.get_p2p_port_number()).into();
+    *laddr = format!("tcp://0.0.0.0:266{}{}", offset, offset).into();
     let rpc = values
         .get_mut("rpc")
         .expect("Test failed")
@@ -718,8 +692,7 @@ pub fn update_cosmos_config(test: &Test) -> Result<()> {
     let Some(laddr) = rpc.get_mut("laddr") else {
         panic!("Test failed")
     };
-    *laddr =
-        format!("tcp://0.0.0.0:{}", chain_type.get_rpc_port_number()).into();
+    *laddr = format!("tcp://0.0.0.0:6416{offset}").into();
 
     let mut file = OpenOptions::new()
         .write(true)
@@ -784,37 +757,14 @@ pub fn update_cosmos_config(test: &Test) -> Result<()> {
     serde_json::to_writer_pretty(writer, &genesis)
         .expect("Writing Cosmos genesis.toml failed");
 
-    if matches!(chain_type, CosmosChainType::Osmosis) {
-        let client_path = cosmos_dir.join("config/client.toml");
-        let s = std::fs::read_to_string(&client_path)
-            .expect("Reading Osmosis client config failed");
-        let mut values = s
-            .parse::<toml::Value>()
-            .expect("Parsing Osmosis client config failed");
-        let Some(laddr) = values.get_mut("node") else {
-            panic!("Test failed")
-        };
-        *laddr = format!("tcp://0.0.0.0:{}", chain_type.get_rpc_port_number())
-            .into();
-        let mut file = OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open(&client_path)?;
-        file.write_all(values.to_string().as_bytes()).map_err(|e| {
-            eyre!(format!(
-                "Writing a  Osmosis client config file failed: {}",
-                e
-            ))
-        })?;
-    }
-
     Ok(())
 }
 
 pub fn get_cosmos_rpc_address(test: &Test) -> String {
-    let chain_type =
-        CosmosChainType::chain_type(test.net.chain_id.as_str()).unwrap();
-    format!("127.0.0.1:{}", chain_type.get_rpc_port_number())
+    let offset = CosmosChainType::chain_type(test.net.chain_id.as_str())
+        .unwrap()
+        .get_offset();
+    format!("127.0.0.1:6416{offset}")
 }
 
 pub fn find_cosmos_address(

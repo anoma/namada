@@ -1,7 +1,7 @@
 //! Middleware entry points on Namada.
 
 pub mod pfm_mod;
-pub mod shielded_recv;
+// mod crossroads_mod;
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -12,18 +12,16 @@ use std::rc::Rc;
 use ibc::core::host::types::identifiers::PortId;
 use ibc::core::router::module::Module;
 use ibc::core::router::types::module::ModuleId;
-use ibc_middleware_overflow_receive::OverflowReceiveMiddleware;
-use ibc_middleware_packet_forward::PacketForwardMiddleware;
+use ibc_middleware_packet_forward::{PacketForwardMiddleware, PfmContext};
 use namada_core::address::Address;
 
 use self::pfm_mod::PfmTransferModule;
-use self::shielded_recv::ShieldedRecvModule;
 use crate::context::transfer_mod::TransferModule;
 use crate::{IbcCommonContext, IbcStorageContext};
 
 /// The stack of middlewares of the transfer module.
 pub type TransferMiddlewares<C, Params> =
-    OverflowReceiveMiddleware<ShieldedRecvModule<C, Params>>;
+    PacketForwardMiddleware<PfmTransferModule<C, Params>>;
 
 /// Create a new instance of [`TransferMiddlewares`]
 pub fn create_transfer_middlewares<C, Params>(
@@ -34,18 +32,16 @@ where
     C: IbcCommonContext + Debug,
     Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
 {
-    OverflowReceiveMiddleware::wrap(ShieldedRecvModule {
-        next: PacketForwardMiddleware::wrap(PfmTransferModule {
-            transfer_module: TransferModule::new(ctx, verifiers),
-            _phantom: PhantomData,
-        }),
+    PacketForwardMiddleware::wrap(PfmTransferModule {
+        transfer_module: TransferModule::new(ctx, verifiers),
+        _phantom: PhantomData,
     })
 }
 
 impl<C, Params> crate::ModuleWrapper for TransferMiddlewares<C, Params>
 where
     C: IbcCommonContext + Debug,
-    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
+    PfmTransferModule<C, Params>: PfmContext,
 {
     fn as_module(&self) -> &dyn Module {
         self
