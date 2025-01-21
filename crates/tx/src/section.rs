@@ -554,6 +554,16 @@ impl Authorization {
             // keys that are also in the given map
             Signer::PubKeys(pks) => {
                 let hash = self.get_raw_hash();
+                if pks.len() > usize::from(u8::MAX) {
+                    return Err(VerifySigError::PksOverflow);
+                }
+                #[allow(clippy::disallowed_types)] // ordering doesn't matter
+                let unique_pks: std::collections::HashSet<
+                    &common::PublicKey,
+                > = std::collections::HashSet::from_iter(pks.iter());
+                if unique_pks.len() != pks.len() {
+                    return Err(VerifySigError::RepeatedPks);
+                }
                 for (idx, pk) in pks.iter().enumerate() {
                     let map_idx =
                         public_keys_index_map.get_index_from_public_key(pk);

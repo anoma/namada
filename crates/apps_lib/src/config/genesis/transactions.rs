@@ -875,7 +875,7 @@ impl<T> Signed<T> {
         };
         signed_tx
             .verify_signatures(
-                &[signed_tx.raw_header_hash()],
+                &HashSet::from_iter([signed_tx.raw_header_hash()]),
                 AccountPublicKeysMap::from_iter(public_keys.into_iter()),
                 &None,
                 threshold,

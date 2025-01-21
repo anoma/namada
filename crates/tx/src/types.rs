@@ -55,6 +55,8 @@ pub enum TxError {
     SigError(String),
     #[error("Failed to deserialize Tx: {0}")]
     Deserialization(String),
+    #[error("Tx contains repeated sections")]
+    RepeatedSections,
 }
 
 /// A Namada transaction is represented as a header followed by a series of
@@ -214,9 +216,22 @@ impl Tx {
 
     /// Get hashes of all the sections in this transaction
     pub fn sechashes(&self) -> Vec<namada_core::hash::Hash> {
-        let mut hashes = vec![self.header_hash()];
+        let mut hashes =
+            Vec::with_capacity(self.sections.len().saturating_add(1));
+        hashes.push(self.header_hash());
         for sec in &self.sections {
             hashes.push(sec.get_hash());
+        }
+        hashes
+    }
+
+    /// Get unique hashes of all the sections in this transaction
+    pub fn unique_sechashes(&self) -> HashSet<namada_core::hash::Hash> {
+        let mut hashes =
+            HashSet::with_capacity(self.sections.len().saturating_add(1));
+        hashes.insert(self.header_hash());
+        for sec in &self.sections {
+            hashes.insert(sec.get_hash());
         }
         hashes
     }
@@ -435,11 +450,11 @@ impl Tx {
             .map_err(DecodeError::InvalidEncoding)
     }
 
-    /// Verify that the section with the given hash has been signed by the given
-    /// public key
+    /// Verify that the sections with the given hashes have been signed by the
+    /// given public keys
     pub fn verify_signatures<F>(
         &self,
-        hashes: &[namada_core::hash::Hash],
+        hashes: &HashSet<namada_core::hash::Hash>,
         public_keys_index_map: AccountPublicKeysMap,
         signer: &Option<Address>,
         threshold: u8,
@@ -455,15 +470,40 @@ impl Tx {
 
         for section in &self.sections {
             if let Section::Authorization(signatures) = section {
-                // Check that the hashes being checked are a subset of those in
-                // this section. Also ensure that all the sections the signature
-                // signs over are present.
-                let matching_hashes = hashes.iter().all(|x| {
-                    signatures.targets.contains(x) || section.get_hash() == *x
-                }) && signatures
-                    .targets
-                    .iter()
-                    .all(|x| self.get_section(x).is_some());
+                #[allow(clippy::disallowed_types)] // ordering doesn't matter
+                let unique_targets: std::collections::HashSet<
+                    &namada_core::hash::Hash,
+                > = std::collections::HashSet::from_iter(
+                    signatures.targets.iter(),
+                );
+                // Only start checking the hashes match if the number of
+                // signature targets is matching
+                let matching_hashes = if unique_targets.len() == hashes.len()
+                    || (hashes.len() > 1
+                        && unique_targets.len().saturating_add(1)
+                            == hashes.len())
+                {
+                    let this_section_hash = section.get_hash();
+                    // Check that the hashes being checked match those in
+                    // this section's targets or that it's a `this_section_hash`
+                    // (that cannot be included in the targets as it's a hash of
+                    // itself)
+                    let matching_hashes = hashes.iter().all(|x| {
+                        unique_targets.contains(x) || this_section_hash == *x
+                    });
+                    if !matching_hashes && hashes.len() > 1 {
+                        // When there is more than 1 hash (this happens for
+                        // wrapper tx signature), the hashes iter should only be
+                        // attempted once.
+                        // We exit early as there can be only one wrapper sig,
+                        // inner tx sign only over a single hash (the raw
+                        // inner tx hash).
+                        return Err(VerifySigError::InvalidWrapperSignature);
+                    }
+                    matching_hashes
+                } else {
+                    false
+                };
 
                 // Don't require matching hashes when fuzzing as it's unlikely
                 // to be true
@@ -512,7 +552,7 @@ impl Tx {
     pub fn verify_signature(
         &self,
         public_key: &common::PublicKey,
-        hashes: &[namada_core::hash::Hash],
+        hashes: &HashSet<namada_core::hash::Hash>,
     ) -> Result<&Authorization, VerifySigError> {
         self.verify_signatures(
             hashes,
@@ -522,7 +562,6 @@ impl Tx {
             || Ok(()),
         )
         .map(|x| *x.first().unwrap())
-        .map_err(|_| VerifySigError::InvalidWrapperSignature)
     }
 
     /// Compute signatures for the given keys
@@ -577,18 +616,23 @@ impl Tx {
     ) -> std::result::Result<Option<&Authorization>, TxError> {
         match &self.header.tx_type {
             // verify signature and extract signed data
-            TxType::Wrapper(wrapper) => self
-                .verify_signature(&wrapper.pk, &self.sechashes())
-                .map(Option::Some)
-                .map_err(|err| {
-                    TxError::SigError(format!(
-                        "WrapperTx signature verification failed: {}",
-                        err
-                    ))
-                }),
+            TxType::Wrapper(wrapper) => {
+                let hashes = self.unique_sechashes();
+                if hashes.len() != self.sections.len().saturating_add(1) {
+                    return Err(TxError::RepeatedSections);
+                }
+                self.verify_signature(&wrapper.pk, &hashes)
+                    .map(Option::Some)
+                    .map_err(|err| {
+                        TxError::SigError(format!(
+                            "WrapperTx signature verification failed: {}",
+                            err
+                        ))
+                    })
+            }
             // verify signature and extract signed data
             TxType::Protocol(protocol) => self
-                .verify_signature(&protocol.pk, &self.sechashes())
+                .verify_signature(&protocol.pk, &self.unique_sechashes())
                 .map(Option::Some)
                 .map_err(|err| {
                     TxError::SigError(format!(
@@ -1134,7 +1178,7 @@ mod test {
 
         // Unsigned tx should fail validation
         tx.verify_signatures(
-            &[tx.header_hash()],
+            &HashSet::from_iter([tx.header_hash()]),
             pks_map.clone(),
             &None,
             threshold,
@@ -1153,7 +1197,7 @@ mod test {
             // Signed tx should pass validation
             let authorizations = tx
                 .verify_signatures(
-                    &[tx.header_hash()],
+                    &HashSet::from_iter([tx.header_hash()]),
                     pks_map.clone(),
                     &None,
                     threshold,
@@ -1176,7 +1220,7 @@ mod test {
             // Should be rejected
             assert_matches!(
                 tx.verify_signatures(
-                    &[tx.header_hash()],
+                    &HashSet::from_iter([tx.header_hash()]),
                     pks_map.clone(),
                     &None,
                     threshold,
@@ -1205,7 +1249,7 @@ mod test {
 
         // Unsigned tx should fail validation
         tx.verify_signatures(
-            &[tx.header_hash()],
+            &HashSet::from_iter([tx.header_hash()]),
             pks_map.clone(),
             &None,
             threshold,
@@ -1227,7 +1271,7 @@ mod test {
             // Signed tx should pass validation
             let authorizations = tx
                 .verify_signatures(
-                    &[tx.header_hash()],
+                    &HashSet::from_iter([tx.header_hash()]),
                     pks_map.clone(),
                     &None,
                     threshold,
@@ -1248,7 +1292,7 @@ mod test {
             // Should be rejected
             assert_matches!(
                 tx.verify_signatures(
-                    &[tx.header_hash()],
+                    &HashSet::from_iter([tx.header_hash()]),
                     pks_map.clone(),
                     &None,
                     threshold,
@@ -1270,7 +1314,7 @@ mod test {
             // Should be rejected
             assert_matches!(
                 tx.verify_signatures(
-                    &[tx.header_hash()],
+                    &HashSet::from_iter([tx.header_hash()]),
                     pks_map.clone(),
                     &None,
                     threshold,
@@ -1292,7 +1336,7 @@ mod test {
             // Should be rejected
             assert_matches!(
                 tx.verify_signatures(
-                    &[tx.header_hash()],
+                    &HashSet::from_iter([tx.header_hash()]),
                     pks_map.clone(),
                     &None,
                     threshold,

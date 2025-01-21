@@ -26,6 +26,7 @@ mod tests {
     use namada_core::chain::testing::get_dummy_header;
     use namada_sdk::account::pks_handle;
     use namada_sdk::borsh::BorshSerializeExt;
+    use namada_sdk::collections::HashSet;
     use namada_sdk::hash::Hash;
     use namada_sdk::ibc::context::nft_transfer_mod::testing::DummyNftTransferModule;
     use namada_sdk::ibc::context::transfer_mod::testing::DummyTransferModule;
@@ -565,7 +566,7 @@ mod tests {
             assert_eq!(tx.data(&cmt).as_ref(), Some(data));
             assert!(
                 tx.verify_signatures(
-                    &[tx.header_hash(),],
+                    &HashSet::from_iter([tx.header_hash()]),
                     pks_map,
                     &None,
                     1,
@@ -577,7 +578,7 @@ mod tests {
             let other_keypair = key::testing::keypair_2();
             assert!(
                 tx.verify_signatures(
-                    &[tx.header_hash(),],
+                    &HashSet::from_iter([tx.header_hash()]),
                     AccountPublicKeysMap::from_iter([other_keypair.ref_to()]),
                     &None,
                     1,
