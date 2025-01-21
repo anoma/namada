@@ -1616,6 +1616,7 @@ dependencies = [
  "ident_case",
  "proc-macro2",
  "quote",
+ "strsim 0.10.0",
  "syn 2.0.96",
 ]
 
@@ -2883,8 +2884,11 @@ dependencies = [
  "curve25519-dalek",
  "generic-ec-core",
  "generic-ec-curves",
+ "hex",
  "phantom-type",
  "rand_core",
+ "serde",
+ "serde_with",
  "subtle",
  "zeroize",
 ]
@@ -2897,6 +2901,7 @@ checksum = "dcba5fdf70cc3ce5805c487f8523b4ceeb32e8ec5237c71ffd93c1ca47a97fee"
 dependencies = [
  "generic-array",
  "rand_core",
+ "serde",
  "subtle",
  "zeroize",
 ]
@@ -6072,10 +6077,12 @@ dependencies = [
  "base58",
  "bimap",
  "borsh",
+ "curve25519-dalek",
  "data-encoding",
  "derivation-path",
  "fd-lock",
  "fuzzy-message-detection",
+ "generic-ec",
  "hd-wallet",
  "itertools 0.12.1",
  "masp_primitives",
@@ -6088,6 +6095,7 @@ dependencies = [
  "rand",
  "rand_core",
  "serde",
+ "sha2 0.9.9",
  "slip10_ed25519",
  "smooth-operator",
  "thiserror 1.0.50",
@@ -7962,6 +7970,28 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "serde_with"
+version = "2.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07ff71d2c147a7b57362cead5e22f772cd52f6ab31cfcd9edcd7f6aeb2a0afbe"
+dependencies = [
+ "serde",
+ "serde_with_macros",
+]
+
+[[package]]
+name = "serde_with_macros"
+version = "2.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "881b6f881b17d13214e5d494c939ebab463d01264ce1811e9d4ac3a882e7695f"
+dependencies = [
+ "darling 0.20.3",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.96",
 ]
 
 [[package]]

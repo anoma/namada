@@ -30,6 +30,7 @@ data-encoding.workspace = true
 derivation-path.workspace = true
 fd-lock = {workspace = true, optional = true}
 fmd.workspace = true
+generic-ec.workspace = true
 hd-wallet.workspace = true
 itertools.workspace = true
 masp_primitives.workspace = true
@@ -37,6 +38,7 @@ orion.workspace = true
 rand.workspace = true
 rand_core.workspace = true
 serde.workspace = true
+sha2.workspace = true
 slip10_ed25519.workspace = true
 smooth-operator.workspace = true
 thiserror.workspace = true
@@ -47,3 +49,4 @@ zeroize.workspace = true
 
 [dev-dependencies]
 base58.workspace = true
+curve25519-dalek.workspace = true
