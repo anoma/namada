@@ -14,7 +14,7 @@ use namada_sdk::chain::{ChainId, ChainIdPrefix};
 use namada_sdk::eth_bridge::EthereumBridgeParams;
 use namada_sdk::governance::pgf::parameters::PgfParameters;
 use namada_sdk::hash::Hash;
-use namada_sdk::ibc::parameters::IbcParameters;
+use namada_sdk::ibc::parameters::{IbcParameters, IbcTokenRateLimits};
 use namada_sdk::key::{common, RefTo};
 use namada_sdk::parameters::EpochDuration;
 use namada_sdk::time::{DateTimeUtc, DurationNanos, Rfc3339String};
@@ -485,8 +485,10 @@ impl Finalized {
             default_per_epoch_throughput_limit,
         } = self.parameters.ibc_params.clone();
         IbcParameters {
-            default_mint_limit,
-            default_per_epoch_throughput_limit,
+            default_rate_limits: IbcTokenRateLimits {
+                mint_limit: default_mint_limit,
+                throughput_per_epoch_limit: default_per_epoch_throughput_limit,
+            },
         }
     }
 

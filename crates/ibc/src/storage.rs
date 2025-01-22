@@ -591,9 +591,10 @@ pub fn get_limits<S: StorageRead>(
                 .read(&params_key())?
                 .expect("Parameters should be stored");
             (
-                mint_limit.unwrap_or(params.default_mint_limit),
-                throughput_limit
-                    .unwrap_or(params.default_per_epoch_throughput_limit),
+                mint_limit.unwrap_or(params.default_rate_limits.mint_limit),
+                throughput_limit.unwrap_or(
+                    params.default_rate_limits.throughput_per_epoch_limit,
+                ),
             )
         }
     })

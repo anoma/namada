@@ -1925,9 +1925,11 @@ pub async fn query_ibc_rate_limits<C: Client + Sync>(
         _ => {
             let params = query_ibc_params(client).await?;
             IbcTokenRateLimits {
-                mint_limit: mint_limit.unwrap_or(params.default_mint_limit),
-                throughput_per_epoch_limit: throughput_limit
-                    .unwrap_or(params.default_per_epoch_throughput_limit),
+                mint_limit: mint_limit
+                    .unwrap_or(params.default_rate_limits.mint_limit),
+                throughput_per_epoch_limit: throughput_limit.unwrap_or(
+                    params.default_rate_limits.throughput_per_epoch_limit,
+                ),
             }
         }
     })

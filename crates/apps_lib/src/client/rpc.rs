@@ -1092,22 +1092,20 @@ pub async fn query_protocol_parameters(
 
     display_line!(context.io(), "\nIBC parameters");
     let IbcParameters {
-        default_mint_limit,
-        default_per_epoch_throughput_limit,
+        default_rate_limits:
+            IbcTokenRateLimits {
+                mint_limit,
+                throughput_per_epoch_limit,
+            },
     } = query_ibc_params(context.client())
         .await
         .expect("Failed to query the IBC parameters");
-    display_line!(
-        context.io(),
-        "{:4}Default mint limit: {}",
-        "",
-        default_mint_limit
-    );
+    display_line!(context.io(), "{:4}Default mint limit: {}", "", mint_limit);
     display_line!(
         context.io(),
         "{:4}Default per epoch throughput limit: {}",
         "",
-        default_per_epoch_throughput_limit
+        throughput_per_epoch_limit
     );
 }
 
