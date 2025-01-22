@@ -1486,28 +1486,34 @@ pub async fn build_redelegation(
     )
     .await?;
     let current_epoch = rpc::query_epoch(context.client()).await?;
-    let is_not_chained = if let Some(redel_end_epoch) = incoming_redel_epoch {
-        let last_contrib_epoch =
-            redel_end_epoch.prev().expect("End epoch must have a prev");
-        last_contrib_epoch.unchecked_add(params.slash_processing_epoch_offset())
-            <= current_epoch
-    } else {
-        true
-    };
-    if !is_not_chained {
+    let earliest_redeleg_epoch =
+        if let Some(redel_end_epoch) = incoming_redel_epoch {
+            let last_contrib_epoch =
+                redel_end_epoch.prev().expect("End epoch must have a prev");
+            let earliest_redeleg_epoch = last_contrib_epoch
+                .unchecked_add(params.slash_processing_epoch_offset());
+            (earliest_redeleg_epoch > current_epoch)
+                .then_some(earliest_redeleg_epoch)
+        } else {
+            None
+        };
+    if let Some(earliest_redeleg_epoch) = earliest_redeleg_epoch {
         edisplay_line!(
             context.io(),
             "The source validator {} has an incoming redelegation from the \
              delegator {} that may still be subject to future slashing. \
-             Redelegation is not allowed until this is no longer the case.",
+             Redelegation is not allowed until epoch {} when this is no \
+             longer the case.",
             &src_validator,
-            &owner
+            &owner,
+            earliest_redeleg_epoch
         );
         if !tx_args.force {
             return Err(Error::from(
                 TxSubmitError::IncomingRedelIsStillSlashable(
-                    src_validator.clone(),
                     owner.clone(),
+                    src_validator.clone(),
+                    earliest_redeleg_epoch,
                 ),
             ));
         }
