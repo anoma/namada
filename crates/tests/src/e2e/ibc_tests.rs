@@ -1066,20 +1066,22 @@ fn ibc_upgrade_client() -> Result<()> {
 ///   - Receiving 2 samoleans from Gaia will fail
 #[test]
 fn ibc_rate_limit() -> Result<()> {
+    const DEFAULT_RATE_LIMIT: Amount = Amount::from_u64(1_000_000);
+    const DEFAULT_MINT_LIMIT: Amount = Amount::from_u64(1);
+
     // Mint limit 2 transfer/channel-0/nam, per-epoch throughput limit 1 NAM
-    let update_genesis = |mut genesis: templates::All<
-        templates::Unvalidated,
-    >,
-                          base_dir: &_| {
-        genesis.parameters.parameters.epochs_per_year =
-            epochs_per_year_from_min_duration(50);
-        genesis.parameters.ibc_params.default_mint_limit = Amount::from_u64(1);
-        genesis
-            .parameters
-            .ibc_params
-            .default_per_epoch_throughput_limit = Amount::from_u64(1_000_000);
-        setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
-    };
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(50);
+            genesis.parameters.ibc_params.default_mint_limit =
+                DEFAULT_MINT_LIMIT;
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit = DEFAULT_RATE_LIMIT;
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
+        };
     let (ledger, gaia, test, test_gaia) =
         run_namada_cosmos(CosmosChainType::Gaia(None), update_genesis)?;
     let _bg_ledger = ledger.background();
@@ -1097,11 +1099,46 @@ fn ibc_rate_limit() -> Result<()> {
     )?;
 
     // Start relaying
+    let rpc = get_actor_rpc(&test, Who::Validator(0));
     let hermes = run_hermes(&hermes_dir)?;
     let _bg_hermes = hermes.background();
 
+    // Query the IBC rate limits
+    let ibc_denom =
+        format!("{port_id_namada}/{channel_id_namada}/{COSMOS_COIN}");
+    // Need the raw address because the token won't be received later in this
+    // test
+    let cosmos_token_addr = ibc_token(&ibc_denom).to_string();
+    for (token, token_alias, mint_limit, rate_limit) in [
+        (
+            NAM,
+            &NAM.to_lowercase(),
+            DEFAULT_MINT_LIMIT.to_string_native(),
+            DEFAULT_RATE_LIMIT.to_string_native(),
+        ),
+        (
+            &ibc_denom,
+            &cosmos_token_addr,
+            DEFAULT_MINT_LIMIT.to_string(),
+            DEFAULT_RATE_LIMIT.to_string(),
+        ),
+    ] {
+        let tx_args =
+            vec!["query-ibc-rate-limits", "--token", token, "--node", &rpc];
+        let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+        client.exp_string(&format!(
+            "IBC rate limits for token {}:",
+            token_alias
+        ))?;
+        client.exp_string(&format!("Global mint limit: {}", mint_limit))?;
+        client.exp_string(&format!(
+            "Throughput limit: {} per epoch",
+            rate_limit
+        ))?;
+        client.assert_success();
+    }
+
     // wait for the next epoch
-    let rpc = get_actor_rpc(&test, Who::Validator(0));
     let mut epoch = get_epoch(&test, &rpc).unwrap();
     let next_epoch = epoch.next();
     while epoch <= next_epoch {
@@ -1195,12 +1232,7 @@ fn ibc_rate_limit() -> Result<()> {
     wait_for_packet_relay(&hermes_dir, &port_id_gaia, &channel_id_gaia, &test)?;
 
     // Check if Namada hasn't receive it
-    let ibc_denom =
-        format!("{port_id_namada}/{channel_id_namada}/{COSMOS_COIN}");
-    // Need the raw address to check the balance because the token shouldn't be
-    // received
-    let token_addr = ibc_token(ibc_denom).to_string();
-    check_balance(&test, ALBERT, token_addr, 0)?;
+    check_balance(&test, ALBERT, cosmos_token_addr, 0)?;
 
     Ok(())
 }

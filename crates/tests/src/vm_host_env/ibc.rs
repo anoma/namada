@@ -52,7 +52,7 @@ use namada_sdk::ibc::core::connection::types::{
 pub use namada_sdk::ibc::core::host::types::identifiers::{
     ChannelId, ClientId, ConnectionId, PortId, Sequence,
 };
-use namada_sdk::ibc::parameters::IbcParameters;
+use namada_sdk::ibc::parameters::{IbcParameters, IbcTokenRateLimits};
 use namada_sdk::ibc::primitives::proto::{Any, Protobuf};
 use namada_sdk::ibc::primitives::Timestamp;
 pub use namada_sdk::ibc::storage::{
@@ -189,10 +189,10 @@ pub fn init_storage() -> (Address, Address) {
         let gov_params = GovernanceParameters::default();
         gov_params.init_storage(&mut env.state).unwrap();
         let ibc_params = IbcParameters {
-            default_mint_limit: token::Amount::native_whole(100),
-            default_per_epoch_throughput_limit: token::Amount::native_whole(
-                100,
-            ),
+            default_rate_limits: IbcTokenRateLimits {
+                mint_limit: token::Amount::native_whole(100),
+                throughput_per_epoch_limit: token::Amount::native_whole(100),
+            },
         };
         ibc_params.init_storage(&mut env.state).unwrap();
 

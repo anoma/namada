@@ -287,6 +287,7 @@ pub mod cmds {
                 .subcommand(QuerySlashes::def().display_order(5))
                 .subcommand(QueryDelegations::def().display_order(5))
                 .subcommand(QueryFindValidator::def().display_order(5))
+                .subcommand(QueryIbcRateLimit::def().display_order(5))
                 .subcommand(QueryResult::def().display_order(5))
                 .subcommand(QueryRawBytes::def().display_order(5))
                 .subcommand(QueryProposal::def().display_order(5))
@@ -397,6 +398,8 @@ pub mod cmds {
             let query_commission =
                 Self::parse_with_ctx(matches, QueryCommissionRate);
             let query_metadata = Self::parse_with_ctx(matches, QueryMetaData);
+            let query_ibc_rate_limit =
+                Self::parse_with_ctx(matches, QueryIbcRateLimit);
             let add_to_eth_bridge_pool =
                 Self::parse_with_ctx(matches, AddToEthBridgePool);
             let shielded_sync = Self::parse_with_ctx(matches, ShieldedSync);
@@ -459,6 +462,7 @@ pub mod cmds {
                 .or(query_native_supply)
                 .or(query_staking_rewards_rate)
                 .or(query_account)
+                .or(query_ibc_rate_limit)
                 .or(shielded_sync)
                 .or(gen_ibc_shielding)
                 .or(utils)
@@ -554,6 +558,7 @@ pub mod cmds {
         QueryPgf(QueryPgf),
         QueryValidatorState(QueryValidatorState),
         QueryRewards(QueryRewards),
+        QueryIbcRateLimit(QueryIbcRateLimit),
         ShieldedSync(ShieldedSync),
         GenIbcShieldingTransfer(GenIbcShieldingTransfer),
     }
@@ -2183,6 +2188,27 @@ pub mod cmds {
                 ))
                 .arg_required_else_help(true)
                 .add_args::<args::QueryFindValidator<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryIbcRateLimit(pub args::QueryIbcRateLimit<args::CliTypes>);
+
+    impl SubCmd for QueryIbcRateLimit {
+        const CMD: &'static str = "query-ibc-rate-limits";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryIbcRateLimit(args::QueryIbcRateLimit::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!(
+                    "Query the IBC rate limit for the provided token."
+                ))
+                .add_args::<args::QueryIbcRateLimit<args::CliTypes>>()
         }
     }
 
@@ -7468,6 +7494,34 @@ pub mod args {
                 addr: self.addr.map_right(|validator_addr| {
                     ctx.borrow_chain_or_exit().get(&validator_addr)
                 }),
+            })
+        }
+    }
+
+    impl Args for QueryIbcRateLimit<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let token = TOKEN.parse(matches);
+
+            Self { query, token }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>()
+                .arg(TOKEN.def().help(wrap!("The IBC token.")))
+        }
+    }
+
+    impl CliToSdk<QueryIbcRateLimit<SdkTypes>> for QueryIbcRateLimit<CliTypes> {
+        type Error = std::convert::Infallible;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryIbcRateLimit<SdkTypes>, Self::Error> {
+            Ok(QueryIbcRateLimit::<SdkTypes> {
+                query: self.query.to_sdk(ctx)?,
+                token: ctx.borrow_chain_or_exit().get(&self.token),
             })
         }
     }

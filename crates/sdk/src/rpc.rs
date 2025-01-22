@@ -41,8 +41,10 @@ use namada_governance::utils::{
     compute_proposal_result, ProposalResult, ProposalVotes, Vote,
 };
 use namada_ibc::core::host::types::identifiers::PortId;
+use namada_ibc::parameters::{IbcParameters, IbcTokenRateLimits};
 use namada_ibc::storage::{
-    ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key,
+    ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key, mint_limit_key,
+    throughput_limit_key,
 };
 use namada_ibc::trace::calc_ibc_token_hash;
 use namada_io::{display_line, edisplay_line, Client, Io};
@@ -1897,4 +1899,49 @@ pub async fn query_osmosis_pool_routes(
         .into_iter()
         .map(|r| r.pools.into_iter().map(OsmosisPoolHop::from).collect())
         .collect())
+}
+
+/// Query the IBC rate limit for the provided token
+pub async fn query_ibc_rate_limits<C: Client + Sync>(
+    client: &C,
+    token: &Address,
+) -> Result<IbcTokenRateLimits, error::Error> {
+    let throughput_limit =
+        query_storage_value::<_, Amount>(client, &throughput_limit_key(token))
+            .await
+            .ok();
+    let mint_limit =
+        query_storage_value::<_, Amount>(client, &mint_limit_key(token))
+            .await
+            .ok();
+
+    Ok(match (mint_limit, throughput_limit) {
+        (Some(mint_limit), Some(throughput_per_epoch_limit)) => {
+            IbcTokenRateLimits {
+                mint_limit,
+                throughput_per_epoch_limit,
+            }
+        }
+        _ => {
+            let params = query_ibc_params(client).await?;
+            IbcTokenRateLimits {
+                mint_limit: mint_limit
+                    .unwrap_or(params.default_rate_limits.mint_limit),
+                throughput_per_epoch_limit: throughput_limit.unwrap_or(
+                    params.default_rate_limits.throughput_per_epoch_limit,
+                ),
+            }
+        }
+    })
+}
+
+/// Query the global IBC parameters
+pub async fn query_ibc_params<C: Client + Sync>(
+    client: &C,
+) -> Result<IbcParameters, error::Error> {
+    query_storage_value::<_, IbcParameters>(
+        client,
+        &namada_ibc::storage::params_key(),
+    )
+    .await
 }

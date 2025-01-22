@@ -563,7 +563,7 @@ mod tests {
     };
     use crate::core::router::types::event::ModuleEvent;
     use crate::event::IbcEventType;
-    use crate::parameters::IbcParameters;
+    use crate::parameters::{IbcParameters, IbcTokenRateLimits};
     use crate::primitives::proto::{Any, Protobuf};
     use crate::primitives::{Timestamp, ToProto};
     use crate::storage::{
@@ -630,8 +630,10 @@ mod tests {
         let gov_params = GovernanceParameters::default();
         gov_params.init_storage(&mut state).unwrap();
         let ibc_params = IbcParameters {
-            default_mint_limit: Amount::native_whole(100),
-            default_per_epoch_throughput_limit: Amount::native_whole(100),
+            default_rate_limits: IbcTokenRateLimits {
+                mint_limit: Amount::native_whole(100),
+                throughput_per_epoch_limit: Amount::native_whole(100),
+            },
         };
         ibc_params.init_storage(&mut state).unwrap();
         namada_proof_of_stake::test_utils::test_init_genesis::<
