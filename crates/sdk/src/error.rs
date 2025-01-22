@@ -301,9 +301,10 @@ pub enum TxSubmitError {
     /// slashing
     #[error(
         "An incoming redelegation from delegator {0} to validator {1} is \
-         still subject to possible slashing"
+         still subject to possible slashing and cannot redelegated again \
+         before epoch {2}"
     )]
-    IncomingRedelIsStillSlashable(Address, Address),
+    IncomingRedelIsStillSlashable(Address, Address, Epoch),
     /// An empty string was provided as a new email
     #[error("An empty string cannot be provided as a new email")]
     InvalidEmail,
