@@ -381,14 +381,39 @@ impl DB for MockDB {
     fn read_subspace_val_with_height(
         &self,
         key: &Key,
-        _height: BlockHeight,
-        _last_height: BlockHeight,
+        height: BlockHeight,
+        last_height: BlockHeight,
     ) -> Result<Option<Vec<u8>>> {
-        tracing::warn!(
-            "read_subspace_val_with_height is not implemented, will read \
-             subspace value from latest height"
-        );
-        self.read_subspace_val(key)
+        if height == last_height {
+            self.read_subspace_val(key)
+        } else {
+            // Quick-n-dirty implementation for reading subspace value at height:
+            // - See if there are any diffs between height+1..last_height.
+            // - If so, the first one will provide the value we want as its old value.
+            // - If not, we can just read the value at the latest height.
+            for h in (height.0 + 1)..=last_height.0 {
+                let old_diff = self.read_diffs_val(key, h.into(), true)?;
+                let new_diff = self.read_diffs_val(key, h.into(), false)?;
+
+                match (old_diff, new_diff) {
+                    (Some(old_diff), Some(_)) | (Some(old_diff), None) => {
+                        // If there is an old diff, it contains the value at the requested height.
+                        return Ok(Some(old_diff));
+                    }
+                    (None, Some(_)) => {
+                        // If there is a new diff but no old diff, there was
+                        // no value at the requested height.
+                        return Ok(None);
+                    }
+                    (None, None) => {
+                        // If there are no diffs, keep looking.
+                        continue;
+                    }
+                }
+            }
+
+            self.read_subspace_val(key)
+        }
     }
 
     fn write_subspace_val(
