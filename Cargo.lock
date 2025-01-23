@@ -5542,6 +5542,7 @@ dependencies = [
  "namada_state",
  "namada_storage",
  "namada_token",
+ "namada_trans_token",
  "namada_tx",
  "namada_vm",
  "namada_vote_ext",
