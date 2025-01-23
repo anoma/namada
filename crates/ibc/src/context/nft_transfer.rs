@@ -13,6 +13,7 @@ use ibc::apps::nft_transfer::types::{
 };
 use ibc::core::host::types::error::HostError;
 use ibc::core::host::types::identifiers::{ChannelId, PortId};
+use ibc::core::primitives::Signer;
 use namada_core::address::{Address, MASP};
 use namada_core::token::Amount;
 use namada_systems::trans_token;
@@ -126,6 +127,28 @@ where
     type AccountId = Address;
     type Nft = NftMetadata;
     type NftClass = NftClass;
+
+    fn sender_account(
+        &self,
+        signer: &Signer,
+    ) -> Result<Self::AccountId, HostError> {
+        Address::decode(signer.as_ref()).map_err(|e| HostError::Other {
+            description: format!(
+                "Decoding the signer failed: {signer}, error {e}"
+            ),
+        })
+    }
+
+    fn receiver_account(
+        &self,
+        signer: &Signer,
+    ) -> Result<Self::AccountId, HostError> {
+        Address::try_from(signer).map_err(|e| HostError::Other {
+            description: format!(
+                "Decoding the signer failed: {signer}, error {e}"
+            ),
+        })
+    }
 
     fn get_port(&self) -> Result<PortId, HostError> {
         Ok(PORT_ID_STR.parse().expect("the ID should be parsable"))
