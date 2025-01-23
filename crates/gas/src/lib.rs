@@ -33,7 +33,10 @@ use thiserror::Error;
 #[allow(missing_docs)]
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum Error {
-    #[error("Transaction gas limit exceeded maximum of {0}")]
+    #[error(
+        "Transaction gas exceeded the limit of {0} gas sub-units. Plase \
+         account for the gas scale to convert this value to gas units."
+    )]
     TransactionGasExceededError(u64),
     #[error("Block gas limit exceeded")]
     BlockGasExceeded,
