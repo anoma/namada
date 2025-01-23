@@ -1,6 +1,7 @@
 #!/bin/bash
 
 check_changelog_added_in_subfolders() {
+    echo "Checking changelog"
     if [[ -z "${SHA}" ]]; then
         head_commit=$(git rev-parse HEAD)
     else
