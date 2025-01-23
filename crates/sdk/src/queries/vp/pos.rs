@@ -904,7 +904,11 @@ fn enrich_bonds_and_unbonds(
 mod test {
     use super::*;
     use crate::queries::testing::TestClient;
-    use crate::queries::{RequestCtx, RequestQuery, Router};
+    use crate::queries::{RequestCtx, RequestQuery, Router, RPC};
+    use namada_core::chain::Epoch;
+    use namada_core::token;
+    use namada_core::{address, storage};
+    use namada_state::StorageWrite;
 
     #[tokio::test]
     async fn test_validator_by_tm_addr_sanitized_input() {
@@ -931,11 +935,309 @@ mod test {
         };
         let result = POS.handle(ctx, &request);
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Invalid Tendermint address")
-        )
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid Tendermint address"))
+    }
+
+    // Helpers for test_rewards_query
+    mod helpers {
+        use super::*;
+
+        pub fn init_validator<RPC: Router>(
+            client: &mut TestClient<RPC>,
+        ) -> (Address, namada_proof_of_stake::PosParams) {
+            let genesis_validator =
+                namada_proof_of_stake::test_utils::get_dummy_genesis_validator(
+                );
+            let validator_address = genesis_validator.address.clone();
+
+            let params =
+                namada_proof_of_stake::test_utils::test_init_genesis::<
+                    _,
+                    namada_parameters::Store<_>,
+                    governance::Store<_>,
+                    namada_trans_token::Store<_>,
+                >(
+                    &mut client.state,
+                    namada_proof_of_stake::OwnedPosParams::default(),
+                    std::iter::once(genesis_validator),
+                    Epoch(0),
+                )
+                .expect("Test initialization failed");
+
+            (validator_address, params)
+        }
+
+        pub fn setup_delegator<RPC: Router>(
+            client: &mut TestClient<RPC>,
+            validator_address: &Address,
+            bond_amount: token::Amount,
+        ) -> Address {
+            let delegator = address::testing::established_address_2();
+
+            // Credit tokens to delegator
+            let native_token = client.state.get_native_token().unwrap();
+            StorageWrite::write(
+                &mut client.state,
+                &storage::Key::from(
+                    namada_trans_token::storage_key::balance_key(
+                        &native_token,
+                        &delegator,
+                    ),
+                ),
+                bond_amount,
+            )
+            .expect("Credit tokens failed");
+
+            // Bond tokens from delegator to validator
+            namada_proof_of_stake::bond_tokens::<
+                _,
+                governance::Store<_>,
+                namada_trans_token::Store<_>,
+            >(
+                &mut client.state,
+                Some(&delegator),
+                validator_address,
+                bond_amount,
+                Epoch(1),
+                Some(0),
+            )
+            .expect("Bonding tokens failed");
+
+            delegator
+        }
+
+        pub fn init_state<RPC: Router>(
+            client: &mut TestClient<RPC>,
+            bond_amount: token::Amount,
+        ) -> (Address, Address, token::Amount) {
+            let (validator, _params) = init_validator(client);
+            let delegator = setup_delegator(client, &validator, bond_amount);
+
+            // Initialize the predecessor epochs
+            client
+                .state
+                .in_mem_mut()
+                .block
+                .pred_epochs
+                .new_epoch(0.into());
+
+            (validator, delegator, bond_amount)
+        }
+
+        pub fn advance_epoch<RPC: Router>(
+            client: &mut TestClient<RPC>,
+            validator_delegator: &(Address, Address),
+            reward: &(Option<token::Amount>, Option<token::Amount>),
+        ) -> Epoch {
+            let (validator, delegator) = validator_delegator;
+            let (validator_reward, delegator_reward) = reward;
+            let current_epoch = client.state.in_mem().last_epoch;
+            let next_epoch = current_epoch.next();
+            let height = client.state.in_mem().block.height;
+
+            // Advance block height and epoch
+            let next_height = height + 1;
+            client
+                .state
+                .in_mem_mut()
+                .begin_block(next_height)
+                .expect("Test failed");
+            client.state.in_mem_mut().block.epoch = next_epoch;
+            client.state.in_mem_mut().block.height = next_height;
+            client
+                .state
+                .in_mem_mut()
+                .block
+                .pred_epochs
+                .new_epoch(next_height);
+
+            // Add rewards
+            if let Some(rewards_amount) = delegator_reward {
+                namada_proof_of_stake::rewards::add_rewards_to_counter(
+                    &mut client.state,
+                    delegator,
+                    validator,
+                    *rewards_amount,
+                )
+                .expect("Adding delegator rewards failed");
+            }
+
+            if let Some(rewards_amount) = validator_reward {
+                namada_proof_of_stake::rewards::add_rewards_to_counter(
+                    &mut client.state,
+                    validator,
+                    validator,
+                    *rewards_amount,
+                )
+                .expect("Adding validator rewards failed");
+            }
+
+            client.state.commit_block().expect("Test failed");
+
+            next_epoch
+        }
+    }
+
+    #[tokio::test]
+    async fn test_rewards_query() {
+        // Initialize test client
+        let mut client = TestClient::new(RPC);
+
+        // We will be reusing this route frequently, so alias it here
+        let pos = RPC.vp().pos();
+
+        // Set up validator
+        let (validator, delegator, _params) =
+            helpers::init_state(&mut client, token::Amount::native_whole(100));
+
+        let bond = (validator.clone(), delegator.clone());
+        let reward = (None, None);
+
+        // Advance to next epoch without rewards
+        let epoch = helpers::advance_epoch(&mut client, &bond, &reward);
+        assert_eq!(epoch, Epoch(1));
+
+        // Test querying rewards (should be 0)
+        let result = pos
+            .rewards(&client, &validator, &Some(delegator.clone()), &None)
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, token::Amount::zero());
+
+        let result = pos
+            .rewards(
+                &client,
+                &validator,
+                &Some(delegator.clone()),
+                &Some(epoch),
+            )
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, token::Amount::zero());
+
+        let result = pos
+            .rewards(&client, &validator, &None, &None)
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, token::Amount::zero());
+
+        // Advance to next epoch with some rewards
+        let val_reward_epoch_2 = token::Amount::native_whole(5);
+        let del_reward_epoch_2 = token::Amount::native_whole(7);
+        let reward_epoch_2 =
+            (Some(val_reward_epoch_2), Some(del_reward_epoch_2));
+        let epoch = helpers::advance_epoch(&mut client, &bond, &reward_epoch_2);
+        assert_eq!(epoch, Epoch(2));
+
+        // Query latest rewards for delegator
+        let result = pos
+            .rewards(&client, &validator, &Some(delegator.clone()), &None)
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, del_reward_epoch_2);
+
+        // Query latest rewards for validator
+        let result = pos
+            .rewards(&client, &validator, &None, &None)
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, val_reward_epoch_2);
+
+        // Query delegator rewards at specific epoch
+        let result = pos
+            .rewards(
+                &client,
+                &validator,
+                &Some(delegator.clone()),
+                &Some(epoch),
+            )
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, del_reward_epoch_2);
+
+        // Query validator rewards at specific epoch
+        let result = pos
+            .rewards(&client, &validator, &None, &Some(epoch))
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, val_reward_epoch_2);
+
+        // Ensure no rewards at previous epoch
+        let result = pos
+            .rewards(
+                &client,
+                &validator,
+                &Some(delegator.clone()),
+                &epoch.prev(),
+            )
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, token::Amount::zero());
+
+        let result = pos
+            .rewards(&client, &validator, &None, &epoch.prev())
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, token::Amount::zero());
+
+        // Advance to another epoch with more rewards
+        let val_reward_epoch_3 = token::Amount::native_whole(9);
+        let del_reward_epoch_3 = token::Amount::native_whole(11);
+        let reward_epoch_3 =
+            (Some(val_reward_epoch_3), Some(del_reward_epoch_3));
+        let epoch = helpers::advance_epoch(&mut client, &bond, &reward_epoch_3);
+        assert_eq!(epoch, Epoch(3));
+
+        // Query latest rewards
+        let result = pos
+            .rewards(&client, &validator, &Some(delegator.clone()), &None)
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, del_reward_epoch_3 + del_reward_epoch_2);
+
+        let result = pos
+            .rewards(&client, &validator, &None, &None)
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, val_reward_epoch_3 + val_reward_epoch_2);
+
+        // Query rewards at specific epoch
+        let result = pos
+            .rewards(
+                &client,
+                &validator,
+                &Some(delegator.clone()),
+                &Some(epoch),
+            )
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, del_reward_epoch_3 + del_reward_epoch_2);
+
+        let result = pos
+            .rewards(&client, &validator, &None, &Some(epoch))
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, val_reward_epoch_3 + val_reward_epoch_2);
+
+        // Query at previous epoch
+        let result = pos
+            .rewards(
+                &client,
+                &validator,
+                &Some(delegator.clone()),
+                &epoch.prev(),
+            )
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, del_reward_epoch_2);
+
+        let result = pos
+            .rewards(&client, &validator, &None, &epoch.prev())
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, val_reward_epoch_2);
     }
 }

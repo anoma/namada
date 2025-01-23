@@ -162,6 +162,7 @@ namada_proof_of_stake = { path = "../proof_of_stake", default-features = false, 
 namada_state = { path = "../state", features = ["testing"] }
 namada_storage = { path = "../storage", features = ["testing"] }
 namada_token = { path = "../token", features = ["testing", "masp"] }
+namada_trans_token = { path = "../trans_token" }
 namada_tx = { path = "../tx", features = ["testing"]}
 namada_vm = { path = "../vm" }
 namada_vote_ext = { path = "../vote_ext" }
