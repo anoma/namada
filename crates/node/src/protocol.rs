@@ -794,17 +794,14 @@ where
                 } else {
                     state.write_log_mut().drop_tx();
 
-                    // FIXME: review this part
-                    let mut error_msg = String::new();
-                    if !is_masp_transfer {
-                        error_msg.push_str("Not a MASP transaction.");
-                    }
-                    if !result.is_accepted() {
-                        error_msg = format!(
+                    let error_msg = if !is_masp_transfer {
+                        "Not a MASP transaction.".to_string()
+                    } else {
+                        format!(
                             "Some VPs rejected it: {:#?}",
                             result.vps_result.rejected_vps
-                        );
-                    }
+                        )
+                    };
                     tracing::error!(error_msg);
 
                     return Err(Error::FeeError(error_msg).into());
