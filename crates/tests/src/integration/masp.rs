@@ -6119,7 +6119,9 @@ fn speculative_context() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("Gas error: Transaction gas limit exceeded"));
+    assert!(captured.contains(
+        "Gas error: Transaction gas exceeded the limit of 10000 gas units"
+    ));
 
     // 6. Check that the speculative context was not updated
     let captured = CapturedOutput::of(|| {

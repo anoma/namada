@@ -616,6 +616,7 @@ mod tests {
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
     const TX_GAS_LIMIT: u64 = 10_000_000_000;
+    const GAS_SCALE: u64 = 1;
 
     fn get_client_id() -> ClientId {
         let id = format!("{}-0", MOCK_CLIENT_TYPE);
@@ -1018,11 +1019,9 @@ mod tests {
         let tx_code = vec![];
         let mut tx_data = vec![];
         msg.to_any().encode(&mut tx_data).expect("encoding failed");
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -1105,11 +1104,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -1233,11 +1230,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -1344,11 +1339,9 @@ mod tests {
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -1440,11 +1433,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -1563,11 +1554,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -1675,11 +1664,9 @@ mod tests {
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -1772,11 +1759,9 @@ mod tests {
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -1897,11 +1882,9 @@ mod tests {
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -2021,11 +2004,9 @@ mod tests {
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -2130,11 +2111,9 @@ mod tests {
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -2234,11 +2213,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -2392,11 +2369,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -2605,11 +2580,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -2762,11 +2735,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -2922,11 +2893,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -3082,11 +3051,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -3262,11 +3229,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -3498,11 +3463,9 @@ mod tests {
             .add_serialized_data(tx_data)
             .sign_wrapper(keypair_1());
 
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                TX_GAS_LIMIT,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE),
+        ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
