@@ -4,14 +4,14 @@ on:
   push:
     branches:
       - main
-      - 'maint-[0-9]+.[0-9]+'
-      - 'maint-libs-[0-9]+.[0-9]+'
+      - "maint-[0-9]+.[0-9]+"
+      - "maint-libs-[0-9]+.[0-9]+"
   # Run in PRs with conflicts (https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request)
-  pull_request_target:
+  pull_request:
     branches:
       - main
-      - 'maint-[0-9]+.[0-9]+'
-      - 'maint-libs-[0-9]+.[0-9]+'
+      - "maint-[0-9]+.[0-9]+"
+      - "maint-libs-[0-9]+.[0-9]+"
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
@@ -36,32 +36,26 @@ env:
   NIGHTLY: nightly-2024-09-08
   NAMADA_MASP_PARAMS_DIR: /masp/.masp-params
   LEDGER_APP_VERSION: "2.0.3"
+  ROLE: arn:aws:iam::375643557360:role/github-runners-ci-shared
 
 jobs:
   changelog:
     runs-on: [ubuntu-latest]
-    if: github.event_name == 'pull_request_target' && github.event.pull_request.draft == false && !contains(github.ref, '-rc')
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && !contains(github.ref, '-rc')
     timeout-minutes: 5
 
     steps:
       - name: Checkout repo
-        if: ${{ github.event_name != 'pull_request_target' }}
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-      - name: Checkout PR
-        if: ${{ github.event_name == 'pull_request_target' }}
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       - name: Check changelog
         run: bash .github/workflows/scripts/check-changelog.sh
         env:
           SHA: ${{ github.event.pull_request.head.sha }}
-    
+
   rust-docs:
-    container: 
+    container:
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
     timeout-minutes: 20
@@ -69,17 +63,11 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS 
+      - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE }}
+          role-to-assume: ${{ env.ROLE }}
       - name: Cache cargo
         id: cache
         uses: runs-on/cache@v4
@@ -101,7 +89,7 @@ jobs:
         run: sccache --stop-server || true
 
   lints:
-    container: 
+    container:
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
     timeout-minutes: 15
@@ -109,17 +97,11 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS 
+      - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE }}
+          role-to-assume: ${{ env.ROLE }}
       - name: Cache cargo
         id: cache
         uses: runs-on/cache@v4
@@ -145,12 +127,12 @@ jobs:
   build-wasm:
     timeout-minutes: 10
     runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
-    container: 
+    container:
       image: ghcr.io/heliaxdev/namada-ci:wasm-main
     strategy:
       fail-fast: true
       matrix:
-        make: 
+        make:
           - name: wasm
             command: build-wasm-scripts
             files: |
@@ -159,25 +141,18 @@ jobs:
               wasm/checksums.json
           - name: wasm-for-tests
             command: build-wasm-tests-scripts
-            files:
-              wasm_for_tests/*.wasm
+            files: wasm_for_tests/*.wasm
     env:
       RUSTC_WRAPPER: ""
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS 
+      - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE }}
+          role-to-assume: ${{ env.ROLE }}
       - name: Cache cargo
         id: cache
         uses: runs-on/cache@v4
@@ -188,7 +163,7 @@ jobs:
           key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-${{ env.NIGHTLY }}
       - name: Build ${{ matrix.make.name }}
         run: make ${{ matrix.make.command }}
-      - name: Upload ${{ matrix.make.name }} artifacts 
+      - name: Upload ${{ matrix.make.name }} artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.make.name }}-${{ github.event.pull_request.head.sha || github.sha }}
@@ -199,7 +174,7 @@ jobs:
 
   test-wasm:
     timeout-minutes: 30
-    container: 
+    container:
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
     needs: [build-wasm]
@@ -207,17 +182,11 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS 
+      - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE }}
+          role-to-assume: ${{ env.ROLE }}
       - name: Cache cargo
         id: cache
         uses: runs-on/cache@v4
@@ -245,14 +214,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wasm-cov-${{ github.event.pull_request.head.sha || github.sha }}
-          path: wasm/lcov.info # output of `make test-wasm-with-coverage` 
+          path: wasm/lcov.info # output of `make test-wasm-with-coverage`
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
 
   test-unit:
     runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
-    container: 
+    container:
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     timeout-minutes: 20
     needs: [build-wasm]
@@ -260,17 +229,11 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS 
+      - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE }}
+          role-to-assume: ${{ env.ROLE }}
       - name: Cache cargo
         id: cache
         uses: runs-on/cache@v4
@@ -301,34 +264,28 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: unit-cov-${{ github.event.pull_request.head.sha || github.sha }}
-          path: lcov.info # output of `make test-unit-with-coverage` 
+          path: lcov.info # output of `make test-unit-with-coverage`
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
       - name: Stop sccache
         if: always() && steps.sccache.conclusion == 'success'
         run: sccache --stop-server || true
-  
+
   check-packages:
     runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
-    container: 
+    container:
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     timeout-minutes: 15
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS 
+      - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE }}
+          role-to-assume: ${{ env.ROLE }}
       - name: Cache cargo
         id: cache
         uses: runs-on/cache@v4
@@ -353,7 +310,7 @@ jobs:
 
   test-integration:
     runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
-    container: 
+    container:
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     timeout-minutes: 25
     needs: [build-wasm]
@@ -361,17 +318,11 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS 
+      - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE }}
+          role-to-assume: ${{ env.ROLE }}
       - name: Cache cargo
         id: cache
         uses: runs-on/cache@v4
@@ -402,7 +353,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: integration-cov-${{ github.event.pull_request.head.sha || github.sha }}
-          path: lcov.info # output of `make test-integration-with-coverage` 
+          path: lcov.info # output of `make test-integration-with-coverage`
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
@@ -412,7 +363,7 @@ jobs:
 
   check-benchmarks:
     runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
-    container: 
+    container:
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     if: github.event.pull_request.draft == false || contains(github.head_ref, 'mergify/merge-queue') || contains(github.ref_name, 'mergify/merge-queue')
     timeout-minutes: 25
@@ -421,17 +372,11 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS 
+      - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE }}
+          role-to-assume: ${{ env.ROLE }}
       - name: Cache cargo
         id: cache
         uses: runs-on/cache@v4
@@ -466,24 +411,18 @@ jobs:
 
   build-binaries:
     runs-on: [self-hosted, 16vcpu-32ram-ubuntu22-namada-x86]
-    container: 
+    container:
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     timeout-minutes: 25
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS 
+      - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE }}
+          role-to-assume: ${{ env.ROLE }}
       - name: Cache cargo
         id: cache
         uses: runs-on/cache@v4
@@ -523,7 +462,7 @@ jobs:
 
   test-e2e:
     runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
-    container: 
+    container:
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     if: github.event.pull_request.draft == false || contains(github.head_ref, 'mergify/merge-queue') || contains(github.ref_name, 'mergify/merge-queue')
     needs: [build-wasm, build-binaries]
@@ -541,17 +480,11 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS 
+      - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE }}
+          role-to-assume: ${{ env.ROLE }}
       - name: Cache cargo
         id: cache
         uses: runs-on/cache@v4
@@ -613,7 +546,7 @@ jobs:
           path: |
             /tmp/.*/logs/
             /tmp/.*/setup/validator-*/logs/
-            /tmp/.*/setup/validator-*/e2e-test.*/*.toml 
+            /tmp/.*/setup/validator-*/e2e-test.*/*.toml
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 5
@@ -626,7 +559,8 @@ jobs:
 
   upload-coverage:
     runs-on: [ubuntu-latest]
-    timeout-minutes: 20
+    timeout-minutes: 10
+    if: ${{ github.event.pull_request.head.repo.full_name == 'anoma/namada' }}
     needs: [test-unit, test-integration]
 
     steps:
@@ -662,12 +596,6 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
       - name: Checkout ledger-namada
         run: |
           echo "Using Namada Ledger App version: v${LEDGER_APP_VERSION}"
@@ -695,7 +623,7 @@ jobs:
 
   test-e2e-with-device-automation:
     runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
-    container: 
+    container:
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     if: github.event.pull_request.draft == false || contains(github.head_ref, 'mergify/merge-queue') || contains(github.ref_name, 'mergify/merge-queue')
     needs: [build-wasm, build-binaries]
@@ -704,17 +632,11 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS 
+      - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE }}
+          role-to-assume: ${{ env.ROLE }}
       - name: Cache cargo
         id: cache
         uses: runs-on/cache@v4
@@ -778,7 +700,7 @@ jobs:
           path: |
             /tmp/.*/logs/
             /tmp/.*/setup/validator-*/logs/
-            /tmp/.*/setup/validator-*/e2e-test.*/*.toml 
+            /tmp/.*/setup/validator-*/e2e-test.*/*.toml
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 5
