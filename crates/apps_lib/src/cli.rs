@@ -3559,7 +3559,6 @@ pub mod args {
             let raw = "http://127.0.0.1:26657";
             Url::from_str(raw).unwrap()
         }));
-    pub const LEDGER_ZIP32: ArgFlag = flag("ledger-zip32");
     pub const LIST_FIND_ADDRESSES_ONLY: ArgFlag = flag("addr");
     pub const LIST_FIND_KEYS_ONLY: ArgFlag = flag("keys");
     pub const LOCALHOST: ArgFlag = flag("localhost");
@@ -3672,6 +3671,7 @@ pub mod args {
     pub const TX_HASH: Arg<String> = arg("tx-hash");
     pub const THRESHOLD: ArgOpt<u8> = arg_opt("threshold");
     pub const UNSAFE_DONT_ENCRYPT: ArgFlag = flag("unsafe-dont-encrypt");
+    pub const UNSAFE_PURE_ZIP32: ArgFlag = flag("unsafe-pure-zip32");
     pub const UNSAFE_SHOW_SECRET: ArgFlag = flag("unsafe-show-secret");
     pub const USE_DEVICE: ArgFlag = flag("use-device");
     pub const VALIDATOR: Arg<WalletAddress> = arg("validator");
@@ -7980,14 +7980,14 @@ pub mod args {
                 HD_PROMPT_BIP39_PASSPHRASE.parse(matches);
             let use_device = USE_DEVICE.parse(matches);
             let device_transport = DEVICE_TRANSPORT.parse(matches);
-            let ledger_zip32 = LEDGER_ZIP32.parse(matches);
+            let unsafe_pure_zip32 = UNSAFE_PURE_ZIP32.parse(matches);
             Self {
                 scheme,
                 shielded,
                 alias,
                 alias_force,
                 unsafe_dont_encrypt,
-                ledger_zip32,
+                unsafe_pure_zip32,
                 derivation_path,
                 allow_non_compliant,
                 prompt_bip39_passphrase,
@@ -8059,12 +8059,16 @@ pub mod args {
                 "Use an additional passphrase for HD-key generation."
             )))
             .arg(
-                LEDGER_ZIP32.def().requires(SHIELDED.name).help(wrap!(
-                    "Use the modified ZIP 32 algorithm supported by Ledger \
-                     devices. This flag is necessary if importing the \
-                     generated mnemonic code onto the Ledger device at some \
-                     future time is a requirement."
-                )),
+                UNSAFE_PURE_ZIP32
+                    .def()
+                    .requires(SHIELDED.name)
+                    .conflicts_with(USE_DEVICE.name)
+                    .help(wrap!(
+                        "Use the deprecated pure ZIP 32 algorithm to derive \
+                         shielded keys. This flag is necessary if importing a \
+                         mnemonic code that was generated on Namada 1.0.0 or \
+                         before."
+                    )),
             )
         }
     }

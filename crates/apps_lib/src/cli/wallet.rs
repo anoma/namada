@@ -193,7 +193,7 @@ async fn shielded_key_derive(
         alias,
         alias_force,
         unsafe_dont_encrypt,
-        ledger_zip32,
+        unsafe_pure_zip32,
         derivation_path,
         allow_non_compliant,
         prompt_bip39_passphrase,
@@ -203,6 +203,14 @@ async fn shielded_key_derive(
     }: args::KeyDerive,
 ) {
     let mut wallet = load_wallet(ctx);
+    if !unsafe_pure_zip32 {
+        tracing::warn!(
+            "The default shielded key derivation algorithm has been changed \
+             to achieve hardware wallet compatibility. For information on the \
+             deprecated algorithm, see the documentation for \
+             --unsafe-pure-zip32."
+        );
+    }
     let derivation_path = decode_shielded_derivation_path(derivation_path)
         .unwrap_or_else(|err| {
             edisplay_line!(io, "{}", err);
@@ -223,7 +231,7 @@ async fn shielded_key_derive(
                 alias,
                 alias_force,
                 birthday,
-                ledger_zip32,
+                unsafe_pure_zip32,
                 derivation_path,
                 None,
                 prompt_bip39_passphrase,
