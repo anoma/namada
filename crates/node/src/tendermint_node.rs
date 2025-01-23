@@ -80,7 +80,7 @@ pub async fn run(
     abort_recv: Receiver<Sender<()>>,
 ) -> Result<()> {
     let (home_dir_string, tendermint_path) =
-        initalize_config(home_dir, chain_id, genesis_time, config).await?;
+        initialize_config(home_dir, chain_id, genesis_time, config).await?;
     let tendermint_node =
         start_node(proxy_app_address, home_dir_string, tendermint_path)?;
 
@@ -91,7 +91,7 @@ pub async fn run(
 
 /// Setup the tendermint configuration. We return the tendermint path and home
 /// directory
-async fn initalize_config(
+async fn initialize_config(
     home_dir: PathBuf,
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
