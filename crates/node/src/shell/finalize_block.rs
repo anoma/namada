@@ -379,9 +379,7 @@ where
                         .unwrap_or("<unknown>"),
                     msg,
                 );
-                // FIXME:remove all these calls but one
-                let gas_scale = get_gas_scale(&self.state)
-                    .expect("Failed to get gas scale from parameters");
+                let gas_scale = tx_data.tx_gas_meter.get_gas_scale();
                 let scaled_gas = tx_data
                     .tx_gas_meter
                     .get_tx_consumed_gas()
@@ -413,8 +411,7 @@ where
                     msg
                 );
 
-                let gas_scale = get_gas_scale(&self.state)
-                    .expect("Failed to get gas scale from parameters");
+                let gas_scale = tx_data.tx_gas_meter.get_gas_scale();
                 let scaled_gas = tx_data
                     .tx_gas_meter
                     .get_tx_consumed_gas()
@@ -496,8 +493,7 @@ where
             self.commit_batch_hash(tx_data.replay_protection_hashes);
         }
 
-        let gas_scale = get_gas_scale(&self.state)
-            .expect("Failed to get gas scale from parameters");
+        let gas_scale = tx_data.tx_gas_meter.get_gas_scale();
         let scaled_gas = tx_data
             .tx_gas_meter
             .get_tx_consumed_gas()
@@ -675,8 +671,6 @@ where
                 TxType::Wrapper(wrapper) => {
                     stats.increment_wrapper_txs();
 
-                    let gas_scale = get_gas_scale(&self.state)
-                        .expect("Failed to get gas scale from parameters");
                     let gas_limit =
                         match wrapper.gas_limit.as_scaled_gas(gas_scale) {
                             Ok(value) => value,
