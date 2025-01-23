@@ -613,7 +613,7 @@ where
                         // process_proposal.
                         tracing::error!(
                             "Transfer of tx fee cannot be applied because of \
-                             an eror: {}. This shouldn't happen.",
+                             an error: {}. This shouldn't happen.",
                             e
                         );
                         return Err(e.into());
