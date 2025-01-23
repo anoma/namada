@@ -93,11 +93,19 @@ where
             pos_votes_from_abci(&self.state, &req.decided_last_commit.votes);
         let validator_set_update_epoch =
             self.get_validator_set_update_epoch(current_epoch);
+        let gas_scale = get_gas_scale(&self.state)
+            .expect("Failed to get gas scale from parameters");
 
         // Sub-system updates:
         // - Governance - applied first in case a proposal changes any of the
         //   other syb-systems
-        gov_finalize_block(self, emit_events, current_epoch, new_epoch)?;
+        gov_finalize_block(
+            self,
+            emit_events,
+            current_epoch,
+            new_epoch,
+            gas_scale,
+        )?;
         // - Token
         token_finalize_block(&mut self.state, emit_events, is_masp_new_epoch)?;
         // - PoS
@@ -139,6 +147,7 @@ where
         let successful_wrappers = self.retrieve_and_execute_transactions(
             &native_block_proposer_address,
             &req.txs,
+            gas_scale,
             ExecutionArgs {
                 response: &mut response,
                 changed_keys: &mut changed_keys,
@@ -370,6 +379,7 @@ where
                         .unwrap_or("<unknown>"),
                     msg,
                 );
+                // FIXME:remove all these calls but one
                 let gas_scale = get_gas_scale(&self.state)
                     .expect("Failed to get gas scale from parameters");
                 let scaled_gas = tx_data
@@ -595,6 +605,7 @@ where
         &mut self,
         native_block_proposer_address: &Address,
         processed_txs: &[shim::request::ProcessedTx],
+        gas_scale: u64,
         ExecutionArgs {
             response,
             changed_keys,
@@ -683,7 +694,7 @@ where
                                 continue;
                             }
                         };
-                    let tx_gas_meter = TxGasMeter::new(gas_limit);
+                    let tx_gas_meter = TxGasMeter::new(gas_limit, gas_scale);
                     for cmt in tx.commitments() {
                         if let Some(code_sec) = tx
                             .get_section(cmt.code_sechash())
@@ -760,7 +771,10 @@ where
                             }
                         }
                     }
-                    (DispatchArgs::Protocol(protocol_tx), TxGasMeter::new(0))
+                    (
+                        DispatchArgs::Protocol(protocol_tx),
+                        TxGasMeter::new(0, gas_scale),
+                    )
                 }
             };
             let tx_event = new_tx_event(&tx, height.0);
@@ -1117,6 +1131,7 @@ fn gov_finalize_block<D, H>(
     emit_events: &mut Vec<Event>,
     current_epoch: Epoch,
     is_new_epoch: bool,
+    gas_scale: u64,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync,
@@ -1146,7 +1161,7 @@ where
                     tx_wasm_cache,
                 },
                 // No gas limit for governance proposal
-                &RefCell::new(TxGasMeter::new(u64::MAX)),
+                &RefCell::new(TxGasMeter::new(u64::MAX, gas_scale)),
                 state,
             );
             // Governance must construct the tx with data and code commitments
@@ -5680,7 +5695,7 @@ mod test_finalize_block {
             .write(&min_confirmations_key(), new_min_confirmations)
             .expect("Test failed");
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
+            &TxGasMeter::new(u64::MAX, get_gas_scale(&shell.state).unwrap()),
         ));
         let keys_changed = BTreeSet::from([min_confirmations_key()]);
         let verifiers = BTreeSet::default();

@@ -1000,9 +1000,11 @@ mod test_bridge_pool_vp {
         keys_changed.append(&mut new_keys_changed);
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
@@ -1356,9 +1358,11 @@ mod test_bridge_pool_vp {
         let verifiers = BTreeSet::default();
 
         // create the data to be given to the vp
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
@@ -1414,9 +1418,11 @@ mod test_bridge_pool_vp {
 
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
@@ -1493,9 +1499,11 @@ mod test_bridge_pool_vp {
 
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
@@ -1567,9 +1575,11 @@ mod test_bridge_pool_vp {
         let verifiers = BTreeSet::default();
 
         // create the data to be given to the vp
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
@@ -1658,9 +1668,11 @@ mod test_bridge_pool_vp {
             .expect("Test failed");
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
@@ -1735,9 +1747,11 @@ mod test_bridge_pool_vp {
 
         // create the data to be given to the vp
         let verifiers = BTreeSet::default();
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
         let mut tx = Tx::from_type(TxType::Raw);

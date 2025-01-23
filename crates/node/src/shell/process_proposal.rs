@@ -437,7 +437,7 @@ where
                         };
                     }
                 };
-                let mut tx_gas_meter = TxGasMeter::new(gas_limit);
+                let mut tx_gas_meter = TxGasMeter::new(gas_limit, gas_scale);
                 if tx_gas_meter.add_wrapper_gas(tx_bytes).is_err() {
                     return TxResult {
                         code: ResultCode::TxGasLimit.into(),

@@ -121,7 +121,7 @@ pub fn validate_ibc_vp_from_tx<'a>(
         wasm::compilation_cache::common::testing::cache();
 
     let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-        &TxGasMeter::new(10_000_000_000),
+        &TxGasMeter::new(10_000_000_000, 1),
     ));
     let ctx = Ctx::new(
         &ADDRESS,
@@ -160,7 +160,7 @@ pub fn validate_multitoken_vp_from_tx<'a>(
         wasm::compilation_cache::common::testing::vp_cache();
 
     let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-        &TxGasMeter::new(10_000_000_000),
+        &TxGasMeter::new(10_000_000_000, 1),
     ));
     let ctx = Ctx::<_, _, VpEvalWasm<_, _, _>>::new(
         &ADDRESS,

@@ -971,9 +971,11 @@ mod shielded_token_tests {
                 .write(&src_key, new_amount.serialize_to_vec())
                 .unwrap();
 
-            let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-                &TxGasMeter::new(u64::MAX),
-            ));
+            let gas_meter =
+                RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                    u64::MAX,
+                    namada_parameters::get_gas_scale(&state).unwrap(),
+                )));
             let (vp_vp_cache, _vp_cache_dir) = vp_cache();
             let ctx = Ctx::new(
                 &MASP,
@@ -1029,9 +1031,11 @@ mod shielded_token_tests {
             .write(&token_map_key, token_map.serialize_to_vec())
             .unwrap();
 
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let ctx = Ctx::new(
             &MASP,
@@ -1080,7 +1084,7 @@ mod shielded_token_tests {
                 .unwrap();
 
             let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-                &TxGasMeter::new(u64::MAX),
+                &TxGasMeter::new(u64::MAX, namada_parameters::get_gas_scale(&state).unwrap()),
             ));
             let (vp_vp_cache, _vp_cache_dir) = vp_cache();
             let ctx = Ctx::new(
@@ -1129,7 +1133,7 @@ mod shielded_token_tests {
             let keys_changed = BTreeSet::from([random_masp_key.clone()]);
 
             let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-                &TxGasMeter::new(u64::MAX),
+                &TxGasMeter::new(u64::MAX, namada_parameters::get_gas_scale(&state).unwrap()),
             ));
             let (vp_vp_cache, _vp_cache_dir) = vp_cache();
             let ctx = Ctx::new(

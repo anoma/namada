@@ -1241,9 +1241,11 @@ mod test {
         let state = init_storage();
         let keys_changed = BTreeSet::new();
 
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -1481,9 +1483,11 @@ mod test {
 
         let keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -1581,9 +1585,11 @@ mod test {
 
         let keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -1682,9 +1688,11 @@ mod test {
 
         let keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -1783,9 +1791,11 @@ mod test {
 
         let keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -1865,9 +1875,11 @@ mod test {
 
         let keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -1947,9 +1959,11 @@ mod test {
 
         let keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -2047,9 +2061,11 @@ mod test {
             activation_epoch_key.clone(),
         ]);
 
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -2147,9 +2163,11 @@ mod test {
             activation_epoch_key.clone(),
         ]);
 
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -2229,9 +2247,11 @@ mod test {
 
         let mut keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -2365,9 +2385,11 @@ mod test {
 
         let mut keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -2501,9 +2523,11 @@ mod test {
 
         let mut keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -2637,9 +2661,11 @@ mod test {
 
         let mut keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -2789,9 +2815,11 @@ mod test {
 
         let mut keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 
@@ -2941,9 +2969,11 @@ mod test {
 
         let mut keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::vp_cache();
 

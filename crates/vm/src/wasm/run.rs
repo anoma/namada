@@ -1162,7 +1162,10 @@ mod tests {
     #[test]
     fn test_tx_memory_limiter_in_guest() {
         let mut state = TestState::default();
-        let gas_meter = RefCell::new(TxGasMeter::new(TX_GAS_LIMIT));
+        let gas_meter = RefCell::new(TxGasMeter::new(
+            TX_GAS_LIMIT,
+            namada_parameters::get_gas_scale(&state).unwrap(),
+        ));
         let tx_index = TxIndex::default();
 
         // This code will allocate memory of the given size
@@ -1228,9 +1231,11 @@ mod tests {
     fn test_vp_memory_limiter_in_guest_calling_eval() {
         let mut state = TestState::default();
         let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(TX_GAS_LIMIT),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                TX_GAS_LIMIT,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -1330,9 +1335,11 @@ mod tests {
     fn test_vp_memory_limiter_in_guest() {
         let mut state = TestState::default();
         let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(TX_GAS_LIMIT),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                TX_GAS_LIMIT,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -1399,7 +1406,10 @@ mod tests {
     #[test]
     fn test_tx_memory_limiter_in_host_input() {
         let mut state = TestState::default();
-        let gas_meter = RefCell::new(TxGasMeter::new(TX_GAS_LIMIT));
+        let gas_meter = RefCell::new(TxGasMeter::new(
+            TX_GAS_LIMIT,
+            namada_parameters::get_gas_scale(&state).unwrap(),
+        ));
         let tx_index = TxIndex::default();
 
         let tx_no_op = TestWasms::TxNoOp.read_bytes();
@@ -1463,9 +1473,11 @@ mod tests {
     fn test_vp_memory_limiter_in_host_input() {
         let mut state = TestState::default();
         let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(TX_GAS_LIMIT),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                TX_GAS_LIMIT,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -1530,7 +1542,10 @@ mod tests {
     #[test]
     fn test_tx_memory_limiter_in_host_env() {
         let mut state = TestState::default();
-        let gas_meter = RefCell::new(TxGasMeter::new(TX_GAS_LIMIT));
+        let gas_meter = RefCell::new(TxGasMeter::new(
+            TX_GAS_LIMIT,
+            namada_parameters::get_gas_scale(&state).unwrap(),
+        ));
         let tx_index = TxIndex::default();
 
         let tx_read_key = TestWasms::TxReadStorageKey.read_bytes();
@@ -1586,9 +1601,11 @@ mod tests {
     fn test_vp_memory_limiter_in_host_env() {
         let mut state = TestState::default();
         let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(TX_GAS_LIMIT),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                TX_GAS_LIMIT,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -1644,9 +1661,11 @@ mod tests {
     fn test_vp_memory_limiter_in_host_env_inside_guest_calling_eval() {
         let mut state = TestState::default();
         let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(TX_GAS_LIMIT),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                TX_GAS_LIMIT,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         let tx_index = TxIndex::default();
@@ -1786,7 +1805,10 @@ mod tests {
     #[test]
     fn test_tx_out_of_gas_in_guest() {
         let mut state = TestState::default();
-        let gas_meter = RefCell::new(TxGasMeter::new(OUT_OF_GAS_LIMIT));
+        let gas_meter = RefCell::new(TxGasMeter::new(
+            OUT_OF_GAS_LIMIT,
+            namada_parameters::get_gas_scale(&state).unwrap(),
+        ));
         let tx_index = TxIndex::default();
 
         // This code will charge gas in a host function indefinetely
@@ -1825,7 +1847,10 @@ mod tests {
     #[test]
     fn test_tx_out_of_gas_in_host() {
         let mut state = TestState::default();
-        let gas_meter = RefCell::new(TxGasMeter::new(OUT_OF_GAS_LIMIT));
+        let gas_meter = RefCell::new(TxGasMeter::new(
+            OUT_OF_GAS_LIMIT,
+            namada_parameters::get_gas_scale(&state).unwrap(),
+        ));
         let tx_index = TxIndex::default();
 
         // This code will charge gas in a host function indefinetely
@@ -1866,9 +1891,11 @@ mod tests {
         let tx_index = TxIndex::default();
 
         let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(OUT_OF_GAS_LIMIT),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                OUT_OF_GAS_LIMIT,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
 
@@ -1910,9 +1937,11 @@ mod tests {
         let tx_index = TxIndex::default();
 
         let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(OUT_OF_GAS_LIMIT),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                OUT_OF_GAS_LIMIT,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
 
@@ -2093,9 +2122,11 @@ mod tests {
         let tx_index = TxIndex::default();
         let mut state = TestState::default();
         let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(TX_GAS_LIMIT),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                TX_GAS_LIMIT,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
         // store the vp code
@@ -2135,7 +2166,10 @@ mod tests {
         let tx_data = vec![];
         let tx_index = TxIndex::default();
         let mut state = TestState::default();
-        let gas_meter = RefCell::new(TxGasMeter::new(TX_GAS_LIMIT));
+        let gas_meter = RefCell::new(TxGasMeter::new(
+            TX_GAS_LIMIT,
+            namada_parameters::get_gas_scale(&state).unwrap(),
+        ));
 
         // store the tx code
         let code_hash = Hash::sha256(tx_code);

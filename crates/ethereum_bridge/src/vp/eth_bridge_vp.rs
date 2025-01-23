@@ -379,9 +379,11 @@ mod tests {
         // set up the VP
         let mut tx = Tx::from_type(TxType::Raw);
         tx.push_default_inner_tx();
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = setup_ctx(
             batched_tx.tx,
@@ -436,9 +438,11 @@ mod tests {
         // set up the VP
         let mut tx = Tx::from_type(TxType::Raw);
         tx.push_default_inner_tx();
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = setup_ctx(
             batched_tx.tx,
@@ -496,9 +500,11 @@ mod tests {
         // set up the VP
         let mut tx = Tx::from_type(TxType::Raw);
         tx.push_default_inner_tx();
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = setup_ctx(
             batched_tx.tx,
