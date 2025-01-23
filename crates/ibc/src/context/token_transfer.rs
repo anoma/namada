@@ -183,21 +183,29 @@ where
 {
     type AccountId = Address;
 
-    fn sender_account_from_signer(
+    fn sender_account(
         &self,
         signer: &Signer,
-    ) -> Option<Self::AccountId> {
-        Address::decode(signer.as_ref()).ok()
+    ) -> Result<Self::AccountId, HostError> {
+        Address::decode(signer.as_ref()).map_err(|e| HostError::Other {
+            description: format!(
+                "Decoding the signer failed: {signer}, error {e}"
+            ),
+        })
     }
 
-    fn receiver_account_from_signer(
+    fn receiver_account(
         &self,
         signer: &Signer,
-    ) -> Option<Self::AccountId> {
+    ) -> Result<Self::AccountId, HostError> {
         if self.parse_addr_as_governance {
-            Some(namada_core::address::GOV)
+            Ok(namada_core::address::GOV)
         } else {
-            Address::try_from(signer).ok()
+            Address::try_from(signer).map_err(|e| HostError::Other {
+                description: format!(
+                    "Decoding the signer failed: {signer}, error {e}"
+                ),
+            })
         }
     }
 
