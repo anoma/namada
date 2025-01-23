@@ -669,10 +669,10 @@ where
     }
 }
 
-/// Custom error type for masp fee payment. This is needed to enforce that the
-/// error messages we produce are not misleading
-// FIXME: should contain Error
-pub struct MaspFeeError(String);
+/// Custom wrapper type for masp fee payment errors. The purpose of this type is
+/// to prepend errors with some masp fee payment string to ensure that the
+/// messages we produce are not misleading
+pub struct MaspFeeError(Error);
 
 impl Display for MaspFeeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -682,11 +682,17 @@ impl Display for MaspFeeError {
 
 impl From<&MaspFeeError> for Error {
     fn from(value: &MaspFeeError) -> Self {
+        let msg = match &value.0 {
+            // Destructure the error to avoid nesting a FeeError into another
+            // instance of itself, which would produce a duplicated message
+            Error::FeeError(inner_msg) => inner_msg,
+            error => &error.to_string(),
+        };
+
         Self::FeeError(format!(
             "The transparent balance of the fee payer was insufficient to pay \
              fees. The protocol tried to run the first transaction in the \
-             batch to pay fees via the MASP but it failed: {0}",
-            value.0
+             batch to pay fees via the MASP but it failed: {msg}",
         ))
     }
 }
@@ -697,15 +703,9 @@ impl From<MaspFeeError> for Error {
     }
 }
 
-impl From<&Error> for MaspFeeError {
-    fn from(value: &Error) -> Self {
-        Self(value.to_string())
-    }
-}
-
 impl From<Error> for MaspFeeError {
     fn from(value: Error) -> Self {
-        Self::from(&value)
+        Self(value)
     }
 }
 fn try_masp_fee_payment<S, D, H, CA>(
@@ -782,7 +782,7 @@ where
                         Either::Left(true),
                     )?
                     .ok_or_else(|| {
-                        MaspFeeError(
+                        Error::FeeError(
                             "Missing expected masp section reference"
                                 .to_string(),
                         )
@@ -807,14 +807,14 @@ where
                     }
                     tracing::error!(error_msg);
 
-                    return Err(MaspFeeError(error_msg));
+                    return Err(Error::FeeError(error_msg).into());
                 }
             }
             Err(e) => {
                 state.write_log_mut().drop_tx();
                 let error_msg = format!("Wasm run failed: {}", e);
                 tracing::error!(error_msg);
-                return Err(MaspFeeError(error_msg));
+                return Err(Error::FeeError(error_msg).into());
             }
         }
     };
@@ -937,12 +937,12 @@ where
 
                     checked!(balance - fees).map_or_else(
                         |_| {
-                            Err(MaspFeeError(format!(
+                            Err(MaspFeeError::from(Error::FeeError(format!(
                                 "Masp fee payment unshielded an insufficient \
                                  amount. Balance after unshielding: {balance} \
                                  {}, required {fees}",
                                 wrapper.fee.token
-                            ))
+                            )))
                             .into())
                         },
                         |_| Ok(Some(valid_batched_tx_result)),
