@@ -71,6 +71,8 @@ from_middleware! {
     impl<C, Params> Module for PfmTransferModule<C, Params>
     where
         C: IbcCommonContext + Debug,
+        Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+            + Debug,
 }
 
 impl<C, Params> MiddlewareModule for PfmTransferModule<C, Params>
@@ -79,7 +81,7 @@ where
     Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
         + Debug,
 {
-    type NextMiddleware = TransferModule<C>;
+    type NextMiddleware = TransferModule<C, Params>;
 
     fn next_middleware(&self) -> &Self::NextMiddleware {
         &self.transfer_module

@@ -421,6 +421,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
+        None,
         Some(AA_PAYMENT_ADDRESS),
     )?;
     wait_for_packet_relay(
@@ -475,6 +476,7 @@ fn ibc_transfers() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
         Some(Duration::new(10, 0)),
+        None,
         None,
         None,
         Some(AA_PAYMENT_ADDRESS),
@@ -757,6 +759,7 @@ fn ibc_nft_transfers() -> Result<()> {
         Some(CHRISTEL_KEY),
         &port_id_namada,
         &channel_id_namada,
+        None,
         None,
         None,
         None,
@@ -2210,7 +2213,7 @@ fn ibc_shielded_recv_middleware_happy_flow() -> Result<()> {
         None,
         None,
         Some(&memo),
-        true,
+        Some(IBC_REFUND_TARGET_ALIAS),
     )?;
     wait_for_packet_relay(&hermes_dir, &port_id_gaia, &channel_id_gaia, &test)?;
 
@@ -2296,7 +2299,7 @@ fn ibc_shielded_recv_middleware_unhappy_flow() -> Result<()> {
         None,
         None,
         Some(&memo),
-        false,
+        None,
     )?;
     wait_for_packet_relay(&hermes_dir, &port_id_gaia, &channel_id_gaia, &test)?;
 
@@ -3720,7 +3723,7 @@ fn osmosis_xcs() -> Result<()> {
         None,
         None,
         None,
-        false,
+        None,
     )?;
     // Transfer Samoleans from Gaia
     transfer_from_cosmos(

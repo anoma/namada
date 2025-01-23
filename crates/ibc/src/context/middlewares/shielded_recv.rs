@@ -45,7 +45,8 @@ use crate::{Error, IbcCommonContext, IbcStorageContext, TokenTransferContext};
 pub struct ShieldedRecvModule<C, Params>
 where
     C: IbcCommonContext + Debug,
-    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
 {
     /// The next middleware module
     pub next: PacketForwardMiddleware<PfmTransferModule<C, Params>>,
@@ -54,7 +55,8 @@ where
 impl<C, Params> ShieldedRecvModule<C, Params>
 where
     C: IbcCommonContext + Debug,
-    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
 {
     fn insert_verifier(&self, address: Address) {
         self.next
@@ -78,7 +80,8 @@ where
 impl<C, Params> Debug for ShieldedRecvModule<C, Params>
 where
     C: IbcCommonContext + Debug,
-    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct(stringify!(ShieldedRecvModule))
@@ -91,13 +94,14 @@ from_middleware! {
     impl<C, Params> Module for ShieldedRecvModule<C, Params>
     where
         C: IbcCommonContext + Debug,
-        Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
+        Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage> + Debug,
 }
 
 impl<C, Params> MiddlewareModule for ShieldedRecvModule<C, Params>
 where
     C: IbcCommonContext + Debug,
-    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
 {
     type NextMiddleware = PacketForwardMiddleware<PfmTransferModule<C, Params>>;
 
@@ -176,7 +180,8 @@ impl ibc_middleware_overflow_receive::PacketMetadata
 impl<C, Params> OverflowRecvContext for ShieldedRecvModule<C, Params>
 where
     C: IbcCommonContext + Debug,
-    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
 {
     type Error = Error;
     type PacketMetadata = NamadaMemo<OsmosisSwapMemoData>;

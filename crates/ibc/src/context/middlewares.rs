@@ -46,7 +46,8 @@ where
 impl<C, Params> crate::ModuleWrapper for TransferMiddlewares<C, Params>
 where
     C: IbcCommonContext + Debug,
-    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
 {
     fn as_module(&self) -> &dyn Module {
         self
