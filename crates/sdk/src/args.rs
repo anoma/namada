@@ -2894,8 +2894,8 @@ pub struct KeyDerive {
     pub alias_force: bool,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
-    /// Use the modified ZIP 32 algorithm supported by Ledger devices
-    pub ledger_zip32: bool,
+    /// Use the deprecated pure ZIP 32 algorithm
+    pub unsafe_pure_zip32: bool,
     /// BIP44 / ZIP32 derivation path
     pub derivation_path: String,
     /// Allow non-compliant derivation path
