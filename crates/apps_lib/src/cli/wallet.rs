@@ -544,6 +544,21 @@ async fn transparent_key_and_address_derive(
     }
     let alias = alias.to_lowercase();
     let alias = if !use_device {
+        if let SchemeType::Ed25519 = scheme {
+            let default_path = DerivationPath::default_for_transparent_scheme(
+                SchemeType::Ed25519,
+            );
+            if derivation_path == default_path {
+                display_line!(
+                    io,
+                    "Path {} is not allowed for safety as it's used in \
+                     modified ZIP32 as a seed for deriving shielded keys.",
+                    default_path
+                );
+                display_line!(io, "No changes are persisted. Exiting.");
+                cli::safe_exit(1)
+            }
+        }
         let encryption_password =
             read_and_confirm_encryption_password(unsafe_dont_encrypt);
         wallet
