@@ -25,7 +25,7 @@ use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
 use masp_primitives::transaction::components::{I128Sum, ValueSum};
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{
-    ExtendedFullViewingKey, ExtendedKey,
+    ExtendedFullViewingKey,
     ExtendedSpendingKey as MaspExtendedSpendingKey, PseudoExtendedKey,
 };
 use masp_proofs::prover::LocalTxProver;
@@ -198,28 +198,41 @@ pub enum TransferErr {
 
 /// Freeze a Builder into the format necessary for inclusion in a Tx. This is
 /// the format used by hardware wallets to validate a MASP Transaction.
-pub struct WalletMap;
+pub struct WalletMap<K1, P: Copy, K2, N: Clone, F: Fn(&K1) -> K2> {
+    /// The parameters that will replace the previous ones
+    pub params: P,
+    /// The notifier that will replace the previous one
+    pub notifier: N,
+    /// The mapping between keys
+    pub keys: F,
+    /// Phantom data
+    pub phantom: std::marker::PhantomData<(K1, K2)>,
+}
 
-impl<P1>
+impl<P1, K1, P2: Copy, K2, N2: Clone, F: Fn(&K1) -> K2>
     masp_primitives::transaction::components::sapling::builder::MapBuilder<
         P1,
-        PseudoExtendedKey,
-        (),
-        ExtendedFullViewingKey,
-    > for WalletMap
+        K1,
+        P2,
+        K2,
+    > for WalletMap<K1, P2, K2, N2, F>
 {
-    fn map_params(&self, _s: P1) {}
+    fn map_params(&self, _s: P1) -> P2 {
+        self.params
+    }
 
-    fn map_key(&self, s: PseudoExtendedKey) -> ExtendedFullViewingKey {
-        s.to_viewing_key()
+    fn map_key(&self, s: K1) -> K2 {
+        (self.keys)(&s)
     }
 }
 
-impl<P1, N1>
-    MapBuilder<P1, PseudoExtendedKey, N1, (), ExtendedFullViewingKey, ()>
-    for WalletMap
+impl<P1, K1, N1, P2: Copy, K2, N2: Clone, F: Fn(&K1) -> K2>
+    MapBuilder<P1, K1, N1, P2, K2, N2>
+    for WalletMap<K1, P2, K2, N2, F>
 {
-    fn map_notifier(&self, _s: N1) {}
+    fn map_notifier(&self, _s: N1) -> N2 {
+        self.notifier.clone()
+    }
 }
 
 /// Abstracts platform specific details away from the logic of shielded pool

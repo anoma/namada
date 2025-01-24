@@ -323,6 +323,7 @@ impl TransparentTransfersRef<'_> {
 pub mod testing {
     use std::collections::BTreeMap;
     use std::sync::Mutex;
+    use std::marker::PhantomData;
 
     use masp_primitives::consensus::testing::arb_height;
     #[cfg(feature = "mainnet")]
@@ -336,7 +337,7 @@ pub mod testing {
     };
     use masp_primitives::transaction::components::{TxOut, U64Sum};
     use masp_primitives::transaction::fees::fixed::FeeRule;
-    use masp_primitives::zip32::PseudoExtendedKey;
+    use masp_primitives::zip32::{ExtendedKey, PseudoExtendedKey};
     use namada_core::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
@@ -515,7 +516,12 @@ pub mod testing {
             ).unwrap();
             transfer.shielded_section_hash = Some(masp_tx.txid().into());
             (transfer, ShieldedTransfer {
-                builder: builder.map_builder(WalletMap),
+                builder: builder.map_builder(WalletMap {
+                    notifier: (),
+                    params: (),
+                    keys: ExtendedKey::to_viewing_key,
+                    phantom: PhantomData,
+                }),
                 metadata,
                 masp_tx,
                 epoch,

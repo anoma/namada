@@ -2206,10 +2206,12 @@ mod test_signing {
     use core::str::FromStr;
     use std::collections::BTreeSet;
     use std::sync::Arc;
+    use std::marker::PhantomData;
 
     use assert_matches::assert_matches;
     use masp_primitives::consensus::BlockHeight;
     use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
+    use masp_primitives::zip32::sapling::{ExtendedKey, PseudoExtendedKey};
     use namada_core::chain::ChainId;
     use namada_core::hash::Hash;
     use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
@@ -2835,11 +2837,16 @@ mod test_signing {
             ])),
             asset_types: assets.clone(),
             metadata: SaplingMetadata::empty(),
-            builder: masp_primitives::transaction::builder::Builder::new(
+            builder: masp_primitives::transaction::builder::Builder::<_, PseudoExtendedKey>::new(
                 masp_primitives::consensus::TestNetwork,
                 BlockHeight::from_u32(1),
             )
-            .map_builder(WalletMap),
+                .map_builder(WalletMap {
+                    params: (),
+                    notifier: (),
+                    keys: ExtendedKey::to_viewing_key,
+                    phantom: PhantomData,
+                }),
         };
         tx.add_masp_builder(masp_builder);
 

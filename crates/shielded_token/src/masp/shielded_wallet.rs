@@ -1,5 +1,6 @@
 //! The shielded wallet implementation
 use std::collections::{btree_map, BTreeMap, BTreeSet};
+use std::marker::PhantomData;
 
 use eyre::{eyre, Context};
 use masp_primitives::asset_type::AssetType;
@@ -1335,7 +1336,12 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             return Err(TransferErr::InsufficientFunds(batch.into()));
         }
 
-        let builder_clone = builder.clone().map_builder(WalletMap);
+        let builder_clone = builder.clone().map_builder(WalletMap {
+            notifier: (),
+            params: (),
+            keys: ExtendedKey::to_viewing_key,
+            phantom: PhantomData,
+        });
         // Build and return the constructed transaction
         #[cfg(not(feature = "testing"))]
         let prover = self.utils.local_tx_prover();
