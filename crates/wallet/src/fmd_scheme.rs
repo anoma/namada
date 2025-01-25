@@ -57,8 +57,10 @@ impl ExtendedSeedKeyPair {
         let hash = Zeroizing::new({
             let mut hasher = sha2::Sha256::default();
             hasher.update(FMD_SCHEME_SEED_PREFIX);
-            hasher.update(viewing_key.to_bytes());
             hasher.update(diversifier.0);
+            // NB: hash the secret last to prevent
+            // length extension attacks on sha2
+            hasher.update(viewing_key.to_bytes());
             hasher.finalize().into()
         });
 
