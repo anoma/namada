@@ -9,6 +9,108 @@ Namada v1.0.0 is the first stable release of the Namada apps.
 - updated namada libraries to libs-v0.46.1
   ([\#4123](https://github.com/anoma/namada/pull/4123))
 
+## libs-v0.47.0
+
+Namada libs v0.47.0 release
+
+### BUG FIXES
+
+- Fixed a bug that was preventing generating wrapper signatures
+  offline. Removed a redundant `sign-tx` client command.
+  ([\#4120](https://github.com/anoma/namada/pull/4120))
+- Strengthen migration checks and ensure to update merkle tree during
+  migrations. The redundant `namadan update-db` command has been removed in the
+  process. ([\#4135](https://github.com/anoma/namada/pull/4135))
+- Fix unbonding period for IBC client
+  ([\#4142](https://github.com/anoma/namada/issues/4142))
+- Fixed a bug in the masp rewards estimation logic that was not correctly
+  accounting for native token rewards and rewards accrued by assets shielded
+  at the current epoch. Updated the API of the function to better suite some UI
+  needs. Improved testing ([\#4146](https://github.com/anoma/namada/pull/4146))
+- Fixed the apps version fallback for a build without git.
+  ([\#4224](https://github.com/anoma/namada/pull/4224))
+- Fixed running CometBFT as a validator when the Namada config `tendermint_mode`
+  is set to a non-validator mode. When the `tendermint_mode` changes
+  from a validator to non-validator mode, the node will replace and
+  backup the validator consensus key and state in the CometBFT directory.
+  ([\#4245](https://github.com/anoma/namada/pull/4245))
+- Support IBC signing on hardware wallets not supporting MASP
+  ([\#4251](https://github.com/anoma/namada/pull/4251))
+- The the swapped arguments in error message for a chained redelegation. Also
+  added the earliest redelegation epoch to help users determine when they can
+  redelegate again. ([\#4264](https://github.com/anoma/namada/pull/4264))
+- Fixed a wrong gas limit error message that was being
+  propagated when the transaction would go out of gas.
+  ([\#4269](https://github.com/anoma/namada/pull/4269))
+
+### CI
+
+- Add Ledger app unit tests to the Namada CI.
+  ([\#4140](https://github.com/anoma/namada/pull/4140))
+- Upgrade the CI to test against an unpatched Ledger Namada app v2.0.3.
+  ([\#4253](https://github.com/anoma/namada/pull/4253))
+
+### FEATURES
+
+- Implement compatibility with Strangelove's Packet Forward Middleware
+  in Namada, to allow forwarding ICS-20 packets over multiple chains.
+  ([\#4082](https://github.com/anoma/namada/pull/4082))
+- Integrate Namada and Osmosis, to allow swapping assets privately. Osmosis
+  is leveraged for its liquidity and DEX capabilities, while Namada is
+  leveraged for its shielded pool (i.e. MASP) and privacy guarantees.
+  ([\#4133](https://github.com/anoma/namada/pull/4133))
+- Disable validation of IBC ICS-20 receivers, while handling PFM packets.
+  ([\#4134](https://github.com/anoma/namada/pull/4134))
+
+### IMPROVEMENTS
+
+- Adds an SDK query for the active PGF fundings
+  ([\#4126](https://github.com/anoma/namada/pull/4126))
+- The display of a transaction's result now includes the result code
+  and avoids displaying the gas unless the transaction was successful.
+  Improved the display of a dry-run and aligned it with the former.
+  ([\#4182](https://github.com/anoma/namada/pull/4182))
+- Improve namadac next-epoch-info to also estimate how much time is left in the
+  current epoch. ([\#4205](https://github.com/anoma/namada/pull/4205))
+- Increase the allowed number of PGF targets in a single proposal from 20 to
+  10,000. ([\#4209](https://github.com/anoma/namada/pull/4209))
+- Turned `token::Amount::from_u128` into a const fn.
+  ([\#4220](https://github.com/anoma/namada/pull/4220))
+- Stop batching transactions that need to be signed on
+  the hardware wallet because these are not supported yet.
+  ([\#4228](https://github.com/anoma/namada/pull/4228))
+- Improved the staking rewards query to print last staked ratio.
+  ([\#4241](https://github.com/anoma/namada/pull/4241))
+- Added the possibility to query the IBC rate limit of a specified token.
+  ([\#4246](https://github.com/anoma/namada/pull/4246))
+- Make modified ZIP 32 derivations the default
+  ([\#4248](https://github.com/anoma/namada/issues/4248))
+- Improved the error message for a failed masp fee payment.
+  ([\#4271](https://github.com/anoma/namada/pull/4271))
+- Disallowed deriving ed25519 keys from the default HD path
+  that's used for deriving shielded keys with the newly default
+  modified ZIP32 to prevent accidental leak of these keys.
+  ([\#4272](https://github.com/anoma/namada/pull/4272))
+
+### MISCELLANEOUS
+
+- Inline borsh-ext crate function in namada_core crate.
+  ([\#4177](https://github.com/anoma/namada/pull/4177))
+
+### SDK
+
+- Allow MASP transaction building without knowledge of the spend authorization
+  key. ([\#4127](https://github.com/anoma/namada/pull/4127))
+- Added a fn to query PoS rewards to the SDK.
+  ([\#4213](https://github.com/anoma/namada/pull/4213))
+- Moved the signature generation logic for offline signing to the SDK.
+  ([\#4234](https://github.com/anoma/namada/pull/4234))
+
+### TESTING
+
+- Added tests for MASP inverse conversions.
+  ([\#4193](https://github.com/anoma/namada/pull/4193))
+
 ## libs-v0.46.1
 
 Namada 0.46.1 is a libaries patch release containing couple improvements and a bug fix in preparetion for a stable apps release.
