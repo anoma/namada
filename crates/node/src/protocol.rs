@@ -613,10 +613,10 @@ where
                         // process_proposal.
                         tracing::error!(
                             "Transfer of tx fee cannot be applied because of \
-                             {}. This shouldn't happen.",
+                             an error: {}. This shouldn't happen.",
                             e
                         );
-                        return Err(e);
+                        return Err(e.into());
                     }
                 }
             };
@@ -669,6 +669,45 @@ where
     }
 }
 
+/// Custom wrapper type for masp fee payment errors. The purpose of this type is
+/// to prepend errors with some masp fee payment string to ensure that the
+/// messages we produce are not misleading
+pub struct MaspFeeError(Error);
+
+impl Display for MaspFeeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", Error::from(self))
+    }
+}
+
+impl From<&MaspFeeError> for Error {
+    fn from(value: &MaspFeeError) -> Self {
+        let msg = match &value.0 {
+            // Destructure the error to avoid nesting a FeeError into another
+            // instance of itself, which would produce a duplicated message
+            Error::FeeError(inner_msg) => inner_msg,
+            error => &error.to_string(),
+        };
+
+        Self::FeeError(format!(
+            "The transparent balance of the fee payer was insufficient to pay \
+             fees. The protocol tried to run the first transaction in the \
+             batch to pay fees via the MASP but it failed: {msg}",
+        ))
+    }
+}
+
+impl From<MaspFeeError> for Error {
+    fn from(value: MaspFeeError) -> Self {
+        Self::from(&value)
+    }
+}
+
+impl From<Error> for MaspFeeError {
+    fn from(value: Error) -> Self {
+        Self(value)
+    }
+}
 fn try_masp_fee_payment<S, D, H, CA>(
     ShellParams {
         tx_gas_meter,
@@ -678,7 +717,7 @@ fn try_masp_fee_payment<S, D, H, CA>(
     }: &mut ShellParams<'_, S, D, H, CA>,
     tx: &Tx,
     tx_index: &TxIndex,
-) -> Result<MaspTxResult>
+) -> std::result::Result<MaspTxResult, MaspFeeError>
 where
     S: 'static
         + State<D = D, H = H>
@@ -690,9 +729,6 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    const MASP_FEE_PAYMENT_ERROR: &str =
-        "The first transaction in the batch failed to pay fees via the MASP.";
-
     // The fee payment is subject to a gas limit imposed by a protocol
     // parameter. Here we instantiate a custom gas meter for this step where the
     // gas limit is actually the lowest between the protocol parameter and the
@@ -759,27 +795,24 @@ where
                 } else {
                     state.write_log_mut().drop_tx();
 
-                    let mut error_msg = MASP_FEE_PAYMENT_ERROR.to_string();
-                    if !is_masp_transfer {
-                        error_msg.push_str(" Not a MASP transaction.");
-                    }
-                    if !result.is_accepted() {
-                        error_msg = format!(
-                            "{error_msg} Some VPs rejected it: {:#?}",
+                    let error_msg = if !is_masp_transfer {
+                        "Not a MASP transaction.".to_string()
+                    } else {
+                        format!(
+                            "Some VPs rejected it: {:#?}",
                             result.vps_result.rejected_vps
-                        );
-                    }
+                        )
+                    };
                     tracing::error!(error_msg);
 
-                    return Err(Error::FeeError(error_msg));
+                    return Err(Error::FeeError(error_msg).into());
                 }
             }
             Err(e) => {
                 state.write_log_mut().drop_tx();
-                let error_msg =
-                    format!("{MASP_FEE_PAYMENT_ERROR} Wasm run failed: {}", e);
+                let error_msg = format!("Wasm run failed: {}", e);
                 tracing::error!(error_msg);
-                return Err(Error::FeeError(error_msg));
+                return Err(Error::FeeError(error_msg).into());
             }
         }
     };
@@ -902,12 +935,13 @@ where
 
                     checked!(balance - fees).map_or_else(
                         |_| {
-                            Err(Error::FeeError(format!(
+                            Err(MaspFeeError::from(Error::FeeError(format!(
                                 "Masp fee payment unshielded an insufficient \
-                                 amount: Balance after unshielding: {balance} \
-                                 {}; required {fees}",
+                                 amount. Balance after unshielding: {balance} \
+                                 {}, required {fees}",
                                 wrapper.fee.token
                             )))
+                            .into())
                         },
                         |_| Ok(Some(valid_batched_tx_result)),
                     )
