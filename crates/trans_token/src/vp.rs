@@ -449,9 +449,11 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let BatchedTx { tx, cmt } = dummy_tx(&state);
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
@@ -496,9 +498,11 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let BatchedTx { tx, cmt } = dummy_tx(&state);
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let verifiers = BTreeSet::new();
         let ctx = Ctx::new(
@@ -560,9 +564,11 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let BatchedTx { tx, cmt } = dummy_tx(&state);
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         // for the minter
@@ -628,9 +634,11 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let BatchedTx { tx, cmt } = dummy_tx(&state);
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         // for the minter
@@ -687,9 +695,11 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let BatchedTx { tx, cmt } = dummy_tx(&state);
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let verifiers = BTreeSet::new();
         let ctx = Ctx::new(
@@ -751,9 +761,11 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let BatchedTx { tx, cmt } = dummy_tx(&state);
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         // for the minter
@@ -797,9 +809,11 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let BatchedTx { tx, cmt } = dummy_tx(&state);
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         // for the minter
@@ -846,9 +860,11 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let BatchedTx { tx, cmt } = dummy_tx(&state);
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let verifiers = BTreeSet::new();
         let ctx = Ctx::new(
@@ -887,9 +903,11 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let BatchedTx { tx, cmt } = dummy_tx(&state);
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
@@ -936,9 +954,11 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let BatchedTx { tx, cmt } = dummy_tx(&state);
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
@@ -984,9 +1004,11 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let BatchedTx { tx, cmt } = dummy_tx(&state);
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
@@ -1031,9 +1053,11 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let BatchedTx { tx, cmt } = dummy_tx(&state);
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
@@ -1084,9 +1108,11 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let BatchedTx { tx, cmt } = dummy_tx(&state);
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
@@ -1128,9 +1154,11 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let BatchedTx { tx, cmt } = dummy_tx(&state);
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
-        ));
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
 
         let parties = BTreeSet::from([src1, dest1, src2, dest2]);

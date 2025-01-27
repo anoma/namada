@@ -42,7 +42,8 @@ where
                     .gas_limit
                     .as_scaled_gas(gas_scale)
                     .into_storage_result()?;
-                let tx_gas_meter = RefCell::new(TxGasMeter::new(gas_limit));
+                let tx_gas_meter =
+                    RefCell::new(TxGasMeter::new(gas_limit, gas_scale));
                 let mut shell_params = ShellParams::new(
                     &tx_gas_meter,
                     &mut state,
@@ -73,7 +74,7 @@ where
                 (
                     None,
                     TxResult::default().to_extended_result(None),
-                    RefCell::new(TxGasMeter::new(gas_limit)),
+                    RefCell::new(TxGasMeter::new(gas_limit, gas_scale)),
                 )
             }
         };

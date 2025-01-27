@@ -883,7 +883,10 @@ pub mod testing {
                 // Reset the gas meter on each change, so that we never run
                 // out in this test
                 let gas_limit = env.gas_meter.borrow().tx_gas_limit.clone();
-                env.gas_meter = RefCell::new(TxGasMeter::new(gas_limit));
+                env.gas_meter = RefCell::new(TxGasMeter::new(
+                    gas_limit,
+                    namada_sdk::parameters::get_gas_scale(tx::ctx()).unwrap(),
+                ));
                 env.state.in_mem().block.epoch
             });
             println!("Current epoch {}", current_epoch);
