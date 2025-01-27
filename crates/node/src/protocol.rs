@@ -712,6 +712,7 @@ where
         Gas::from_whole_units(max_gas_limit.into(), gas_scale).ok_or_else(
             || Error::GasError("Overflow in gas expansion".to_string()),
         )?,
+        gas_scale,
     ));
 
     let valid_batched_tx_result = {
@@ -1624,7 +1625,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         // gas meter with no gas left
-        let gas_meter = TxGasMeter::new(0);
+        let gas_meter = TxGasMeter::new(0, get_gas_scale(&state).unwrap());
 
         let batched_tx = dummy_tx.batch_ref_first_tx().unwrap();
         let result = execute_vps(
@@ -1679,7 +1680,10 @@ mod tests {
                             &addr,
                             &state,
                             &RefCell::new(VpGasMeter::new_from_tx_meter(
-                                &TxGasMeter::new(u64::MAX),
+                                &TxGasMeter::new(
+                                    u64::MAX,
+                                    get_gas_scale(&state).unwrap()
+                                ),
                             )),
                             &Default::default(),
                             &Default::default(),
@@ -1705,7 +1709,10 @@ mod tests {
                         &addr,
                         &state,
                         &RefCell::new(VpGasMeter::new_from_tx_meter(
-                            &TxGasMeter::new(u64::MAX,)
+                            &TxGasMeter::new(
+                                u64::MAX,
+                                get_gas_scale(&state).unwrap()
+                            )
                         )),
                         &Default::default(),
                         &Default::default(),

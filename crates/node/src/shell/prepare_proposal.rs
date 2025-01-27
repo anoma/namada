@@ -307,7 +307,7 @@ where
     let gas_scale = get_gas_scale(temp_state).map_err(|_| ())?;
     let gas_limit =
         wrapper.gas_limit.as_scaled_gas(gas_scale).map_err(|_| ())?;
-    let mut tx_gas_meter = TxGasMeter::new(gas_limit);
+    let mut tx_gas_meter = TxGasMeter::new(gas_limit, gas_scale);
     tx_gas_meter.add_wrapper_gas(tx_bytes).map_err(|_| ())?;
 
     super::replay_protection_checks(&tx, temp_state).map_err(|_| ())?;

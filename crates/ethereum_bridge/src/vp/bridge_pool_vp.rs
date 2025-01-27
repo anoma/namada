@@ -1001,7 +1001,7 @@ mod test_bridge_pool_vp {
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
+            &TxGasMeter::new(u64::MAX, 1),
         ));
         let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
@@ -1357,7 +1357,7 @@ mod test_bridge_pool_vp {
 
         // create the data to be given to the vp
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
+            &TxGasMeter::new(u64::MAX, 1),
         ));
         let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
@@ -1415,7 +1415,7 @@ mod test_bridge_pool_vp {
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
+            &TxGasMeter::new(u64::MAX, 1),
         ));
         let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
@@ -1494,7 +1494,7 @@ mod test_bridge_pool_vp {
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
+            &TxGasMeter::new(u64::MAX, 1),
         ));
         let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
@@ -1568,7 +1568,7 @@ mod test_bridge_pool_vp {
 
         // create the data to be given to the vp
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
+            &TxGasMeter::new(u64::MAX, 1),
         ));
         let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
@@ -1659,7 +1659,7 @@ mod test_bridge_pool_vp {
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
+            &TxGasMeter::new(u64::MAX, 1),
         ));
         let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
@@ -1736,7 +1736,7 @@ mod test_bridge_pool_vp {
         // create the data to be given to the vp
         let verifiers = BTreeSet::default();
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new(u64::MAX),
+            &TxGasMeter::new(u64::MAX, 1),
         ));
         let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
