@@ -26,7 +26,7 @@ pub enum DerivationPathError {
 }
 
 /// A key derivation path
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DerivationPath(DerivationPathInner);
 
 impl DerivationPath {
