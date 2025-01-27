@@ -681,7 +681,7 @@ fn transparent_key_and_address_gen(
                         io,
                         "Path {} is also used in modified ZIP32 as a seed for \
                          deriving shielded keys. Because you requested to \
-                         store this key unecrypted, this may inadvertently \
+                         store this key unencrypted, this may inadvertently \
                          expose the derived shielded key.",
                         default_path
                     );
