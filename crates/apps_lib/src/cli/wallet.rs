@@ -670,6 +670,24 @@ fn transparent_key_and_address_gen(
             display_line!(io, "No changes are persisted. Exiting.");
             cli::safe_exit(1)
         }
+        if unsafe_dont_encrypt {
+            if let SchemeType::Ed25519 = scheme {
+                let default_path =
+                    DerivationPath::default_for_transparent_scheme(
+                        SchemeType::Ed25519,
+                    );
+                if derivation_path == default_path {
+                    display_line!(
+                        io,
+                        "Path {} is also used in modified ZIP32 as a seed for \
+                         deriving shielded keys. Because you requested to \
+                         store this key unecrypted, this may inadvertently \
+                         expose the derived shielded key.",
+                        default_path
+                    );
+                }
+            }
+        }
         let (_mnemonic, seed) = Wallet::<CliWalletUtils>::gen_hd_seed(
             None,
             &mut OsRng,
