@@ -646,6 +646,11 @@ impl<U: WalletIo> Wallet<U> {
     /// provided, will prompt for password from stdin.
     /// Stores the key in decrypted key cache and returns the alias of the key
     /// and a reference-counting pointer to the key.
+    ///
+    /// Any usage of this function should be careful not expose a shielded key
+    /// that may be derived via modified ZIP32 from this key (specifically when
+    /// the scheme is Ed25519 with the default HD derivation path and no
+    /// encryption password is being used).
     #[allow(clippy::too_many_arguments)]
     pub fn derive_store_key_from_mnemonic_code(
         &mut self,
@@ -773,6 +778,11 @@ impl<U: WalletIo> Wallet<U> {
     /// without encryption.
     /// Stores the key in decrypted key cache and returns the alias of the key
     /// and the key itself.
+    ///
+    /// Any usage of this function should be careful not expose a shielded key
+    /// that may be derived via modified ZIP32 from this key (specifically when
+    /// the scheme is Ed25519 with the default HD derivation path and no
+    /// encryption password is being used).
     pub fn derive_store_hd_secret_key(
         &mut self,
         scheme: SchemeType,
