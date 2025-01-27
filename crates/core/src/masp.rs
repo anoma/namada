@@ -104,7 +104,7 @@ impl Display for MaspTxId {
     Serialize,
     Deserialize,
 )]
-pub struct MaspEpoch(pub Epoch);
+pub struct MaspEpoch(Epoch);
 
 impl Display for MaspEpoch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -133,6 +133,11 @@ impl MaspEpoch {
                 .checked_div(masp_epoch_multiplier)
                 .ok_or("Masp epoch multiplier cannot be 0")?,
         ))
+    }
+
+    /// Get the inner value
+    pub fn inner_epoch(&self) -> Epoch {
+        self.0
     }
 
     /// Returns a 0 masp epoch

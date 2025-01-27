@@ -2816,7 +2816,7 @@ pub async fn build_ibc_transfer(
                 context,
                 masp_transfer_data,
                 None,
-                args.tx.expiration.to_datetime(),
+                None,
                 bparams,
             )
             .await?

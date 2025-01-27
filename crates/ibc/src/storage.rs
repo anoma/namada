@@ -693,5 +693,5 @@ pub fn refund_masp_tx_key(
     epoch: MaspEpoch,
 ) -> Key {
     let prefix = refund_masp_tx_prefix(port_id, channel_id, sequence);
-    prefix.with_segment(epoch.0)
+    prefix.with_segment(epoch.inner_epoch())
 }
