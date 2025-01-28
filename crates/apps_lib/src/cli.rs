@@ -2049,7 +2049,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(wrap!(
-                    "Query the latest rewards available to claim for a given \
+                    "Query the rewards available to claim for a given \
                      delegation (or self-bond)."
                 ))
                 .add_args::<args::QueryRewards<args::CliTypes>>()
@@ -7341,7 +7341,11 @@ pub mod args {
                 )
                 .arg(EPOCH.def().help(wrap!(
                     "The epoch at which to query (corresponding to the last \
-                     committed block, if not specified)."
+                     committed block, if not specified). \
+                     \
+                     Note: when querying by epoch, this returns the accumulated \
+                     rewards that were available to claim at the start of the \
+                     epoch."
                 )))
         }
     }
