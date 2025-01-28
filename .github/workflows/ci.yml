@@ -547,6 +547,7 @@ jobs:
             /tmp/.*/logs/
             /tmp/.*/setup/validator-*/logs/
             /tmp/.*/setup/validator-*/e2e-test.*/*.toml
+            /tmp/.*/hermes/logs/
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 5
