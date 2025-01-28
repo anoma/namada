@@ -958,7 +958,7 @@ mod test {
                     _,
                     namada_parameters::Store<_>,
                     governance::Store<_>,
-                    namada_trans_token::Store<_>,
+                    namada_token::Store<_>,
                 >(
                     &mut client.state,
                     namada_proof_of_stake::OwnedPosParams::default(),
@@ -981,11 +981,9 @@ mod test {
             let native_token = client.state.get_native_token().unwrap();
             StorageWrite::write(
                 &mut client.state,
-                &storage::Key::from(
-                    namada_trans_token::storage_key::balance_key(
-                        &native_token,
-                        &delegator,
-                    ),
+                &namada_token::storage_key::balance_key(
+                    &native_token,
+                    &delegator,
                 ),
                 bond_amount,
             )
@@ -995,7 +993,7 @@ mod test {
             namada_proof_of_stake::bond_tokens::<
                 _,
                 governance::Store<_>,
-                namada_trans_token::Store<_>,
+                namada_token::Store<_>,
             >(
                 &mut client.state,
                 Some(&delegator),

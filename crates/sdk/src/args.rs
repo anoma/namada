@@ -101,8 +101,6 @@ pub trait NamadaTypes: Clone + std::fmt::Debug {
     type MaspIndexerAddress: Clone + std::fmt::Debug;
     /// Represents a block height
     type BlockHeight: Clone + std::fmt::Debug;
-    /// Represents an epoch
-    type Epoch: Clone + std::fmt::Debug;
 }
 
 /// The concrete types being used in Namada SDK
@@ -130,7 +128,6 @@ impl NamadaTypes for SdkTypes {
     type Data = Vec<u8>;
     type DatedSpendingKey = DatedSpendingKey;
     type DatedViewingKey = DatedViewingKey;
-    type Epoch = namada_core::chain::Epoch;
     type EthereumAddress = ();
     type Keypair = namada_core::key::common::SecretKey;
     type MaspIndexerAddress = String;
@@ -2549,7 +2546,7 @@ pub struct QueryRewards<C: NamadaTypes = SdkTypes> {
     /// Address of the validator
     pub validator: C::Address,
     /// Epoch in which to find rewards
-    pub epoch: Option<C::Epoch>,
+    pub epoch: Option<Epoch>,
 }
 
 /// Query PoS delegations
