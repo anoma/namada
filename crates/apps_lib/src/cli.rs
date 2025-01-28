@@ -7574,7 +7574,6 @@ pub mod args {
         type Data = PathBuf;
         type DatedSpendingKey = WalletDatedSpendingKey;
         type DatedViewingKey = WalletDatedViewingKey;
-        type Epoch = Epoch;
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
         type MaspIndexerAddress = String;
