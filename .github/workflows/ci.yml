@@ -520,7 +520,7 @@ jobs:
           mv hermes /usr/local/bin
       - name: (test) Install libssl1.1
         run: |
-          curl -O libssl1.1.deb -LO http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.23_amd64.deb
+          curl -o libssl1.1.deb -LO http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.23_amd64.deb
           dpkg -i libssl1.1.deb
       - name: Change permissions
         run: |
