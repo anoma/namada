@@ -17,10 +17,10 @@ use namada_core::address::{self, Address};
 use namada_core::arith::{checked, CheckedAdd, CheckedSub};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashSet;
-use namada_core::masp::{addr_taddr, encode_asset_type, MaspEpoch, TAddrData};
+use namada_core::masp::{addr_taddr, encode_asset_type, encode_reward_asset_types, MaspEpoch, TAddrData};
 use namada_core::storage::Key;
 use namada_core::token;
-use namada_core::token::{Amount, MaspDigitPos};
+use namada_core::token::{NATIVE_MAX_DECIMAL_PLACES, Amount, MaspDigitPos};
 use namada_core::uint::I320;
 use namada_state::{
     ConversionState, OptionExt, ReadConversionState, ResultExt,
@@ -32,7 +32,7 @@ use namada_vp_env::{Error, Result, VpEnv};
 use crate::storage_key::{
     is_masp_key, is_masp_nullifier_key, is_masp_token_map_key,
     is_masp_transfer_key, masp_commitment_anchor_key, masp_commitment_tree_key,
-    masp_convert_anchor_key, masp_nullifier_key,
+    masp_convert_anchor_key, masp_nullifier_key, masp_reward_balance_key,
 };
 use crate::validation::verify_shielded_tx;
 
@@ -356,6 +356,14 @@ where
                 Self::apply_balance_change(ctx, acc, account)
             })?;
 
+        // Also record the decodings for native tokens to facilitate claiming
+        // rewards
+        unepoched_tokens(
+            &ctx.get_native_token()?,
+            NATIVE_MAX_DECIMAL_PLACES.into(),
+            &mut changed_balances.tokens,
+        )?;
+
         let ibc_addr = TAddrData::Addr(address::IBC);
         // Enable decoding the IBC address hash
         changed_balances
@@ -479,7 +487,8 @@ where
 
         // Checks on the transparent bundle, if present
         let mut changed_bals_minus_txn = changed_balances.clone();
-        validate_transparent_bundle(
+        Self::validate_transparent_bundle(
+            ctx,
             &shielded_tx,
             &mut changed_bals_minus_txn,
             masp_epoch,
@@ -603,6 +612,261 @@ where
         // Verify the proofs
         verify_shielded_tx(&shielded_tx, |gas| ctx.charge_gas(gas))
     }
+
+    fn validate_transparent_input<A: Authorization>(
+        ctx: &'ctx CTX,
+        vin: &TxIn<A>,
+        changed_balances: &mut ChangedBalances,
+        transparent_tx_pool: &mut I128Sum,
+        epoch: MaspEpoch,
+        conversion_state: &ConversionState,
+        authorizers: &mut BTreeSet<TransparentAddress>,
+        reward_balance: &mut Amount,
+    ) -> Result<()> {
+        // A decrease in the balance of an account needs to be
+        // authorized by the account of this transparent input
+        authorizers.insert(vin.address);
+        // Non-masp sources add to the transparent tx pool
+        *transparent_tx_pool = transparent_tx_pool
+            .checked_add(
+                &I128Sum::from_nonnegative(vin.asset_type, i128::from(vin.value))
+                    .ok()
+                    .ok_or_err_msg("invalid value or asset type for amount")?,
+            )
+            .ok_or_err_msg("Overflow in input sum")?;
+
+        let bal_ref = changed_balances
+            .pre
+            .entry(vin.address)
+            .or_insert(ValueSum::zero());
+
+        match conversion_state.assets.get(&vin.asset_type) {
+            // Note how the asset's epoch must be equal to the present: users
+            // must never be allowed to backdate transparent inputs to a
+            // transaction for they would then be able to claim rewards while
+            // locking their assets for negligible time periods.
+            Some(asset) if asset.epoch == epoch => {
+                let amount = token::Amount::from_masp_denominated(
+                    vin.value,
+                    asset.digit_pos,
+                );
+                *bal_ref = bal_ref
+                    .checked_sub(&ValueSum::from_pair(asset.token.clone(), amount))
+                    .ok_or_else(|| {
+                        Error::new_const("Underflow in bundle balance")
+                    })?;
+            }
+            // Maybe the asset type has no attached epoch
+            None if changed_balances.tokens.contains_key(&vin.asset_type) => {
+                let (token, denom, digit) =
+                    &changed_balances.tokens[&vin.asset_type];
+                // Determine what the asset type would be if it were epoched
+                let epoched_asset_type =
+                    encode_asset_type(token.clone(), *denom, *digit, Some(epoch))
+                    .wrap_err("unable to create asset type")?;
+                if conversion_state.assets.contains_key(&epoched_asset_type) {
+                    // If such an epoched asset type is available in the
+                    // conversion tree, then we must reject the unepoched
+                    // variant
+                    let error =
+                        Error::new_const("epoch is missing from asset type");
+                    tracing::debug!("{error}");
+                    return Err(error);
+                } else {
+                    // Otherwise note the contribution to this transparent input.
+                    // This branch represents the case of an asset not being part
+                    // of the conversion tree: the asset can carry no epoch at all
+                    // or any epoch (even a future one). Given the way we construct
+                    // conversions it's not an issue if we later add it to the
+                    // conversion tree: if the epoch preceeds the one at which we
+                    // start computing rewards or is missing, then this asset will
+                    // not be entitled. If it had instead been constructed with a
+                    // future epoch that matches or follows the one at which we
+                    // start giving out rewards, then it will be entitled (and
+                    // there's no issue with that since it was clearly in the pool
+                    // even before that time)
+                    let amount =
+                        token::Amount::from_masp_denominated(vin.value, *digit);
+                    *bal_ref = bal_ref
+                        .checked_sub(&ValueSum::from_pair(token.clone(), amount))
+                        .ok_or_else(|| {
+                            Error::new_const("Underflow in bundle balance")
+                        })?;
+                }
+            }
+            // unrecognized asset
+            _ => {
+                let error = Error::new_const("Unable to decode asset type");
+                tracing::debug!("{error}");
+                return Err(error);
+            }
+        };
+        // If this input is a reward asset, then increase the reward balance
+        let reward_assets = encode_reward_asset_types(&ctx.get_native_token()?)
+            .wrap_err("unable to create reward asset typess")?;
+        for digit in MaspDigitPos::iter() {
+            if vin.asset_type == reward_assets[digit as usize] {
+                let change =
+                    token::Amount::from_masp_denominated(vin.value, digit);
+                checked!((*reward_balance) += change)?;
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_transparent_output(
+        ctx: &'ctx CTX,
+        out: &TxOut,
+        changed_balances: &mut ChangedBalances,
+        transparent_tx_pool: &mut I128Sum,
+        epoch: MaspEpoch,
+        conversion_state: &ConversionState,
+        reward_balance: &mut Amount,
+    ) -> Result<()> {
+        // Non-masp destinations subtract from transparent tx pool
+        *transparent_tx_pool = transparent_tx_pool
+            .checked_sub(
+                &I128Sum::from_nonnegative(out.asset_type, i128::from(out.value))
+                    .ok()
+                    .ok_or_err_msg("invalid value or asset type for amount")?,
+            )
+            .ok_or_err_msg("Underflow in output subtraction")?;
+
+        let bal_ref = changed_balances
+            .post
+            .entry(out.address)
+            .or_insert(ValueSum::zero());
+        
+        match conversion_state.assets.get(&out.asset_type) {
+            Some(asset) if asset.epoch <= epoch => {
+                let amount = token::Amount::from_masp_denominated(
+                    out.value,
+                    asset.digit_pos,
+                );
+                *bal_ref = bal_ref
+                    .checked_sub(&ValueSum::from_pair(asset.token.clone(), amount))
+                    .ok_or_else(|| {
+                        Error::new_const("Underflow in bundle balance")
+                    })?;
+            }
+            // Maybe the asset type has no attached epoch
+            None if changed_balances.tokens.contains_key(&out.asset_type) =>
+            {
+                // Otherwise note the contribution to this transparent output
+                let (token, _denom, digit) = &changed_balances.tokens[&out.asset_type];
+                let amount =
+                    token::Amount::from_masp_denominated(out.value, *digit);
+                *bal_ref = bal_ref
+                    .checked_sub(&ValueSum::from_pair(token.clone(), amount))
+                    .ok_or_else(|| {
+                        Error::new_const("Underflow in bundle balance")
+                    })?;
+            }
+            // unrecognized asset
+            _ => {
+                let error = Error::new_const("Unable to decode asset type");
+                tracing::debug!("{error}");
+                return Err(error);
+            }
+        };
+
+        // If this output is a reward asset, then reduce the reward balance
+        let reward_assets = encode_reward_asset_types(&ctx.get_native_token()?)
+            .wrap_err("unable to create reward asset typess")?;
+        for digit in MaspDigitPos::iter() {
+            if out.asset_type == reward_assets[digit as usize] {
+                let change =
+                    token::Amount::from_masp_denominated(out.value, digit);
+                checked!((*reward_balance) -= change)?;
+                break;
+            }
+        }
+        
+        Ok(())
+    }
+
+    // Update the transaction value pool and also ensure that the Transaction is
+    // consistent with the balance changes. I.e. the transparent inputs are not more
+    // than the initial balances and that the transparent outputs are not more than
+    // the final balances. Also ensure that the sapling value balance is exactly 0.
+    fn validate_transparent_bundle(
+        ctx: &'ctx CTX,
+        shielded_tx: &Transaction,
+        changed_balances: &mut ChangedBalances,
+        epoch: MaspEpoch,
+        conversion_state: &ConversionState,
+        authorizers: &mut BTreeSet<TransparentAddress>,
+    ) -> Result<()> {
+        // The Sapling value balance adds to the transparent tx pool
+        let mut transparent_tx_pool = shielded_tx.sapling_value_balance();
+
+        let mut pre_reward_balance: Amount =
+            ctx.read_pre(&masp_reward_balance_key())?.unwrap_or_default();
+        let post_reward_balance: Amount =
+            ctx.read_post(&masp_reward_balance_key())?.unwrap_or_default();
+
+        if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
+            for vin in transp_bundle.vin.iter() {
+                Self::validate_transparent_input(
+                    ctx,
+                    vin,
+                    changed_balances,
+                    &mut transparent_tx_pool,
+                    epoch,
+                    conversion_state,
+                    authorizers,
+                    &mut pre_reward_balance,
+                )?;
+            }
+
+            for out in transp_bundle.vout.iter() {
+                Self::validate_transparent_output(
+                    ctx,
+                    out,
+                    changed_balances,
+                    &mut transparent_tx_pool,
+                    epoch,
+                    conversion_state,
+                    &mut pre_reward_balance,
+                )?;
+            }
+        }
+
+        // Ensure that the reward balance is updated correctly by the inputs and
+        // outputs
+        if pre_reward_balance != post_reward_balance {
+            let error = Error::new_const(
+                "The change in reward balance must equal the net unepoched \
+                 native tokens unshielded by this transaction.",
+            );
+            tracing::debug!("{error}");
+            return Err(error);
+        }
+
+        // Ensure that the shielded transaction exactly balances
+        match transparent_tx_pool.partial_cmp(&I128Sum::zero()) {
+            None | Some(Ordering::Less) => {
+                let error = Error::new_const(
+                    "Transparent transaction value pool must be nonnegative. \
+                     Violation may be caused by transaction being constructed in \
+                     previous epoch. Maybe try again.",
+                );
+                tracing::debug!("{error}");
+                // The remaining value in the transparent transaction value pool
+                // MUST be nonnegative.
+                Err(error)
+            }
+            Some(Ordering::Greater) => {
+                let error = Error::new_const(
+                    "Transaction fees cannot be left on the MASP balance.",
+                );
+                tracing::debug!("{error}");
+                Err(error)
+            }
+            _ => Ok(()),
+        }
+    }
 }
 
 // Make a map to help recognize asset types lacking an epoch
@@ -620,212 +884,6 @@ fn unepoched_tokens(
         tokens.insert(asset_type, (token.clone(), denom, digit));
     }
     Ok(())
-}
-
-fn validate_transparent_input<A: Authorization>(
-    vin: &TxIn<A>,
-    changed_balances: &mut ChangedBalances,
-    transparent_tx_pool: &mut I128Sum,
-    epoch: MaspEpoch,
-    conversion_state: &ConversionState,
-    authorizers: &mut BTreeSet<TransparentAddress>,
-) -> Result<()> {
-    // A decrease in the balance of an account needs to be
-    // authorized by the account of this transparent input
-    authorizers.insert(vin.address);
-    // Non-masp sources add to the transparent tx pool
-    *transparent_tx_pool = transparent_tx_pool
-        .checked_add(
-            &I128Sum::from_nonnegative(vin.asset_type, i128::from(vin.value))
-                .ok()
-                .ok_or_err_msg("invalid value or asset type for amount")?,
-        )
-        .ok_or_err_msg("Overflow in input sum")?;
-
-    let bal_ref = changed_balances
-        .pre
-        .entry(vin.address)
-        .or_insert(ValueSum::zero());
-
-    match conversion_state.assets.get(&vin.asset_type) {
-        // Note how the asset's epoch must be equal to the present: users
-        // must never be allowed to backdate transparent inputs to a
-        // transaction for they would then be able to claim rewards while
-        // locking their assets for negligible time periods.
-        Some(asset) if asset.epoch == epoch => {
-            let amount = token::Amount::from_masp_denominated(
-                vin.value,
-                asset.digit_pos,
-            );
-            *bal_ref = bal_ref
-                .checked_sub(&ValueSum::from_pair(asset.token.clone(), amount))
-                .ok_or_else(|| {
-                    Error::new_const("Underflow in bundle balance")
-                })?;
-        }
-        // Maybe the asset type has no attached epoch
-        None if changed_balances.tokens.contains_key(&vin.asset_type) => {
-            let (token, denom, digit) =
-                &changed_balances.tokens[&vin.asset_type];
-            // Determine what the asset type would be if it were epoched
-            let epoched_asset_type =
-                encode_asset_type(token.clone(), *denom, *digit, Some(epoch))
-                    .wrap_err("unable to create asset type")?;
-            if conversion_state.assets.contains_key(&epoched_asset_type) {
-                // If such an epoched asset type is available in the
-                // conversion tree, then we must reject the unepoched
-                // variant
-                let error =
-                    Error::new_const("epoch is missing from asset type");
-                tracing::debug!("{error}");
-                return Err(error);
-            } else {
-                // Otherwise note the contribution to this transparent input.
-                // This branch represents the case of an asset not being part
-                // of the conversion tree: the asset can carry no epoch at all
-                // or any epoch (even a future one). Given the way we construct
-                // conversions it's not an issue if we later add it to the
-                // conversion tree: if the epoch preceeds the one at which we
-                // start computing rewards or is missing, then this asset will
-                // not be entitled. If it had instead been constructed with a
-                // future epoch that matches or follows the one at which we
-                // start giving out rewards, then it will be entitled (and
-                // there's no issue with that since it was clearly in the pool
-                // even before that time)
-                let amount =
-                    token::Amount::from_masp_denominated(vin.value, *digit);
-                *bal_ref = bal_ref
-                    .checked_sub(&ValueSum::from_pair(token.clone(), amount))
-                    .ok_or_else(|| {
-                        Error::new_const("Underflow in bundle balance")
-                    })?;
-            }
-        }
-        // unrecognized asset
-        _ => {
-            let error = Error::new_const("Unable to decode asset type");
-            tracing::debug!("{error}");
-            return Err(error);
-        }
-    };
-    Ok(())
-}
-
-fn validate_transparent_output(
-    out: &TxOut,
-    changed_balances: &mut ChangedBalances,
-    transparent_tx_pool: &mut I128Sum,
-    epoch: MaspEpoch,
-    conversion_state: &ConversionState,
-) -> Result<()> {
-    // Non-masp destinations subtract from transparent tx pool
-    *transparent_tx_pool = transparent_tx_pool
-        .checked_sub(
-            &I128Sum::from_nonnegative(out.asset_type, i128::from(out.value))
-                .ok()
-                .ok_or_err_msg("invalid value or asset type for amount")?,
-        )
-        .ok_or_err_msg("Underflow in output subtraction")?;
-
-    let bal_ref = changed_balances
-        .post
-        .entry(out.address)
-        .or_insert(ValueSum::zero());
-
-    match conversion_state.assets.get(&out.asset_type) {
-        Some(asset) if asset.epoch <= epoch => {
-            let amount = token::Amount::from_masp_denominated(
-                out.value,
-                asset.digit_pos,
-            );
-            *bal_ref = bal_ref
-                .checked_sub(&ValueSum::from_pair(asset.token.clone(), amount))
-                .ok_or_else(|| {
-                    Error::new_const("Underflow in bundle balance")
-                })?;
-        }
-        // Maybe the asset type has no attached epoch
-        None if changed_balances.tokens.contains_key(&out.asset_type) => {
-            // Otherwise note the contribution to this transparent output
-            let (token, _denom, digit) =
-                &changed_balances.tokens[&out.asset_type];
-            let amount =
-                token::Amount::from_masp_denominated(out.value, *digit);
-            *bal_ref = bal_ref
-                .checked_sub(&ValueSum::from_pair(token.clone(), amount))
-                .ok_or_else(|| {
-                    Error::new_const("Underflow in bundle balance")
-                })?;
-        }
-        // unrecognized asset
-        _ => {
-            let error = Error::new_const("Unable to decode asset type");
-            tracing::debug!("{error}");
-            return Err(error);
-        }
-    };
-    Ok(())
-}
-
-// Update the transaction value pool and also ensure that the Transaction is
-// consistent with the balance changes. I.e. the transparent inputs are not more
-// than the initial balances and that the transparent outputs are not more than
-// the final balances. Also ensure that the sapling value balance is exactly 0.
-fn validate_transparent_bundle(
-    shielded_tx: &Transaction,
-    changed_balances: &mut ChangedBalances,
-    epoch: MaspEpoch,
-    conversion_state: &ConversionState,
-    authorizers: &mut BTreeSet<TransparentAddress>,
-) -> Result<()> {
-    // The Sapling value balance adds to the transparent tx pool
-    let mut transparent_tx_pool = shielded_tx.sapling_value_balance();
-
-    if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
-        for vin in transp_bundle.vin.iter() {
-            validate_transparent_input(
-                vin,
-                changed_balances,
-                &mut transparent_tx_pool,
-                epoch,
-                conversion_state,
-                authorizers,
-            )?;
-        }
-
-        for out in transp_bundle.vout.iter() {
-            validate_transparent_output(
-                out,
-                changed_balances,
-                &mut transparent_tx_pool,
-                epoch,
-                conversion_state,
-            )?;
-        }
-    }
-
-    // Ensure that the shielded transaction exactly balances
-    match transparent_tx_pool.partial_cmp(&I128Sum::zero()) {
-        None | Some(Ordering::Less) => {
-            let error = Error::new_const(
-                "Transparent transaction value pool must be nonnegative. \
-                 Violation may be caused by transaction being constructed in \
-                 previous epoch. Maybe try again.",
-            );
-            tracing::debug!("{error}");
-            // The remaining value in the transparent transaction value pool
-            // MUST be nonnegative.
-            Err(error)
-        }
-        Some(Ordering::Greater) => {
-            let error = Error::new_const(
-                "Transaction fees cannot be left on the MASP balance.",
-            );
-            tracing::debug!("{error}");
-            Err(error)
-        }
-        _ => Ok(()),
-    }
 }
 
 // Apply the given Sapling value balance component to the accumulator

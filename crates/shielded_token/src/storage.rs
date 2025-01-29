@@ -65,7 +65,12 @@ where
     let total_rewards_key = masp_total_rewards();
     let mut total_rewards = read_total_rewards(storage)?;
     checked!(total_rewards += amount)?;
-    storage.write(&total_rewards_key, total_rewards)
+    storage.write(&total_rewards_key, total_rewards)?;
+
+    let reward_balance_key = masp_reward_balance_key();
+    let mut reward_balance = read_reward_balance(storage)?;
+    checked!(reward_balance += amount)?;
+    storage.write(&reward_balance_key, reward_balance)
 }
 
 /// Read the total rewards minted by MASP.
@@ -77,6 +82,17 @@ where
     let total_rewards: token::Amount =
         storage.read(&total_rewards_key)?.unwrap_or_default();
     Ok(total_rewards)
+}
+
+/// Read the total rewards minted by MASP.
+pub fn read_reward_balance<S>(storage: &S) -> Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let reward_balance_key = masp_reward_balance_key();
+    let reward_balance: token::Amount =
+        storage.read(&reward_balance_key)?.unwrap_or_default();
+    Ok(reward_balance)
 }
 
 /// Read the masp token map.
