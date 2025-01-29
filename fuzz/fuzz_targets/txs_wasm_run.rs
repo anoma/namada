@@ -1,6 +1,7 @@
 //! Test running well-formed inner WASM txs via finalize block handler.
 
 #![no_main]
+#![allow(clippy::disallowed_methods)]
 
 use std::sync::Mutex;
 
