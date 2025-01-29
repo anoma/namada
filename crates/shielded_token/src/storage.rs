@@ -67,10 +67,10 @@ where
     checked!(total_rewards += amount)?;
     storage.write(&total_rewards_key, total_rewards)?;
 
-    let reward_balance_key = masp_reward_balance_key();
-    let mut reward_balance = read_reward_balance(storage)?;
-    checked!(reward_balance += amount)?;
-    storage.write(&reward_balance_key, reward_balance)
+    let undated_balance_key = masp_undated_balance_key(&native_token);
+    let mut undated_balance = read_undated_balance(storage, &native_token)?;
+    checked!(undated_balance += amount)?;
+    storage.write(&undated_balance_key, undated_balance)
 }
 
 /// Read the total rewards minted by MASP.
@@ -84,15 +84,18 @@ where
     Ok(total_rewards)
 }
 
-/// Read the total rewards minted by MASP.
-pub fn read_reward_balance<S>(storage: &S) -> Result<token::Amount>
+/// Read the undated balance of the given token in the MASP.
+pub fn read_undated_balance<S>(
+    storage: &S,
+    token_address: &Address,
+) -> Result<token::Amount>
 where
     S: StorageRead,
 {
-    let reward_balance_key = masp_reward_balance_key();
-    let reward_balance: token::Amount =
-        storage.read(&reward_balance_key)?.unwrap_or_default();
-    Ok(reward_balance)
+    let undated_balance_key = masp_undated_balance_key(token_address);
+    let undated_balance: token::Amount =
+        storage.read(&undated_balance_key)?.unwrap_or_default();
+    Ok(undated_balance)
 }
 
 /// Read the masp token map.

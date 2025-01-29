@@ -87,7 +87,7 @@ where
 
 /// Get the balance of the given token at the MASP address that is eligble to
 /// receive rewards.
-fn get_masp_rewardable_balance<S, TransToken>(
+fn get_masp_dated_balance<S, TransToken>(
     storage: &mut S,
     token: &Address,
 ) -> Result<Amount>
@@ -95,21 +95,16 @@ where
     S: StorageWrite + StorageRead,
     TransToken: trans_token::Keys + trans_token::Read<S>,
 {
-    use crate::read_reward_balance;
+    use crate::read_undated_balance;
     let masp_addr = MASP;
-    
+
     // total locked amount in the Shielded pool
     let total_tokens_in_masp =
         TransToken::read_balance(storage, token, &masp_addr)?;
-
-    if *token == storage.get_native_token()? {
-        // Since the principal native tokens and rewards are stored together in
-        // the pool, subtract the latter to get what is actually rewardable
-        let masp_reward_balance: Amount = read_reward_balance(storage)?;
-        Ok(checked!(total_tokens_in_masp - masp_reward_balance)?)
-    } else {
-        Ok(total_tokens_in_masp)
-    }
+    // Since dated and undated tokens are stored together in the pool, subtract
+    // the latter to get the dated balance
+    let masp_dated_balance = read_undated_balance(storage, token)?;
+    Ok(checked!(total_tokens_in_masp - masp_dated_balance)?)
 }
 
 /// Compute the MASP rewards by applying the PD-controller to the genesis
@@ -184,8 +179,8 @@ where
 
     // total locked amount in the Shielded pool
     let rewardable_tokens_in_masp =
-        get_masp_rewardable_balance::<S, TransToken>(storage, token)?;
-    
+        get_masp_dated_balance::<S, TransToken>(storage, token)?;
+
     // inflation-per-token = inflation / locked tokens = n/PRECISION
     // ∴ n = (inflation * PRECISION) / locked tokens
     // Since we must put the notes in a compatible format with the
@@ -292,7 +287,9 @@ where
     use masp_primitives::sapling::Node;
     use masp_primitives::transaction::components::I128Sum as MaspAmount;
     use namada_core::arith::CheckedAdd;
-    use namada_core::masp::{encode_asset_type, encode_reward_asset_types, MaspEpoch};
+    use namada_core::masp::{
+        encode_asset_type, encode_reward_asset_types, MaspEpoch,
+    };
     use namada_core::token::MaspDigitPos;
     use rayon::iter::{
         IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
@@ -381,7 +378,7 @@ where
                             real_reward_i128,
                         )
                 )?
-                    .into(),
+                .into(),
             );
             // Add a conversion from the previous asset type
             storage.conversion_state_mut().assets.insert(
@@ -397,8 +394,7 @@ where
             );
         }
         // Dispense a transparent reward in parallel to the shielded rewards
-        let addr_bal =
-            get_masp_rewardable_balance::<S, TransToken>(storage, token)?;
+        let addr_bal = get_masp_dated_balance::<S, TransToken>(storage, token)?;
         // The reward for each reward.1 units of the current asset is reward.0
         // units of the reward token
         total_reward = total_reward
@@ -406,15 +402,11 @@ where
                 addr_bal
                     .u128_eucl_div_rem((reward, precision))
                     .ok_or_else(|| {
-                        Error::new_const(
-                            "Total reward calculation overflow",
-                        )
+                        Error::new_const("Total reward calculation overflow")
                     })?
                     .0,
             )
-            .ok_or_else(|| {
-                Error::new_const("Total reward overflow")
-            })?;
+            .ok_or_else(|| Error::new_const("Total reward overflow"))?;
     }
 
     // Try to distribute Merkle leaf updating as evenly as possible across

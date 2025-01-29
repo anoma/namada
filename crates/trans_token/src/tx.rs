@@ -56,7 +56,7 @@ pub fn multi_transfer<ENV>(
     sources: impl CreditOrDebit,
     targets: impl CreditOrDebit,
     event_desc: Cow<'static, str>,
-) -> Result<HashSet<Address>>
+) -> Result<(HashSet<Address>, HashSet<Address>)>
 where
     ENV: TxEnv + EmitEvents,
 {
@@ -73,7 +73,11 @@ where
     };
     // Apply the balance change for each account in turn
     let mut any_balance_changed = false;
+    // To store all the tokens used in the transfer
+    let mut tokens = HashSet::new();
     for ref account @ (ref owner, ref token) in accounts {
+        // Record the encountered tokens
+        tokens.insert(token.clone());
         let overflow_err = || {
             Error::new_alloc(format!(
                 "The transfer would overflow balance of {owner}"
@@ -109,7 +113,7 @@ where
     }
 
     if !any_balance_changed {
-        return Ok(debited_accounts);
+        return Ok((debited_accounts, tokens));
     }
 
     let mut evt_sources = BTreeMap::new();
@@ -166,7 +170,7 @@ where
         },
     });
 
-    Ok(debited_accounts)
+    Ok((debited_accounts, tokens))
 }
 
 #[derive(Debug, Clone)]
@@ -276,7 +280,7 @@ mod test {
                 let targets =
                     BTreeMap::from_iter([((dest.clone(), token.clone()), amount)]);
 
-                let debited_accounts =
+                let (debited_accounts, _token) =
                     multi_transfer(ctx(), sources, targets, EVENT_DESC).unwrap();
 
                 if amount.is_zero() {
@@ -528,7 +532,7 @@ mod test {
             ((p1.clone(), token2.clone()), amount3),
         ]);
 
-        let debited_accounts =
+        let (debited_accounts, _token) =
             multi_transfer(ctx(), sources, targets, EVENT_DESC).unwrap();
 
         // p2 is not debited as it received more of token1 than it spent
@@ -602,7 +606,7 @@ mod test {
         let targets =
             BTreeMap::from_iter([((addr.clone(), token.clone()), pre_balance)]);
 
-        let debited_accounts =
+        let (debited_accounts, _token) =
             multi_transfer(ctx(), sources, targets, EVENT_DESC).unwrap();
 
         // No account has been debited
@@ -649,7 +653,7 @@ mod test {
         let targets =
             BTreeMap::from_iter([((src.clone(), token.clone()), amount)]);
 
-        let debited_accounts =
+        let (debited_accounts, _token) =
             multi_transfer(ctx(), sources, targets, EVENT_DESC).unwrap();
 
         // No account has been debited
