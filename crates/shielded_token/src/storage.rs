@@ -79,6 +79,20 @@ where
     Ok(total_rewards)
 }
 
+/// Read the undated balance of the given token in the MASP.
+pub fn read_undated_balance<S>(
+    storage: &S,
+    token_address: &Address,
+) -> Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let undated_balance_key = masp_undated_balance_key(token_address);
+    let undated_balance: token::Amount =
+        storage.read(&undated_balance_key)?.unwrap_or_default();
+    Ok(undated_balance)
+}
+
 /// Read the masp token map.
 pub fn read_token_map<S>(storage: &S) -> Result<TokenMap>
 where

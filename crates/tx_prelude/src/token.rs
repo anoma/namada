@@ -44,7 +44,7 @@ pub fn multi_transfer(
 pub fn apply_transparent_transfers(
     ctx: &mut Ctx,
     transfers: TransparentTransfersRef<'_>,
-) -> Result<HashSet<Address>> {
+) -> Result<(HashSet<Address>, HashSet<Address>)> {
     namada_token::tx::apply_transparent_transfers(
         ctx,
         transfers,

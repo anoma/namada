@@ -31,8 +31,9 @@ use namada_vp_env::{Error, Result, VpEnv};
 
 use crate::storage_key::{
     is_masp_key, is_masp_nullifier_key, is_masp_token_map_key,
-    is_masp_transfer_key, masp_commitment_anchor_key, masp_commitment_tree_key,
-    masp_convert_anchor_key, masp_nullifier_key,
+    is_masp_transfer_key, is_masp_undated_balance_key,
+    masp_commitment_anchor_key, masp_commitment_tree_key,
+    masp_convert_anchor_key, masp_nullifier_key, masp_undated_balance_key,
 };
 use crate::validation::verify_shielded_tx;
 
@@ -44,16 +45,35 @@ pub struct MaspVp<'ctx, CTX, Params, Gov, Ibc, TransToken, Transfer> {
 }
 
 // Balances changed by a transaction
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 struct ChangedBalances {
-    // Maps asset types to their decodings
-    tokens: BTreeMap<AssetType, (Address, token::Denomination, MaspDigitPos)>,
+    // Maps unepoched asset types to their decodings
+    unepoched_tokens:
+        BTreeMap<AssetType, (Address, token::Denomination, MaspDigitPos)>,
     // Map between MASP transparent address and Namada types
     decoder: BTreeMap<TransparentAddress, TAddrData>,
     // Balances before the tx
     pre: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
     // Balances after the tx
     post: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
+    // Undated MASP balances before the tx
+    undated_pre: ValueSum<Address, Amount>,
+    // Undated MASP balances after the tx
+    undated_post: ValueSum<Address, Amount>,
+}
+
+// Default is manually implemented due to imperfect derive
+impl Default for ChangedBalances {
+    fn default() -> Self {
+        Self {
+            unepoched_tokens: Default::default(),
+            decoder: Default::default(),
+            pre: Default::default(),
+            post: Default::default(),
+            undated_pre: ValueSum::zero(),
+            undated_post: ValueSum::zero(),
+        }
+    }
 }
 
 impl<'view, 'ctx: 'view, CTX, Params, Gov, Ibc, TransToken, Transfer>
@@ -195,6 +215,41 @@ where
         Ok(())
     }
 
+    // Store the undated balances before and after this tx is applied.
+    fn apply_undated_balances(
+        ctx: &'ctx CTX,
+        keys_changed: &BTreeSet<Key>,
+        mut result: ChangedBalances,
+    ) -> Result<ChangedBalances> {
+        // Record the undated balances of the keys that changed
+        for token in keys_changed.iter().filter_map(is_masp_undated_balance_key)
+        {
+            // Read and store the undated balance before this tx is applied
+            let pre_reward_balance: Amount = ctx
+                .read_pre(&masp_undated_balance_key(&token))?
+                .unwrap_or_default();
+            // Attach the token type to the undated balance
+            let pre_reward_balance =
+                ValueSum::from_pair(token.clone(), pre_reward_balance);
+            // Now finally record the undated balance
+            result.undated_pre =
+                checked!(result.undated_pre.clone() + &pre_reward_balance)
+                    .map_err(Error::new)?;
+            // Read and store the undated balance after this tx is applied
+            let post_reward_balance: Amount = ctx
+                .read_post(&masp_undated_balance_key(&token))?
+                .unwrap_or_default();
+            // Attach the token type to the undated balance
+            let post_reward_balance =
+                ValueSum::from_pair(token, post_reward_balance);
+            // Now finally record the undated balance
+            result.undated_post =
+                checked!(result.undated_post.clone() + &post_reward_balance)
+                    .map_err(Error::new)?;
+        }
+        Ok(result)
+    }
+
     // Check that a transaction carrying output descriptions correctly updates
     // the tree and anchor in storage
     fn valid_note_commitment_update(
@@ -302,7 +357,7 @@ where
             "No denomination found in storage for the given token",
         )?;
         // Record the token without an epoch to facilitate later decoding
-        unepoched_tokens(token, denom, &mut result.tokens)?;
+        unepoched_tokens(token, denom, &mut result.unepoched_tokens)?;
         let counterpart_balance_key =
             TransToken::balance_key(token, counterpart);
         let pre_balance: Amount =
@@ -351,10 +406,14 @@ where
             .filter_map(TransToken::is_any_token_balance_key);
 
         // Apply the balance changes to the changed balances structure
-        let mut changed_balances = counterparts_balances
+        let changed_balances = counterparts_balances
             .try_fold(ChangedBalances::default(), |acc, account| {
                 Self::apply_balance_change(ctx, acc, account)
             })?;
+
+        // Apply the undated balances to the changed balances structure
+        let mut changed_balances =
+            Self::apply_undated_balances(ctx, keys_changed, changed_balances)?;
 
         let ibc_addr = TAddrData::Addr(address::IBC);
         // Enable decoding the IBC address hash
@@ -364,10 +423,12 @@ where
 
         // Note the balance changes they imply
         let ChangedBalances {
-            tokens,
+            unepoched_tokens: tokens,
             decoder,
             pre,
             post,
+            undated_pre,
+            undated_post,
         } = changed_balances;
         let ibc::ChangedBalances { decoder, pre, post } =
             Ibc::apply_ibc_packet::<Transfer>(
@@ -377,10 +438,12 @@ where
                 keys_changed,
             )?;
         Ok(ChangedBalances {
-            tokens,
+            unepoched_tokens: tokens,
             decoder,
             pre,
             post,
+            undated_pre,
+            undated_post,
         })
     }
 
@@ -455,9 +518,11 @@ where
                 .post
                 .get(&masp_address_hash)
                 .unwrap_or(&zero),
+            &changed_balances.undated_pre,
+            &changed_balances.undated_post,
             &shielded_tx.sapling_value_balance(),
             masp_epoch,
-            &changed_balances.tokens,
+            &changed_balances.unepoched_tokens,
             conversion_state,
         )?;
 
@@ -664,9 +729,12 @@ fn validate_transparent_input<A: Authorization>(
                 })?;
         }
         // Maybe the asset type has no attached epoch
-        None if changed_balances.tokens.contains_key(&vin.asset_type) => {
+        None if changed_balances
+            .unepoched_tokens
+            .contains_key(&vin.asset_type) =>
+        {
             let (token, denom, digit) =
-                &changed_balances.tokens[&vin.asset_type];
+                &changed_balances.unepoched_tokens[&vin.asset_type];
             // Determine what the asset type would be if it were epoched
             let epoched_asset_type =
                 encode_asset_type(token.clone(), *denom, *digit, Some(epoch))
@@ -745,10 +813,13 @@ fn validate_transparent_output(
                 })?;
         }
         // Maybe the asset type has no attached epoch
-        None if changed_balances.tokens.contains_key(&out.asset_type) => {
+        None if changed_balances
+            .unepoched_tokens
+            .contains_key(&out.asset_type) =>
+        {
             // Otherwise note the contribution to this transparent output
             let (token, _denom, digit) =
-                &changed_balances.tokens[&out.asset_type];
+                &changed_balances.unepoched_tokens[&out.asset_type];
             let amount =
                 token::Amount::from_masp_denominated(out.value, *digit);
             *bal_ref = bal_ref
@@ -847,15 +918,20 @@ fn apply_balance_component(
 
 // Verify that the pre balance - the Sapling value balance = the post balance
 // using the decodings in tokens and conversion_state for assistance.
+#[allow(clippy::too_many_arguments)]
 fn verify_sapling_balancing_value(
     pre: &ValueSum<Address, Amount>,
     post: &ValueSum<Address, Amount>,
+    undated_pre: &ValueSum<Address, Amount>,
+    undated_post: &ValueSum<Address, Amount>,
     sapling_value_balance: &I128Sum,
     target_epoch: MaspEpoch,
     tokens: &BTreeMap<AssetType, (Address, token::Denomination, MaspDigitPos)>,
     conversion_state: &ConversionState,
 ) -> Result<()> {
     let mut acc = ValueSum::<Address, I320>::from_sum(post.clone());
+    let mut undated_acc =
+        ValueSum::<Address, I320>::from_sum(undated_post.clone());
     for (asset_type, val) in sapling_value_balance.components() {
         // Only assets with at most the target timestamp count
         match conversion_state.assets.get(asset_type) {
@@ -871,6 +947,13 @@ fn verify_sapling_balancing_value(
                 let (token, _denom, digit) = &tokens[asset_type];
                 acc =
                     apply_balance_component(&acc, *val, *digit, token.clone())?;
+                // Additionally record separately the undated changes
+                undated_acc = apply_balance_component(
+                    &undated_acc,
+                    *val,
+                    *digit,
+                    token.clone(),
+                )?;
             }
             _ => {
                 let error = Error::new_const("Unable to decode asset type");
@@ -879,14 +962,21 @@ fn verify_sapling_balancing_value(
             }
         }
     }
-    if acc == ValueSum::from_sum(pre.clone()) {
-        Ok(())
-    } else {
+    if acc != ValueSum::from_sum(pre.clone()) {
         let error = Error::new_const(
             "MASP balance change not equal to Sapling value balance",
         );
         tracing::debug!("{error}");
         Err(error)
+    } else if undated_acc != ValueSum::from_sum(undated_pre.clone()) {
+        let error = Error::new_const(
+            "MASP undated balance change not equal to undated Sapling value \
+             balance",
+        );
+        tracing::debug!("{error}");
+        return Err(error);
+    } else {
+        Ok(())
     }
 }
 

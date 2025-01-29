@@ -3564,7 +3564,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.06262"));
+    assert!(captured.contains("nam: 0.063"));
 
     // Assert BTC balance at VK(A) is still 2
     let captured = CapturedOutput::of(|| {
@@ -3643,7 +3643,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.15655"));
+    assert!(captured.contains("nam: 0.189"));
 
     {
         // Stop decoding and distributing shielded rewards for BTC in next epoch
@@ -3709,7 +3709,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.15655"));
+    assert!(captured.contains("nam: 0.189"));
 
     // Wait till epoch boundary
     node.next_masp_epoch();
@@ -3755,7 +3755,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.15655"));
+    assert!(captured.contains("nam: 0.189"));
 
     {
         // Start distributing shielded rewards for NAM in next epoch
@@ -3814,7 +3814,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.156705"));
+    assert!(captured.contains("nam: 0.189567"));
 
     // Unshield the rewards
     let captured = CapturedOutput::of(|| {
@@ -3830,7 +3830,7 @@ fn dynamic_assets() -> Result<()> {
                 "--token",
                 NAM,
                 "--amount",
-                "0.156705",
+                "0.189567",
                 "--gas-payer",
                 BERTHA_KEY,
                 "--ledger-address",
