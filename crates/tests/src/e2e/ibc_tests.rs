@@ -2488,7 +2488,7 @@ fn try_invalid_transfers(
         &"channel-42".parse().unwrap(),
         None,
         None,
-        Some("IBC token transfer error: context error: `ICS04 Channel error"),
+        Some("No channel end: port transfer, channel channel-42"),
         None,
         false,
     )?;

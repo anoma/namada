@@ -72,10 +72,11 @@ use ibc::core::channel::types::msgs::{
 };
 use ibc::core::channel::types::timeout::{TimeoutHeight, TimeoutTimestamp};
 use ibc::core::entrypoint::{execute, validate};
-use ibc::core::handler::types::error::ContextError;
-use ibc::core::handler::types::events::Error as RawIbcEventError;
+use ibc::core::handler::types::error::HandlerError;
 use ibc::core::handler::types::msgs::MsgEnvelope;
-use ibc::core::host::types::error::IdentifierError;
+use ibc::core::host::types::error::{
+    DecodingError, HostError, IdentifierError,
+};
 use ibc::core::host::types::identifiers::{ChannelId, PortId, Sequence};
 use ibc::core::router::types::error::RouterError;
 use ibc::primitives::proto::Any;
@@ -127,13 +128,13 @@ pub const COMMITMENT_PREFIX: &str = "ibc";
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("IBC event error: {0}")]
-    IbcEvent(RawIbcEventError),
+    IbcEvent(DecodingError),
     #[error("Decoding IBC data error")]
     DecodingData,
     #[error("Decoding message error: {0}")]
     DecodingMessage(RouterError),
-    #[error("IBC context error: {0}")]
-    Context(Box<ContextError>),
+    #[error("IBC handler error: {0}")]
+    Handler(Box<HandlerError>),
     #[error("IBC token transfer error: {0}")]
     TokenTransfer(TokenTransferError),
     #[error("IBC NFT transfer error: {0}")]
@@ -627,12 +628,15 @@ where
                 self.verifiers.borrow_mut().insert(
                     Address::from_str(msg.message.packet_data.sender.as_ref())
                         .map_err(|_| {
-                            Error::TokenTransfer(TokenTransferError::Other(
-                                format!(
-                                    "Cannot convert the sender address {}",
-                                    msg.message.packet_data.sender
-                                ),
-                            ))
+                            Error::TokenTransfer(
+                                HostError::Other {
+                                    description: format!(
+                                        "Cannot convert the sender address {}",
+                                        msg.message.packet_data.sender
+                                    ),
+                                }
+                                .into(),
+                            )
                         })?,
                 );
                 if msg.transfer.is_some() {
@@ -656,12 +660,15 @@ where
                 self.verifiers.borrow_mut().insert(
                     Address::from_str(msg.message.packet_data.sender.as_ref())
                         .map_err(|_| {
-                            Error::NftTransfer(NftTransferError::Other(
-                                format!(
-                                    "Cannot convert the sender address {}",
-                                    msg.message.packet_data.sender
-                                ),
-                            ))
+                            Error::NftTransfer(
+                                HostError::Other {
+                                    description: format!(
+                                        "Cannot convert the sender address {}",
+                                        msg.message.packet_data.sender
+                                    ),
+                                }
+                                .into(),
+                            )
                         })?,
                 );
                 send_nft_transfer_execute(
@@ -685,7 +692,7 @@ where
                     );
                 }
                 execute(&mut self.ctx, &mut self.router, *envelope.clone())
-                    .map_err(|e| Error::Context(Box::new(e)))?;
+                    .map_err(|e| Error::Handler(Box::new(e)))?;
 
                 // Extract MASP tx from the memo in the packet if needed
                 let masp_tx = match &*envelope {
@@ -727,7 +734,7 @@ where
                 &msg.packet.chan_id_on_b,
                 msg.packet.seq_on_a,
             )
-            .map_err(|e| Error::Context(Box::new(e)))?
+            .map_err(|e| Error::Other(e.to_string()))?
         else {
             return Ok(None);
         };
@@ -778,7 +785,7 @@ where
             }
             IbcMessage::Envelope(envelope) => {
                 validate(&self.ctx, &self.router, *envelope)
-                    .map_err(|e| Error::Context(Box::new(e)))
+                    .map_err(|e| Error::Handler(Box::new(e)))
             }
         };
         self.insert_verifiers()?;
@@ -932,8 +939,10 @@ fn received_ibc_trace(
     dest_channel_id: &ChannelId,
 ) -> Result<String, Error> {
     if *dest_port_id == PortId::transfer() {
-        let mut prefixed_denom =
-            base_trace.as_ref().parse().map_err(Error::TokenTransfer)?;
+        let mut prefixed_denom = base_trace
+            .as_ref()
+            .parse()
+            .map_err(|e: DecodingError| Error::Trace(e.to_string()))?;
         if is_receiver_chain_source(
             src_port_id.clone(),
             src_channel_id.clone(),
@@ -955,7 +964,9 @@ fn received_ibc_trace(
     {
         let mut class_id = PrefixedClassId {
             trace_path,
-            base_class_id: base_class_id.parse().map_err(Error::NftTransfer)?,
+            base_class_id: base_class_id
+                .parse()
+                .map_err(|e: DecodingError| Error::Trace(e.to_string()))?,
         };
         if is_nft_receiver_chain_source(
             src_port_id.clone(),
@@ -974,7 +985,9 @@ fn received_ibc_trace(
             );
             class_id.add_trace_prefix(prefix);
         }
-        let token_id: TokenId = token_id.parse().map_err(Error::NftTransfer)?;
+        let token_id: TokenId = token_id
+            .parse()
+            .map_err(|e: DecodingError| Error::Trace(e.to_string()))?;
         return Ok(format!("{class_id}/{token_id}"));
     }
 

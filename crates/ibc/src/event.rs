@@ -10,8 +10,9 @@ use ibc::core::channel::types::timeout::{
 use ibc::core::client::types::events::{
     CLIENT_ID_ATTRIBUTE_KEY, CONSENSUS_HEIGHTS_ATTRIBUTE_KEY,
 };
-use ibc::core::client::types::{Height as IbcHeight, HeightError};
+use ibc::core::client::types::Height as IbcHeight;
 use ibc::core::handler::types::events::IbcEvent as RawIbcEvent;
+use ibc::core::host::types::error::DecodingError;
 use ibc::core::host::types::identifiers::{
     ChannelId as IbcChannelId, ClientId as IbcClientId,
     ConnectionId as IbcConnectionId, PortId, Sequence,
@@ -330,18 +331,14 @@ impl<'data> EventAttributeEntry<'data> for PacketData<'data> {
 pub struct TimeoutHeight(pub IbcTimeoutHeight);
 
 impl FromStr for TimeoutHeight {
-    type Err = HeightError;
+    type Err = DecodingError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        ibc::core::client::types::Height::from_str(s).map_or_else(
-            |err| match err {
-                HeightError::ZeroHeight => {
-                    Ok(TimeoutHeight(IbcTimeoutHeight::Never))
-                }
-                err => Err(err),
-            },
-            |height| Ok(TimeoutHeight(IbcTimeoutHeight::At(height))),
-        )
+        if s == "0-0" {
+            return Ok(TimeoutHeight(IbcTimeoutHeight::Never));
+        }
+        IbcHeight::from_str(s)
+            .map(|height| TimeoutHeight(IbcTimeoutHeight::At(height)))
     }
 }
 

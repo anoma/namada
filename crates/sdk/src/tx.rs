@@ -39,7 +39,7 @@ use namada_core::ibc::core::channel::types::timeout::{
 };
 use namada_core::ibc::core::client::types::Height as IbcHeight;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::ibc::primitives::Timestamp as IbcTimestamp;
+use namada_core::ibc::primitives::{IntoTimestamp, Timestamp as IbcTimestamp};
 use namada_core::key::{self, *};
 use namada_core::masp::{AssetData, MaspEpoch, TransferSource, TransferTarget};
 use namada_core::storage;
@@ -2742,7 +2742,7 @@ pub async fn build_ibc_transfer(
     }
     .try_into();
     let now = now.map_err(|e| Error::Other(e.to_string()))?;
-    let now: IbcTimestamp = now.try_into().map_err(|e| {
+    let now: IbcTimestamp = now.into_timestamp().map_err(|e| {
         Error::Other(format!("Timestamp conversion failed: {e}"))
     })?;
     let timeout_timestamp = if let Some(offset) = args.timeout_sec_offset {

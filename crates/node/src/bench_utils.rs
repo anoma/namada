@@ -68,7 +68,7 @@ use namada_sdk::ibc::core::host::types::path::{
     ClientConsensusStatePath, ClientStatePath, Path as IbcPath,
 };
 use namada_sdk::ibc::primitives::proto::{Any, Protobuf};
-use namada_sdk::ibc::primitives::Timestamp as IbcTimestamp;
+use namada_sdk::ibc::primitives::{IntoTimestamp, Timestamp as IbcTimestamp};
 use namada_sdk::ibc::storage::{
     channel_key, connection_key, mint_limit_key, port_key, throughput_limit_key,
 };
@@ -239,7 +239,7 @@ impl BenchShellInner {
         #[allow(clippy::disallowed_methods)]
         let now: namada_sdk::tendermint::Time =
             DateTimeUtc::now().try_into().unwrap();
-        let now: IbcTimestamp = now.try_into().unwrap();
+        let now: IbcTimestamp = now.into_timestamp().unwrap();
         let timeout_timestamp =
             (now + std::time::Duration::new(3600, 0)).unwrap();
 
@@ -1327,7 +1327,7 @@ impl BenchShieldedCtx {
         #[allow(clippy::disallowed_methods)]
         let now: namada_sdk::tendermint::Time =
             DateTimeUtc::now().try_into().unwrap();
-        let now: IbcTimestamp = now.try_into().unwrap();
+        let now: IbcTimestamp = now.into_timestamp().unwrap();
         let timeout_timestamp =
             (now + std::time::Duration::new(3600, 0)).unwrap();
         let msg = IbcMsgTransfer {

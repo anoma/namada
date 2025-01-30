@@ -5,7 +5,7 @@ use ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusStat
 use ibc::clients::tendermint::types::{
     ClientState as TmClientStateType, ConsensusState as TmConsensusStateType,
 };
-use ibc::core::client::types::error::ClientError;
+use ibc::core::host::types::error::HostError;
 use ibc::primitives::proto::Any;
 use ibc_derive::{IbcClientState, IbcConsensusState};
 #[cfg(any(test, feature = "testing"))]
@@ -44,17 +44,15 @@ impl From<TmClientStateType> for AnyClientState {
 }
 
 impl TryFrom<AnyClientState> for TmClientState {
-    type Error = ClientError;
+    type Error = HostError;
 
     fn try_from(any: AnyClientState) -> Result<Self, Self::Error> {
         match any {
             AnyClientState::Tendermint(cs) => Ok(cs),
             #[cfg(any(test, feature = "testing"))]
-            AnyClientState::Mock(_) => {
-                Err(ClientError::UnknownConsensusStateType {
-                    consensus_state_type: "mock".to_string(),
-                })
-            }
+            AnyClientState::Mock(_) => Err(HostError::Other {
+                description: "Unexpected client state type: Mock".to_string(),
+            }),
         }
     }
 }
@@ -68,15 +66,14 @@ impl From<MockClientState> for AnyClientState {
 
 #[cfg(any(test, feature = "testing"))]
 impl TryFrom<AnyClientState> for MockClientState {
-    type Error = ClientError;
+    type Error = HostError;
 
     fn try_from(any: AnyClientState) -> Result<Self, Self::Error> {
         match any {
-            AnyClientState::Tendermint(_) => {
-                Err(ClientError::UnknownConsensusStateType {
-                    consensus_state_type: "tendermint".to_string(),
-                })
-            }
+            AnyClientState::Tendermint(_) => Err(HostError::Other {
+                description: "Unexpected client state type: Tendermint"
+                    .to_string(),
+            }),
             AnyClientState::Mock(cs) => Ok(cs),
         }
     }
@@ -93,7 +90,7 @@ impl From<AnyClientState> for Any {
 }
 
 impl TryFrom<Any> for AnyClientState {
-    type Error = ClientError;
+    type Error = HostError;
 
     fn try_from(client_state: Any) -> Result<Self, Self::Error> {
         #[cfg(any(test, feature = "testing"))]
@@ -102,7 +99,7 @@ impl TryFrom<Any> for AnyClientState {
         }
 
         let cs = TmClientState::try_from(client_state).map_err(|_| {
-            ClientError::ClientSpecific {
+            HostError::Other {
                 description: "Unknown client state".to_string(),
             }
         })?;
@@ -134,17 +131,15 @@ impl From<TmConsensusStateType> for AnyConsensusState {
 }
 
 impl TryFrom<AnyConsensusState> for TmConsensusStateType {
-    type Error = ClientError;
+    type Error = HostError;
 
     fn try_from(any: AnyConsensusState) -> Result<Self, Self::Error> {
         match any {
             AnyConsensusState::Tendermint(c) => Ok(c.inner().clone()),
             #[cfg(any(test, feature = "testing"))]
-            AnyConsensusState::Mock(_) => {
-                Err(ClientError::UnknownConsensusStateType {
-                    consensus_state_type: "mock".to_string(),
-                })
-            }
+            _ => Err(HostError::Other {
+                description: "Unexpected consensus state type".to_string(),
+            }),
         }
     }
 }
@@ -157,16 +152,14 @@ impl From<MockConsensusState> for AnyConsensusState {
 }
 
 impl TryFrom<AnyConsensusState> for TmConsensusState {
-    type Error = ClientError;
+    type Error = HostError;
 
     fn try_from(any: AnyConsensusState) -> Result<Self, Self::Error> {
         match any {
             AnyConsensusState::Tendermint(cs) => Ok(cs),
             #[cfg(any(test, feature = "testing"))]
-            _ => Err(ClientError::UnknownConsensusStateType {
-                consensus_state_type: "Only Tendermint client state type is \
-                                       supported"
-                    .to_string(),
+            _ => Err(HostError::Other {
+                description: "Unexpected consensus state".to_string(),
             }),
         }
     }
@@ -174,14 +167,13 @@ impl TryFrom<AnyConsensusState> for TmConsensusState {
 
 #[cfg(any(test, feature = "testing"))]
 impl TryFrom<AnyConsensusState> for MockConsensusState {
-    type Error = ClientError;
+    type Error = HostError;
 
     fn try_from(any: AnyConsensusState) -> Result<Self, Self::Error> {
         match any {
             AnyConsensusState::Mock(cs) => Ok(cs),
-            _ => Err(ClientError::UnknownConsensusStateType {
-                consensus_state_type: "The type should be MockConsensusState"
-                    .to_string(),
+            _ => Err(HostError::Other {
+                description: "Unexpected consensus state".to_string(),
             }),
         }
     }
@@ -198,7 +190,7 @@ impl From<AnyConsensusState> for Any {
 }
 
 impl TryFrom<Any> for AnyConsensusState {
-    type Error = ClientError;
+    type Error = HostError;
 
     fn try_from(consensus_state: Any) -> Result<Self, Self::Error> {
         #[cfg(any(test, feature = "testing"))]
@@ -207,7 +199,7 @@ impl TryFrom<Any> for AnyConsensusState {
         }
 
         let cs = TmConsensusState::try_from(consensus_state).map_err(|_| {
-            ClientError::ClientSpecific {
+            HostError::Other {
                 description: "Unknown consensus state".to_string(),
             }
         })?;
@@ -216,12 +208,12 @@ impl TryFrom<Any> for AnyConsensusState {
 }
 
 impl TryFrom<Vec<u8>> for AnyConsensusState {
-    type Error = ClientError;
+    type Error = HostError;
 
     fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
         Any::decode(&bytes[..])
-            .map_err(|e| ClientError::Other {
-                description: e.to_string(),
+            .map_err(|e| HostError::Other {
+                description: format!("Decoding AnyConsensusState failed: {e}"),
             })?
             .try_into()
     }

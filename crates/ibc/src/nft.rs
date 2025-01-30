@@ -1,9 +1,9 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use ibc::apps::nft_transfer::context::{NftClassContext, NftContext};
-use ibc::apps::nft_transfer::types::error::NftTransferError;
 use ibc::apps::nft_transfer::types::{
     ClassData, ClassId, ClassUri, PrefixedClassId, TokenData, TokenId, TokenUri,
 };
+use ibc::core::host::types::error::DecodingError;
 
 /// NFT class
 #[derive(Clone, Debug)]
@@ -45,14 +45,14 @@ impl BorshDeserialize for NftClass {
     ) -> std::io::Result<Self> {
         use std::io::{Error, ErrorKind};
         let class_id: String = BorshDeserialize::deserialize_reader(reader)?;
-        let class_id = class_id.parse().map_err(|e: NftTransferError| {
+        let class_id = class_id.parse().map_err(|e: DecodingError| {
             Error::new(ErrorKind::InvalidData, e.to_string())
         })?;
 
         let is_uri: bool = BorshDeserialize::deserialize_reader(reader)?;
         let class_uri = if is_uri {
             let uri_str: String = BorshDeserialize::deserialize_reader(reader)?;
-            Some(uri_str.parse().map_err(|e: NftTransferError| {
+            Some(uri_str.parse().map_err(|e: DecodingError| {
                 Error::new(ErrorKind::InvalidData, e.to_string())
             })?)
         } else {
@@ -63,7 +63,7 @@ impl BorshDeserialize for NftClass {
         let class_data = if is_data {
             let data_str: String =
                 BorshDeserialize::deserialize_reader(reader)?;
-            Some(data_str.parse().map_err(|e: NftTransferError| {
+            Some(data_str.parse().map_err(|e: DecodingError| {
                 Error::new(ErrorKind::InvalidData, e.to_string())
             })?)
         } else {
@@ -135,19 +135,19 @@ impl BorshDeserialize for NftMetadata {
     ) -> std::io::Result<Self> {
         use std::io::{Error, ErrorKind};
         let class_id: String = BorshDeserialize::deserialize_reader(reader)?;
-        let class_id = class_id.parse().map_err(|e: NftTransferError| {
+        let class_id = class_id.parse().map_err(|e: DecodingError| {
             Error::new(ErrorKind::InvalidData, e.to_string())
         })?;
 
         let token_id: String = BorshDeserialize::deserialize_reader(reader)?;
-        let token_id = token_id.parse().map_err(|e: NftTransferError| {
+        let token_id = token_id.parse().map_err(|e: DecodingError| {
             Error::new(ErrorKind::InvalidData, e.to_string())
         })?;
 
         let is_uri: bool = BorshDeserialize::deserialize_reader(reader)?;
         let token_uri = if is_uri {
             let uri_str: String = BorshDeserialize::deserialize_reader(reader)?;
-            Some(uri_str.parse().map_err(|e: NftTransferError| {
+            Some(uri_str.parse().map_err(|e: DecodingError| {
                 Error::new(ErrorKind::InvalidData, e.to_string())
             })?)
         } else {
@@ -158,7 +158,7 @@ impl BorshDeserialize for NftMetadata {
         let token_data = if is_data {
             let data_str: String =
                 BorshDeserialize::deserialize_reader(reader)?;
-            Some(data_str.parse().map_err(|e: NftTransferError| {
+            Some(data_str.parse().map_err(|e: DecodingError| {
                 Error::new(ErrorKind::InvalidData, e.to_string())
             })?)
         } else {
