@@ -118,13 +118,13 @@ flume = "0.11.1"
 fs_extra = "1.2.0"
 futures = "0.3"
 git2 = { version = "0.18.1", default-features = false }
-ibc = { git = "https://github.com/cosmos/ibc-rs", rev = "a5f9fbf236cb26db3a76cde20ba43382de2d1ba4", features = ["serde"] }
-ibc-derive = { git = "https://github.com/cosmos/ibc-rs", rev = "a5f9fbf236cb26db3a76cde20ba43382de2d1ba4" }
-ibc-middleware-module = { git = "https://github.com/heliaxdev/ibc-middleware", branch = "yuji/upgrade-ibc-rs" }
-ibc-middleware-module-macros = { git = "https://github.com/heliaxdev/ibc-middleware", branch = "yuji/upgrade-ibc-rs" }
-ibc-middleware-overflow-receive = { git = "https://github.com/heliaxdev/ibc-middleware", branch = "yuji/upgrade-ibc-rs" }
-ibc-middleware-packet-forward = { git = "https://github.com/heliaxdev/ibc-middleware", branch = "yuji/upgrade-ibc-rs", features = ["borsh"] }
-ibc-testkit = { git = "https://github.com/cosmos/ibc-rs", rev = "a5f9fbf236cb26db3a76cde20ba43382de2d1ba4", default-features = false }
+ibc = { version = "0.57.0", features = ["serde"] }
+ibc-derive = "0.10.1"
+ibc-middleware-module = { git = "https://github.com/heliaxdev/ibc-middleware", rev = "e723d8465d9ed8185ea08debc01cd4d18af140bc" }
+ibc-middleware-module-macros = { git = "https://github.com/heliaxdev/ibc-middleware", rev = "e723d8465d9ed8185ea08debc01cd4d18af140bc" }
+ibc-middleware-overflow-receive = { git = "https://github.com/heliaxdev/ibc-middleware", rev = "e723d8465d9ed8185ea08debc01cd4d18af140bc" }
+ibc-middleware-packet-forward = { git = "https://github.com/heliaxdev/ibc-middleware", rev = "e723d8465d9ed8185ea08debc01cd4d18af140bc", features = ["borsh"] }
+ibc-testkit = { version = "0.57.0", default-features = false }
 ics23 = "0.12.0"
 usize-set = { version = "0.10.3", features = ["serialize-borsh", "serialize-serde"] }
 indexmap = { package = "nam-indexmap", version = "2.7.1-nam.0", features = ["borsh-schema", "serde"] }
