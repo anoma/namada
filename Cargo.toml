@@ -120,10 +120,10 @@ futures = "0.3"
 git2 = { version = "0.18.1", default-features = false }
 ibc = { version = "0.57.0", features = ["serde"] }
 ibc-derive = "0.10.1"
-ibc-middleware-module = { git = "https://github.com/heliaxdev/ibc-middleware", rev = "e723d8465d9ed8185ea08debc01cd4d18af140bc" }
-ibc-middleware-module-macros = { git = "https://github.com/heliaxdev/ibc-middleware", rev = "e723d8465d9ed8185ea08debc01cd4d18af140bc" }
-ibc-middleware-overflow-receive = { git = "https://github.com/heliaxdev/ibc-middleware", rev = "e723d8465d9ed8185ea08debc01cd4d18af140bc" }
-ibc-middleware-packet-forward = { git = "https://github.com/heliaxdev/ibc-middleware", rev = "e723d8465d9ed8185ea08debc01cd4d18af140bc", features = ["borsh"] }
+ibc-middleware-module = { git = "https://github.com/heliaxdev/ibc-middleware", tag = "module/v0.2.0" }
+ibc-middleware-module-macros = { git = "https://github.com/heliaxdev/ibc-middleware", tag = "module-macros/v0.2.0" }
+ibc-middleware-overflow-receive = { git = "https://github.com/heliaxdev/ibc-middleware", tag = "orm/v0.5.0" }
+ibc-middleware-packet-forward = { git = "https://github.com/heliaxdev/ibc-middleware", tag = "pfm/v0.10.0", features = ["borsh"] }
 ibc-testkit = { version = "0.57.0", default-features = false }
 ics23 = "0.12.0"
 usize-set = { version = "0.10.3", features = ["serialize-borsh", "serialize-serde"] }
