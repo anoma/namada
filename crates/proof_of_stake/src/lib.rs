@@ -115,6 +115,9 @@ use crate::validator_set_update::{
     update_validator_set,
 };
 
+/// Event descriptor for claim-rewards token transfer
+pub const CLAIM_REWARDS_EVENT_DESC: &str = "pos-claim-rewards";
+
 /// PoS storage `Keys/Read/Write` implementation
 #[derive(Debug)]
 pub struct Store<S>(PhantomData<S>);
@@ -2807,7 +2810,7 @@ pub fn claim_reward_tokens<S, Gov, Token>(
 where
     S: StorageRead + StorageWrite,
     Gov: governance::Read<S>,
-    Token: trans_token::Write<S>,
+    Token: trans_token::Write<S> + trans_token::Events<S>,
 {
     tracing::debug!("Claiming rewards in epoch {current_epoch}");
 
@@ -2832,6 +2835,15 @@ where
     // Transfer the bonded tokens from PoS to the source
     let staking_token = staking_token_address(storage);
     Token::transfer(storage, &staking_token, &ADDRESS, &source, reward_tokens)?;
+    Token::emit_transfer_event(
+        storage,
+        CLAIM_REWARDS_EVENT_DESC.into(),
+        trans_token::EventLevel::Tx,
+        &staking_token,
+        reward_tokens,
+        trans_token::UserAccount::Internal(ADDRESS),
+        trans_token::UserAccount::Internal(source),
+    )?;
 
     Ok(reward_tokens)
 }
