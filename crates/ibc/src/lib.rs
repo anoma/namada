@@ -16,6 +16,7 @@
     clippy::print_stdout,
     clippy::print_stderr
 )]
+#![cfg_attr(feature = "arbitrary", allow(clippy::disallowed_methods))]
 
 mod actions;
 pub mod context;
