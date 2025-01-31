@@ -18,8 +18,8 @@ use namada_proof_of_stake::slashing::{
     find_all_enqueued_slashes, find_all_slashes,
 };
 use namada_proof_of_stake::storage::{
-    bond_handle, get_consensus_key, liveness_sum_missed_votes_handle,
-    read_all_validator_addresses,
+    bond_handle, get_consensus_key, get_last_reward_claim_epoch,
+    liveness_sum_missed_votes_handle, read_all_validator_addresses,
     read_below_capacity_validator_set_addresses_with_stake,
     read_consensus_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
@@ -648,12 +648,11 @@ where
     );
 
     // Shortcut: avoid costly lookup of non-existent storage key in history
-    // by first checking to see if it currently exists in memory before
-    // querying by height.
-    // TODO: this might not be valid if rewards have been claimed in the current
-    // epoch? (because the rewards_counter would be removed from
-    // storage until the next epoch)
-    if !ctx.state.has_key(&storage_key)? {
+    // by first checking to see if it currently exists in memory or has ever
+    // been claimed before querying by height.
+    if !ctx.state.has_key(&storage_key)?
+        && get_last_reward_claim_epoch(ctx.state, source, validator)?.is_none()
+    {
         return Ok(token::Amount::zero());
     }
 
