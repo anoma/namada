@@ -423,7 +423,7 @@ where
 
         // Note the balance changes they imply
         let ChangedBalances {
-            unepoched_tokens: tokens,
+            unepoched_tokens,
             decoder,
             pre,
             post,
@@ -438,7 +438,7 @@ where
                 keys_changed,
             )?;
         Ok(ChangedBalances {
-            unepoched_tokens: tokens,
+            unepoched_tokens,
             decoder,
             pre,
             post,

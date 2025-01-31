@@ -456,7 +456,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     async fn precompute_asset_types<C: Client + Sync>(
         &mut self,
         client: &C,
-        tokens: Vec<&Address>,
+        tokens: BTreeSet<&Address>,
     ) -> Result<(), eyre::Error> {
         // To facilitate lookups of human-readable token names
         for token in tokens {
