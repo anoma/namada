@@ -2019,18 +2019,18 @@ mod test_shielded_wallet {
                 }
                 .encode()
                 .unwrap(),
-                -1,
+                -2i128.pow(epoch as u32),
             );
             conv += I128Sum::from_pair(
                 AssetData {
                     token: native_token.clone(),
                     denom: native_token_denom,
                     position: MaspDigitPos::Zero,
-                    epoch: Some(MaspEpoch::new(epoch + 1)),
+                    epoch: Some(MaspEpoch::new(5)),
                 }
                 .encode()
                 .unwrap(),
-                2,
+                2i128.pow(5),
             );
             context.add_conversions(
                 AssetData {
@@ -2057,7 +2057,7 @@ mod test_shielded_wallet {
             token: native_token.clone(),
             denom: native_token_denom,
             position: MaspDigitPos::Zero,
-            epoch: Some(MaspEpoch::new(5)),
+            epoch: Some(MaspEpoch::new(1)),
         };
         wallet.add_asset_type(asset_data.clone());
         wallet.add_note(create_note(asset_data.clone(), 10, pa), vk);
@@ -2093,7 +2093,7 @@ mod test_shielded_wallet {
                 }
                 .encode()
                 .unwrap(),
-                5
+                80,
             )
         );
     }
