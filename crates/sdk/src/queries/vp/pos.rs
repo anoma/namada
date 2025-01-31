@@ -904,9 +904,9 @@ mod test {
     use super::*;
     use crate::queries::testing::TestClient;
     use crate::queries::{RequestCtx, RequestQuery, Router, RPC};
+    use namada_core::address;
     use namada_core::chain::Epoch;
     use namada_core::token;
-    use namada_core::{address, storage};
     use namada_state::StorageWrite;
 
     #[tokio::test]
@@ -1236,5 +1236,69 @@ mod test {
             .await
             .expect("Rewards query failed");
         assert_eq!(result, val_reward_epoch_2);
+
+        // Simulate rewards claim, then query again at previous epoch
+        let height = client.state.in_mem().block.height;
+        client
+            .state
+            .in_mem_mut()
+            .begin_block(height + 1)
+            .expect("Test failed");
+        client.state.in_mem_mut().block.height = height + 1;
+
+        let claimed = namada_proof_of_stake::claim_reward_tokens::<
+            _,
+            governance::Store<_>,
+            namada_token::Store<_>,
+        >(
+            &mut client.state, Some(&delegator), &validator, epoch
+        )
+        .expect("Claiming rewards failed");
+
+        assert_eq!(claimed, del_reward_epoch_3 + del_reward_epoch_2);
+
+        let claimed_validator =
+            namada_proof_of_stake::claim_reward_tokens::<
+                _,
+                governance::Store<_>,
+                namada_token::Store<_>,
+            >(&mut client.state, None, &validator, epoch)
+            .expect("Claiming validator rewards failed");
+
+        assert_eq!(claimed_validator, val_reward_epoch_3 + val_reward_epoch_2);
+
+        // Commit the block
+        client.state.commit_block().expect("Test failed");
+
+        // Expect rewards to now report 0 when not specifying epcoh
+        let result = pos
+            .rewards(&client, &validator, &Some(delegator.clone()), &None)
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, token::Amount::zero());
+
+        let result = pos
+            .rewards(&client, &validator, &None, &None)
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, token::Amount::zero());
+
+        // But when querying at the current epoch, the claimable rewards should still be reported
+        let result = pos
+            .rewards(
+                &client,
+                &validator,
+                &Some(delegator.clone()),
+                &Some(epoch),
+            )
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, del_reward_epoch_3 + del_reward_epoch_2);
+
+        let result = pos
+            .rewards(&client, &validator, &None, &Some(epoch))
+            .await
+            .expect("Rewards query failed");
+        assert_eq!(result, val_reward_epoch_3 + val_reward_epoch_2);
     }
 }
