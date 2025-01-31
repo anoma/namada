@@ -1503,8 +1503,11 @@ pub async fn query_rewards<C: Client + Sync>(
     client: &C,
     source: &Option<Address>,
     validator: &Address,
+    epoch: &Option<Epoch>,
 ) -> token::Amount {
-    unwrap_sdk_result(rpc::query_rewards(client, source, validator).await)
+    unwrap_sdk_result(
+        rpc::query_rewards(client, source, validator, epoch).await,
+    )
 }
 
 /// Query token total supply.
@@ -1920,12 +1923,18 @@ pub async fn query_and_print_rewards<N: Namada>(
     context: &N,
     args: args::QueryRewards,
 ) {
-    let (source, validator) = (args.source, args.validator);
+    let (source, validator, epoch) = (args.source, args.validator, args.epoch);
 
-    let rewards = query_rewards(context.client(), &source, &validator).await;
+    let rewards =
+        query_rewards(context.client(), &source, &validator, &epoch).await;
     display_line!(
         context.io(),
-        "Current rewards available for claim: {} NAM",
+        "{}: {} NAM",
+        epoch
+            .map(|e| format!("Rewards at epoch {}", e))
+            .unwrap_or_else(
+                || "Current rewards available for claim".to_string()
+            ),
         rewards.to_string_native()
     );
 }

@@ -872,9 +872,13 @@ pub async fn query_rewards<C: namada_io::Client + Sync>(
     client: &C,
     source: &Option<Address>,
     validator: &Address,
+    epoch: &Option<Epoch>,
 ) -> Result<token::Amount, error::Error> {
     convert_response::<C, token::Amount>(
-        RPC.vp().pos().rewards(client, validator, source).await,
+        RPC.vp()
+            .pos()
+            .rewards(client, validator, source, epoch)
+            .await,
     )
 }
 
@@ -1682,16 +1686,15 @@ pub async fn osmosis_denom_from_namada_denom(
     if nam_denom.trace_path.is_empty() {
         // Namada native asset
 
-        let address = nam_denom
-            .base_denom
-            .as_str()
-            .parse::<Address>()
-            .map_err(|err| {
-                Error::Encode(EncodingError::Decoding(format!(
+        let address =
+            nam_denom.base_denom.as_str().parse::<Address>().map_err(
+                |err| {
+                    Error::Encode(EncodingError::Decoding(format!(
                     "Failed to parse base denom {} as Namada address: {err}",
                     nam_denom.base_denom
                 )))
-            })?;
+                },
+            )?;
 
         // validate that the base denom is not another ibc token
         if matches!(&address, Address::Internal(InternalAddress::IbcToken(_))) {
