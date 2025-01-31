@@ -524,7 +524,6 @@ async fn query_shielded_balance(
                 context.client(),
                 context.io(),
                 &viewing_key,
-                masp_epoch,
             )
             .await
             .unwrap()
