@@ -488,8 +488,14 @@ async fn query_shielded_balance(
     {
         let mut shielded = context.shielded_mut().await;
         let _ = shielded.load().await;
+        // Precompute asset types to increase chances of success in decoding
+        let token_map = context.wallet().await.get_addresses();
+        let mut tokens: BTreeSet<_> = token_map.values().collect();
+        let native_token = context.native_token();
+        tokens.insert(&native_token);
+        tokens.insert(&token);
         let _ = shielded
-            .precompute_asset_types(context.client(), vec![&token])
+            .precompute_asset_types(context.client(), tokens)
             .await;
         // Save the update state so that future fetches can be short-circuited
         let _ = shielded.save().await;
