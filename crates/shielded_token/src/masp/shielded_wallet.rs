@@ -507,7 +507,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         &'a mut self,
         client: &C,
         asset_type: AssetType,
-        target_epoch: Option<MaspEpoch>,
         conversions: &'a mut Conversions,
     ) -> Result<(), eyre::Error> {
         let btree_map::Entry::Vacant(conv_entry) =
@@ -516,7 +515,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             return Ok(());
         };
         // Get the conversion for the given asset type, otherwise fail
-        let Some((token, denom, position, ep, mut conv, path)) =
+        let Some((token, denom, position, ep, conv, path)) =
             Self::query_conversion(client, asset_type).await
         else {
             return Ok(());
@@ -528,30 +527,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             epoch: Some(ep),
         };
         self.asset_types.insert(asset_type, asset_data.clone());
-        // If no target epoch is specified, then we are converting to the latest
-        // epoch and can short circuit the inverse conversion and the queries
-        // involved in that
-        if let Some(target_epoch) = target_epoch {
-            // Get the equivalent to the original asset in the target epoch
-            let asset_data = asset_data.redate(target_epoch);
-            let target_asset_type = asset_data
-                .encode()
-                .map_err(|_| eyre!("unable to create asset type",))?;
-            // Get the conversion for the target asset type. If this query
-            // returns None for a target_epoch that is less than or equal to the
-            // latest, then the token stopped participating in the rewards
-            // program before target_epoch. Therefore a conversion to
-            // target_epoch is the same as one to the latest epoch.
-            if let Some((_token, _denom, _position, _ep, nconv, _path)) =
-                Self::query_conversion(client, target_asset_type).await
-            {
-                self.asset_types.insert(target_asset_type, asset_data);
-                // Subtract (conversion from target to latest) from (conversion
-                // from original to latest) to get (conversion from original to
-                // target).
-                conv -= nconv;
-            }
-        }
         // If the conversion is 0, then we just have a pure decoding
         if !conv.is_zero() {
             conv_entry.insert((conv.into(), path, 0));
@@ -569,20 +544,14 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         client: &(impl Client + Sync),
         io: &impl Io,
         mut input: I128Sum,
-        target_epoch: Option<MaspEpoch>,
         mut conversions: Conversions,
     ) -> Result<(I128Sum, Conversions), eyre::Error> {
         // Where we will store our exchanged value
         let mut output = I128Sum::zero();
         // Repeatedly exchange assets until it is no longer possible
         while let Some(asset_type) = input.asset_types().next().cloned() {
-            self.query_allowed_conversion(
-                client,
-                asset_type,
-                target_epoch,
-                &mut conversions,
-            )
-            .await?;
+            self.query_allowed_conversion(client, asset_type, &mut conversions)
+                .await?;
             // Consolidate the current amount with any dust from output.
             // Whatever is not used is moved back to output anyway.
             let dust = output.project(asset_type);
@@ -632,13 +601,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         // First get the unexchanged balance
         if let Some(balance) = self.compute_shielded_balance(vk).await? {
             let exchanged_amount = self
-                .compute_exchanged_amount(
-                    client,
-                    io,
-                    balance,
-                    None,
-                    BTreeMap::new(),
-                )
+                .compute_exchanged_amount(client, io, balance, BTreeMap::new())
                 .await?
                 .0;
             // And then exchange balance into current asset types
@@ -740,7 +703,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 context.client(),
                 context.io(),
                 raw_balance.to_owned(),
-                None,
                 Conversions::new(),
             )
             .await?
@@ -768,7 +730,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             self.query_allowed_conversion(
                 context.client(),
                 redated_asset_type,
-                None,
                 &mut latest_conversions,
             )
             .await?;
@@ -819,7 +780,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 context.client(),
                 context.io(),
                 current_exchanged_balance.clone(),
-                Some(next_epoch),
                 estimated_next_epoch_conversions,
             )
             .await?
@@ -990,7 +950,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                         context.client(),
                         context.io(),
                         pre_contr,
-                        None,
                         conversions.clone(),
                     )
                     .await?;
@@ -2076,13 +2035,12 @@ mod test_shielded_wallet {
         // to construct conversions properly, just like the protocol does, i.e.
         // with conversions for non-consecutive epochs
 
-        // Query the balance with conversions at epoch 4
+        // Query the balance with conversions at epoch 5
         let amount = wallet
             .compute_exchanged_amount(
                 context.client(),
                 context.io(),
                 balance,
-                Some(MaspEpoch::new(4)),
                 Conversions::new(),
             )
             .await
@@ -2095,11 +2053,11 @@ mod test_shielded_wallet {
                     token: native_token.clone(),
                     denom: native_token_denom,
                     position: MaspDigitPos::Zero,
-                    epoch: Some(MaspEpoch::new(4)),
+                    epoch: Some(MaspEpoch::new(5)),
                 }
                 .encode()
                 .unwrap(),
-                80,
+                160,
             )
         );
     }
