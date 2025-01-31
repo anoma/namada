@@ -1244,6 +1244,8 @@ mod test {
         let pks_map =
             AccountPublicKeysMap::from_iter(vec![pk1.clone(), pk2.clone()]);
         let threshold = 2_u8;
+        let est_address =
+            namada_core::address::testing::established_address_1();
 
         let tx = Tx::default();
 
@@ -1327,11 +1329,160 @@ mod test {
         // Sign the tx with two keys but one of them incorrect - sk3
         {
             let mut tx = tx.clone();
-            let pks_map_wrong = AccountPublicKeysMap::from_iter(vec![pk1, pk3]);
-            let signatures =
-                tx.compute_section_signature(&[sk1, sk3], &pks_map_wrong, None);
+            let pks_map_wrong =
+                AccountPublicKeysMap::from_iter(vec![pk1.clone(), pk3]);
+            let signatures = tx.compute_section_signature(
+                &[sk1.clone(), sk3],
+                &pks_map_wrong,
+                None,
+            );
             assert_eq!(signatures.len(), 2);
             tx.add_signatures(signatures);
+
+            // Should be rejected
+            assert_matches!(
+                tx.verify_signatures(
+                    &HashSet::from_iter([tx.header_hash()]),
+                    pks_map.clone(),
+                    &None,
+                    threshold,
+                    || Ok(()),
+                ),
+                Err(VerifySigError::InvalidSectionSignature(_))
+            );
+        }
+
+        // Sign the tx with one key but duplicate the signature to try
+        // maliciously making it through the threshold check
+        {
+            let mut tx = tx.clone();
+            let pks_map_wrong =
+                AccountPublicKeysMap::from_iter(vec![pk1.clone()]);
+            let signatures = tx.compute_section_signature(
+                &[sk1.clone()],
+                &pks_map_wrong,
+                None,
+            );
+            assert_eq!(signatures.len(), 1);
+            let sig = signatures.first().unwrap().to_owned();
+
+            // Attach the duplicated signatures with the provided function
+            let signatures = vec![sig.clone(), sig.clone()];
+            tx.add_signatures(signatures);
+
+            // Should be rejected
+            assert_matches!(
+                tx.verify_signatures(
+                    &HashSet::from_iter([tx.header_hash()]),
+                    pks_map.clone(),
+                    &None,
+                    threshold,
+                    || Ok(()),
+                ),
+                Err(VerifySigError::InvalidSectionSignature(_))
+            );
+        }
+
+        // Sign the tx with one key but duplicate the signature to try
+        // maliciously making it through the threshold check. This time avoid
+        // using the provided constructor and attach the signatures manually
+        {
+            let mut tx = tx.clone();
+            let pks_map_wrong =
+                AccountPublicKeysMap::from_iter(vec![pk1.clone()]);
+            let signatures = tx.compute_section_signature(
+                &[sk1.clone()],
+                &pks_map_wrong,
+                None,
+            );
+            assert_eq!(signatures.len(), 1);
+            let sig = signatures.first().unwrap().to_owned();
+
+            let auth = Authorization {
+                targets: vec![tx.header_hash()],
+                signatures: [(0, sig.signature)].into(),
+                signer: Signer::PubKeys(vec![pk1.clone()]),
+            };
+            tx.add_section(Section::Authorization(auth.clone()));
+            tx.add_section(Section::Authorization(auth));
+
+            // Should be rejected
+            assert_matches!(
+                tx.verify_signatures(
+                    &HashSet::from_iter([tx.header_hash()]),
+                    pks_map.clone(),
+                    &None,
+                    threshold,
+                    || Ok(()),
+                ),
+                Err(VerifySigError::InvalidSectionSignature(_))
+            );
+        }
+
+        // Sign the tx with one key but duplicate the signature to try
+        // maliciously making it through the threshold check. This time avoid
+        // using the provided constructor and attach the signatures manually,
+        // also disguise the duplicated signature to avoid the protocol check on
+        // duplicated sections
+        {
+            let mut tx = tx.clone();
+            let pks_map_wrong =
+                AccountPublicKeysMap::from_iter(vec![pk1.clone()]);
+            let signatures = tx.compute_section_signature(
+                &[sk1.clone()],
+                &pks_map_wrong,
+                None,
+            );
+            assert_eq!(signatures.len(), 1);
+            let sig = signatures.first().unwrap().to_owned();
+
+            let auth = Authorization {
+                targets: vec![tx.header_hash()],
+                signatures: [(0, sig.signature)].into(),
+                signer: Signer::PubKeys(vec![pk1.clone()]),
+            };
+            let mut auth2 = auth.clone();
+            auth2.signer = Signer::Address(est_address.clone());
+            tx.add_section(Section::Authorization(auth));
+            tx.add_section(Section::Authorization(auth2));
+
+            // Should be rejected
+            assert_matches!(
+                tx.verify_signatures(
+                    &HashSet::from_iter([tx.header_hash()]),
+                    pks_map.clone(),
+                    &None,
+                    threshold,
+                    || Ok(()),
+                ),
+                Err(VerifySigError::InvalidSectionSignature(_))
+            );
+        }
+
+        // Sign the tx with one key but duplicate the signature to try
+        // maliciously making it through the threshold check. This time avoid
+        // using the provided constructor and attach the signatures manually,
+        // also disguise the duplicated signature to avoid the protocol check on
+        // duplicated sections and change the signature index
+        {
+            let mut tx = tx.clone();
+            let pks_map_wrong =
+                AccountPublicKeysMap::from_iter(vec![pk1.clone()]);
+            let signatures =
+                tx.compute_section_signature(&[sk1], &pks_map_wrong, None);
+            assert_eq!(signatures.len(), 1);
+            let sig = signatures.first().unwrap().to_owned();
+
+            let auth = Authorization {
+                targets: vec![tx.header_hash()],
+                signatures: [(0, sig.signature.clone())].into(),
+                signer: Signer::PubKeys(vec![pk1]),
+            };
+            let mut auth2 = auth.clone();
+            auth2.signer = Signer::Address(est_address);
+            auth2.signatures = [(1, sig.signature)].into();
+            tx.add_section(Section::Authorization(auth));
+            tx.add_section(Section::Authorization(auth2));
 
             // Should be rejected
             assert_matches!(
