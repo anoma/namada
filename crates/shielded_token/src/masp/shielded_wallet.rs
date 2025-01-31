@@ -499,36 +499,54 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     }
 
     /// Query the ledger for the conversion that is allowed for the given asset
-    /// type and cache it.
+    /// type and cache it. The target epoch must be greater than or equal to the
+    /// asset's epoch.
     #[allow(async_fn_in_trait)]
     async fn query_allowed_conversion<'a, C: Client + Sync>(
         &'a mut self,
         client: &C,
         asset_type: AssetType,
+        target_epoch: MaspEpoch,
         conversions: &'a mut Conversions,
-    ) {
-        if let btree_map::Entry::Vacant(conv_entry) =
+    ) -> Result<(), eyre::Error> {
+        let btree_map::Entry::Vacant(conv_entry) =
             conversions.entry(asset_type)
+        else {
+            return Ok(());
+        };
+        // Get the conversion for the given asset type, otherwise fail
+        let Some((token, denom, position, _ep, mut conv, path)) =
+            Self::query_conversion(client, asset_type).await
+        else {
+            return Ok(());
+        };
+        // Get the equivalent to the original asset in the target epoch
+        let pre_asset_type = AssetData {
+            token,
+            denom,
+            position,
+            epoch: Some(target_epoch),
+        };
+        let target_asset_type = pre_asset_type
+            .encode()
+            .map_err(|_| eyre!("unable to create asset type",))?;
+        // Get the conversion for the target asset type. If this query returns
+        // None for a target_epoch that is less than or equal to the latest,
+        // then the token stopped participating in the rewards program before
+        // target_epoch. Therefore a conversion to target_epoch is the same as
+        // one to the latest epoch.
+        if let Some((_token, _denom, _position, _ep, nconv, _path)) =
+            Self::query_conversion(client, target_asset_type).await
         {
-            let Some((token, denom, position, ep, conv, path)) =
-                Self::query_conversion(client, asset_type).await
-            else {
-                return;
-            };
-            self.asset_types.insert(
-                asset_type,
-                AssetData {
-                    token,
-                    denom,
-                    position,
-                    epoch: Some(ep),
-                },
-            );
-            // If the conversion is 0, then we just have a pure decoding
-            if !conv.is_zero() {
-                conv_entry.insert((conv.into(), path, 0));
-            }
+            // Subtract (conversion from target to latest) from (conversion from
+            // original to latest) to get (conversion from original to target).
+            conv -= nconv;
         }
+        // If the conversion is 0, then we just have a pure decoding
+        if !conv.is_zero() {
+            conv_entry.insert((conv.into(), path, 0));
+        }
+        Ok(())
     }
 
     /// Convert the given amount into the latest asset types whilst making a
@@ -548,38 +566,20 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         let mut output = I128Sum::zero();
         // Repeatedly exchange assets until it is no longer possible
         while let Some(asset_type) = input.asset_types().next().cloned() {
-            // Get the equivalent to the current asset in the target epoch and
-            // note whether this equivalent chronologically comes after the
-            // current asset
-            let target_asset_type = self
-                .decode_asset_type(client, asset_type)
-                .await
-                .map(|mut pre_asset_type| {
-                    pre_asset_type.redate(target_epoch);
-                    pre_asset_type
-                        .encode()
-                        .map_err(|_| eyre!("unable to create asset type",))
-                })
-                .transpose()?
-                .unwrap_or(asset_type);
-            let at_target_asset_type = target_asset_type == asset_type;
-            // Fetch and store the required conversions
             self.query_allowed_conversion(
                 client,
-                target_asset_type,
+                asset_type,
+                target_epoch,
                 &mut conversions,
             )
-            .await;
-            self.query_allowed_conversion(client, asset_type, &mut conversions)
-                .await;
+            .await?;
             // Consolidate the current amount with any dust from output.
             // Whatever is not used is moved back to output anyway.
             let dust = output.project(asset_type);
             input += dust.clone();
             output -= dust;
             // Now attempt to apply conversions
-            if let (Some((conv, _wit, usage)), false) =
-                (conversions.get_mut(&asset_type), at_target_asset_type)
+            if let Some((conv, _wit, usage)) = conversions.get_mut(&asset_type)
             {
                 display_line!(
                     io,
@@ -588,27 +588,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 // Not at the target asset type, not at the latest asset type.
                 // Apply conversion to get from current asset type to the latest
                 // asset type.
-                self.apply_conversion(
-                    io,
-                    conv.clone(),
-                    asset_type,
-                    input[&asset_type],
-                    usage,
-                    &mut input,
-                    &mut output,
-                )
-                .await?;
-            } else if let (Some((conv, _wit, usage)), false) = (
-                conversions.get_mut(&target_asset_type),
-                at_target_asset_type,
-            ) {
-                display_line!(
-                    io,
-                    "converting latest asset type to target asset type..."
-                );
-                // Not at the target asset type, yet at the latest asset type.
-                // Apply inverse conversion to get from latest asset type to the
-                // target asset type.
                 self.apply_conversion(
                     io,
                     conv.clone(),
@@ -781,9 +760,10 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             self.query_allowed_conversion(
                 context.client(),
                 redated_asset_type,
+                current_epoch,
                 &mut latest_conversions,
             )
-            .await;
+            .await?;
         }
 
         let mut estimated_next_epoch_conversions = Conversions::new();
