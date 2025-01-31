@@ -559,7 +559,7 @@ where
     let mut current_convs = BTreeMap::<
         (Address, Denomination, MaspDigitPos),
         AllowedConversion,
-        >::new();
+    >::new();
     // Native token inflation values are always with respect to this
     let ref_inflation = calculate_masp_rewards_precision::<S, TransToken>(
         storage,
