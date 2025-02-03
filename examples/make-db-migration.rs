@@ -19,8 +19,6 @@ pub const OLD_CONVERSION_STATE_TYPE_HASH: &str =
     Debug, Default, BorshSerialize, BorshDeserialize, BorshDeserializer,
 )]
 pub struct NewConversionState {
-    /// The last amount of the native token distributed
-    pub normed_inflation: Option<u128>,
     /// The tree currently containing all the conversions
     pub tree: FrozenCommitmentTree<sapling::Node>,
     /// Map assets to their latest conversion and position in Merkle tree
@@ -31,7 +29,6 @@ pub struct NewConversionState {
 impl From<ConversionState> for NewConversionState {
     fn from(value: ConversionState) -> Self {
         Self {
-            normed_inflation: value.normed_inflation,
             tree: value.tree,
             assets: value.assets,
         }

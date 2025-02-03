@@ -36,8 +36,6 @@ pub struct ConversionLeaf {
     Debug, Default, BorshSerialize, BorshDeserialize, BorshDeserializer,
 )]
 pub struct ConversionState {
-    /// The last amount of the native token distributed
-    pub normed_inflation: Option<u128>,
     /// The tree currently containing all the conversions
     pub tree: FrozenCommitmentTree<SaplingNode>,
     /// Map assets to their latest conversion and position in Merkle tree

@@ -65,7 +65,12 @@ where
     let total_rewards_key = masp_total_rewards();
     let mut total_rewards = read_total_rewards(storage)?;
     checked!(total_rewards += amount)?;
-    storage.write(&total_rewards_key, total_rewards)
+    storage.write(&total_rewards_key, total_rewards)?;
+
+    let undated_balance_key = masp_undated_balance_key(&native_token);
+    let mut undated_balance = read_undated_balance(storage, &native_token)?;
+    checked!(undated_balance += amount)?;
+    storage.write(&undated_balance_key, undated_balance)
 }
 
 /// Read the total rewards minted by MASP.
