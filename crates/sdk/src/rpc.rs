@@ -872,9 +872,13 @@ pub async fn query_rewards<C: namada_io::Client + Sync>(
     client: &C,
     source: &Option<Address>,
     validator: &Address,
+    epoch: &Option<Epoch>,
 ) -> Result<token::Amount, error::Error> {
     convert_response::<C, token::Amount>(
-        RPC.vp().pos().rewards(client, validator, source).await,
+        RPC.vp()
+            .pos()
+            .rewards(client, validator, source, epoch)
+            .await,
     )
 }
 
