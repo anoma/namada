@@ -429,7 +429,7 @@ where
 /// borsh-encoded types, it is safe to check `data.is_empty()` to see if the
 /// value was found, except for unit - see `fn query_storage_value` in
 /// `apps/src/lib/client/rpc.rs` for unit type handling via `storage_has_key`.
-fn storage_value<D, H, V, T>(
+pub fn storage_value<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     request: &RequestQuery,
     storage_key: storage::Key,

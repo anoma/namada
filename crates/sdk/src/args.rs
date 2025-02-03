@@ -2545,6 +2545,8 @@ pub struct QueryRewards<C: NamadaTypes = SdkTypes> {
     pub source: Option<C::Address>,
     /// Address of the validator
     pub validator: C::Address,
+    /// Epoch in which to find rewards
+    pub epoch: Option<Epoch>,
 }
 
 /// Query PoS delegations
