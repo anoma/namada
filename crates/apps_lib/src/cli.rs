@@ -7341,11 +7341,9 @@ pub mod args {
                 )
                 .arg(EPOCH.def().help(wrap!(
                     "The epoch at which to query (corresponding to the last \
-                     committed block, if not specified). \
-                     \
-                     Note: when querying by epoch, this returns the accumulated \
-                     rewards that were available to claim at the start of the \
-                     epoch."
+                     committed block, if not specified). Note: when querying \
+                     by epoch, this returns the accumulated rewards that were \
+                     available to claim at the start of the epoch."
                 )))
         }
     }

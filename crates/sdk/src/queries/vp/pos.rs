@@ -901,13 +901,13 @@ fn enrich_bonds_and_unbonds(
 
 #[cfg(test)]
 mod test {
+    use namada_core::chain::Epoch;
+    use namada_core::{address, token};
+    use namada_state::StorageWrite;
+
     use super::*;
     use crate::queries::testing::TestClient;
     use crate::queries::{RequestCtx, RequestQuery, Router, RPC};
-    use namada_core::address;
-    use namada_core::chain::Epoch;
-    use namada_core::token;
-    use namada_state::StorageWrite;
 
     #[tokio::test]
     async fn test_validator_by_tm_addr_sanitized_input() {
@@ -934,10 +934,12 @@ mod test {
         };
         let result = POS.handle(ctx, &request);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid Tendermint address"))
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid Tendermint address")
+        )
     }
 
     // Helpers for test_rewards_query
@@ -1283,7 +1285,8 @@ mod test {
             .expect("Rewards query failed");
         assert_eq!(result, token::Amount::zero());
 
-        // But when querying at the current epoch, the claimable rewards should still be reported
+        // But when querying at the current epoch, the claimable rewards should
+        // still be reported
         let result = pos
             .rewards(
                 &client,
