@@ -201,24 +201,35 @@ impl AssetData {
 
     /// Give this pre-asset type the given epoch if already has an epoch. Return
     /// the replaced value.
-    pub fn redate(&mut self, to: MaspEpoch) {
+    pub fn redate(self, to: MaspEpoch) -> Self {
         if self.epoch.is_some() {
-            self.epoch = Some(to);
+            Self {
+                epoch: Some(to),
+                ..self
+            }
+        } else {
+            self
         }
     }
 
     /// Update the MaspEpoch to the next one
-    pub fn redate_to_next_epoch(&mut self) {
-        if let Some(ep) = self.epoch.as_mut() {
-            if let Some(next) = ep.next() {
-                *ep = next;
+    pub fn redate_to_next_epoch(self) -> Self {
+        if let Some(next) = self.epoch.as_ref().and_then(MaspEpoch::next) {
+            Self {
+                epoch: Some(next),
+                ..self
             }
+        } else {
+            self
         }
     }
 
     /// Remove the epoch associated with this pre-asset type
-    pub fn undate(&mut self) {
-        self.epoch = None;
+    pub fn undate(self) -> Self {
+        Self {
+            epoch: None,
+            ..self
+        }
     }
 }
 
@@ -1128,23 +1139,23 @@ mod test {
 
     #[test]
     fn test_masp_asset_data_basics() {
-        let mut data = AssetData {
+        let data = AssetData {
             token: address::testing::nam(),
             denom: Denomination(6),
             position: MaspDigitPos::One,
             epoch: None,
         };
 
-        data.undate();
+        let data = data.undate();
         assert!(data.epoch.is_none());
 
         let epoch_0 = MaspEpoch::new(3);
-        data.redate(epoch_0);
+        let mut data = data.redate(epoch_0);
         assert!(data.epoch.is_none());
         data.epoch = Some(epoch_0);
 
         let epoch_1 = MaspEpoch::new(5);
-        data.redate(epoch_1);
+        let data = data.redate(epoch_1);
         assert_eq!(data.epoch, Some(epoch_1));
     }
 
