@@ -263,25 +263,25 @@ pub fn encode_reward_asset_types(
             native_token.clone(),
             NATIVE_MAX_DECIMAL_PLACES.into(),
             MaspDigitPos::Zero,
-            Some(MaspEpoch::zero()),
+            None,
         )?,
         encode_asset_type(
             native_token.clone(),
             NATIVE_MAX_DECIMAL_PLACES.into(),
             MaspDigitPos::One,
-            Some(MaspEpoch::zero()),
+            None,
         )?,
         encode_asset_type(
             native_token.clone(),
             NATIVE_MAX_DECIMAL_PLACES.into(),
             MaspDigitPos::Two,
-            Some(MaspEpoch::zero()),
+            None,
         )?,
         encode_asset_type(
             native_token.clone(),
             NATIVE_MAX_DECIMAL_PLACES.into(),
             MaspDigitPos::Three,
-            Some(MaspEpoch::zero()),
+            None,
         )?,
     ])
 }
