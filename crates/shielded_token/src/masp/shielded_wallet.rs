@@ -500,13 +500,14 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
 
     /// Query the ledger for the conversion that is allowed for the given asset
     /// type and cache it. The target epoch must be greater than or equal to the
-    /// asset's epoch.
+    /// asset's epoch. If the target epoch is None, then convert to the latest
+    /// epoch.
     #[allow(async_fn_in_trait)]
     async fn query_allowed_conversion<'a, C: Client + Sync>(
         &'a mut self,
         client: &C,
         asset_type: AssetType,
-        target_epoch: MaspEpoch,
+        target_epoch: Option<MaspEpoch>,
         conversions: &'a mut Conversions,
     ) -> Result<(), eyre::Error> {
         let btree_map::Entry::Vacant(conv_entry) =
@@ -515,32 +516,41 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             return Ok(());
         };
         // Get the conversion for the given asset type, otherwise fail
-        let Some((token, denom, position, _ep, mut conv, path)) =
+        let Some((token, denom, position, ep, mut conv, path)) =
             Self::query_conversion(client, asset_type).await
         else {
             return Ok(());
         };
-        // Get the equivalent to the original asset in the target epoch
-        let pre_asset_type = AssetData {
+        let asset_data = AssetData {
             token,
             denom,
             position,
-            epoch: Some(target_epoch),
+            epoch: Some(ep),
         };
-        let target_asset_type = pre_asset_type
-            .encode()
-            .map_err(|_| eyre!("unable to create asset type",))?;
-        // Get the conversion for the target asset type. If this query returns
-        // None for a target_epoch that is less than or equal to the latest,
-        // then the token stopped participating in the rewards program before
-        // target_epoch. Therefore a conversion to target_epoch is the same as
-        // one to the latest epoch.
-        if let Some((_token, _denom, _position, _ep, nconv, _path)) =
-            Self::query_conversion(client, target_asset_type).await
-        {
-            // Subtract (conversion from target to latest) from (conversion from
-            // original to latest) to get (conversion from original to target).
-            conv -= nconv;
+        self.asset_types.insert(asset_type, asset_data.clone());
+        // If no target epoch is specified, then we are converting to the latest
+        // epoch and can short circuit the inverse conversion and the queries
+        // involved in that
+        if let Some(target_epoch) = target_epoch {
+            // Get the equivalent to the original asset in the target epoch
+            let asset_data = asset_data.redate(target_epoch);
+            let target_asset_type = asset_data
+                .encode()
+                .map_err(|_| eyre!("unable to create asset type",))?;
+            // Get the conversion for the target asset type. If this query
+            // returns None for a target_epoch that is less than or equal to the
+            // latest, then the token stopped participating in the rewards
+            // program before target_epoch. Therefore a conversion to
+            // target_epoch is the same as one to the latest epoch.
+            if let Some((_token, _denom, _position, _ep, nconv, _path)) =
+                Self::query_conversion(client, target_asset_type).await
+            {
+                self.asset_types.insert(target_asset_type, asset_data);
+                // Subtract (conversion from target to latest) from (conversion
+                // from original to latest) to get (conversion from original to
+                // target).
+                conv -= nconv;
+            }
         }
         // If the conversion is 0, then we just have a pure decoding
         if !conv.is_zero() {
@@ -559,7 +569,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         client: &(impl Client + Sync),
         io: &impl Io,
         mut input: I128Sum,
-        target_epoch: MaspEpoch,
+        target_epoch: Option<MaspEpoch>,
         mut conversions: Conversions,
     ) -> Result<(I128Sum, Conversions), eyre::Error> {
         // Where we will store our exchanged value
@@ -618,7 +628,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         client: &(impl Client + Sync),
         io: &impl Io,
         vk: &ViewingKey,
-        target_epoch: MaspEpoch,
     ) -> Result<Option<I128Sum>, eyre::Error> {
         // First get the unexchanged balance
         if let Some(balance) = self.compute_shielded_balance(vk).await? {
@@ -627,7 +636,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     client,
                     io,
                     balance,
-                    target_epoch,
+                    None,
                     BTreeMap::new(),
                 )
                 .await?
@@ -731,7 +740,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 context.client(),
                 context.io(),
                 raw_balance.to_owned(),
-                current_epoch,
+                None,
                 Conversions::new(),
             )
             .await?
@@ -743,7 +752,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         // exchanged balance. For these assets there are no conversions yet so
         // we need to see if there are conversions for the previous epoch
         for (asset_type, _) in current_exchanged_balance.components() {
-            let mut asset = match self
+            let asset = match self
                 .decode_asset_type(context.client(), *asset_type)
                 .await
             {
@@ -754,13 +763,12 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 ) if ep == current_epoch => data,
                 _ => continue,
             };
-            asset.redate(previous_epoch);
-            let redated_asset_type = asset.encode()?;
+            let redated_asset_type = asset.redate(previous_epoch).encode()?;
 
             self.query_allowed_conversion(
                 context.client(),
                 redated_asset_type,
-                current_epoch,
+                None,
                 &mut latest_conversions,
             )
             .await?;
@@ -769,7 +777,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         let mut estimated_next_epoch_conversions = Conversions::new();
         // re-date the all the latest conversions up one epoch
         for (asset_type, (conv, wit, _)) in latest_conversions {
-            let mut asset = self
+            let asset = self
                 .decode_asset_type(context.client(), asset_type)
                 .await
                 .ok_or_else(|| {
@@ -794,14 +802,13 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 if asset.token == native_token
                     || asset_data.token != native_token
                 {
-                    asset_data.redate_to_next_epoch();
+                    asset_data = asset_data.redate_to_next_epoch();
                 }
 
                 est_conv += ValueSum::from_pair(asset_data.encode()?, val)
             }
-            asset.redate_to_next_epoch();
             estimated_next_epoch_conversions.insert(
-                asset.encode().unwrap(),
+                asset.redate_to_next_epoch().encode().unwrap(),
                 (AllowedConversion::from(est_conv), wit.clone(), 0),
             );
         }
@@ -812,7 +819,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 context.client(),
                 context.io(),
                 current_exchanged_balance.clone(),
-                next_epoch,
+                Some(next_epoch),
                 estimated_next_epoch_conversions,
             )
             .await?
@@ -932,7 +939,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         spent_notes: &mut SpentNotesTracker,
         sk: PseudoExtendedKey,
         target: ValueSum<(MaspDigitPos, Address), i128>,
-        target_epoch: MaspEpoch,
     ) -> Result<
         (
             I128Sum,
@@ -984,7 +990,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                         context.client(),
                         context.io(),
                         pre_contr,
-                        target_epoch,
+                        None,
                         conversions.clone(),
                     )
                     .await?;
@@ -1527,7 +1533,8 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         Ok(change)
     }
 
-    /// Add the necessary transaction inputs to the builder.
+    /// Add the necessary transaction inputs to the builder. The supplied epoch
+    /// must be the current epoch.
     #[allow(async_fn_in_trait)]
     #[allow(clippy::too_many_arguments)]
     async fn add_inputs(
@@ -1600,7 +1607,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     notes_tracker,
                     sk,
                     required_amt.clone(),
-                    epoch,
                 )
                 .await
                 .map_err(|e| TransferErr::General(e.to_string()))?;
@@ -1818,7 +1824,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 "Failed to decode epoched asset type, undating it: {:#?}",
                 decoded
             );
-            decoded.undate();
+            *decoded = decoded.clone().undate();
             asset_type = decoded
                 .encode()
                 .map_err(|_| eyre!("unable to create asset type"))?;
@@ -2076,7 +2082,7 @@ mod test_shielded_wallet {
                 context.client(),
                 context.io(),
                 balance,
-                MaspEpoch::new(4),
+                Some(MaspEpoch::new(4)),
                 Conversions::new(),
             )
             .await
