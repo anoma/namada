@@ -1140,7 +1140,7 @@ where
     // Root cargo workspace manifest path
     let (bin_name, log_level) = match bin {
         Bin::Namada => ("namada", "info"),
-        Bin::Node => ("namadan", "debug"),
+        Bin::Node => ("namadan", "info"),
         Bin::Client => (
             "namadac",
             if is_shielded_sync {
