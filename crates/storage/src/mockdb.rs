@@ -387,9 +387,11 @@ impl DB for MockDB {
         if height == last_height {
             self.read_subspace_val(key)
         } else {
-            // Quick-n-dirty implementation for reading subspace value at height:
+            // Quick-n-dirty implementation for reading subspace value at
+            // height:
             // - See if there are any diffs between height+1..last_height.
-            // - If so, the first one will provide the value we want as its old value.
+            // - If so, the first one will provide the value we want as its old
+            //   value.
             // - If not, we can just read the value at the latest height.
             for h in (height.0 + 1)..=last_height.0 {
                 let old_diff = self.read_diffs_val(key, h.into(), true)?;
@@ -397,7 +399,8 @@ impl DB for MockDB {
 
                 match (old_diff, new_diff) {
                     (Some(old_diff), Some(_)) | (Some(old_diff), None) => {
-                        // If there is an old diff, it contains the value at the requested height.
+                        // If there is an old diff, it contains the value at the
+                        // requested height.
                         return Ok(Some(old_diff));
                     }
                     (None, Some(_)) => {
