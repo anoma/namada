@@ -4341,23 +4341,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ledger-namada-rs"
-version = "0.0.1"
-source = "git+https://github.com/Zondax/ledger-namada?tag=v2.0.4#50f3332e091bad2e96ac52e30f03dd85d7daf9e7"
-dependencies = [
- "bincode",
- "byteorder",
- "ed25519-dalek",
- "leb128",
- "ledger-transport",
- "ledger-zondax-generic",
- "prost 0.11.9",
- "prost-types 0.11.9",
- "sha2 0.10.8",
- "thiserror 1.0.50",
-]
-
-[[package]]
 name = "ledger-transport"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4848,6 +4831,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "nam-ledger-namada-rs"
+version = "0.0.1-nam.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4df1ba1f42a8e5776e4c8d3e13f6dbc8fac56924a451ba9f014ab56a0d142c72"
+dependencies = [
+ "bincode",
+ "byteorder",
+ "ed25519-dalek",
+ "leb128",
+ "ledger-transport",
+ "ledger-zondax-generic",
+ "prost 0.11.9",
+ "prost-types 0.11.9",
+ "sha2 0.10.8",
+ "thiserror 1.0.50",
+]
+
+[[package]]
 name = "nam-ledger-proto"
 version = "0.1.1-nam.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4985,13 +4986,13 @@ dependencies = [
  "itertools 0.12.1",
  "kdam",
  "lazy_static",
- "ledger-namada-rs",
  "ledger-transport",
  "ledger-transport-hid",
  "linkme",
  "masp_primitives",
  "nam-jubjub",
  "nam-ledger-lib",
+ "nam-ledger-namada-rs",
  "namada_core",
  "namada_macros",
  "namada_migrations",
