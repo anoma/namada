@@ -508,7 +508,7 @@ async fn query_shielded_balance(
         display_line!(context.io(), "{token_alias}: 0");
     };
 
-    let balance = if no_conversions {
+    let balance = if no_conversions || token != context.native_token() {
         let Some(bal) = shielded
             .compute_shielded_balance(&viewing_key)
             .await
