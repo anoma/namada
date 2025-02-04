@@ -642,8 +642,8 @@ impl<U: WalletIo> Wallet<U> {
     ///
     /// Any usage of this function should be careful not expose a shielded key
     /// that may be derived via modified ZIP32 from this key (specifically when
-    /// the scheme is Ed25519 with the default HD derivation path and no
-    /// encryption password is being used).
+    /// the derivation path and schema matching `DerivationPath::modified_zip32`
+    /// and no encryption password is being used).
     #[allow(clippy::too_many_arguments)]
     pub fn derive_store_key_from_mnemonic_code(
         &mut self,
@@ -774,8 +774,8 @@ impl<U: WalletIo> Wallet<U> {
     ///
     /// Any usage of this function should be careful not expose a shielded key
     /// that may be derived via modified ZIP32 from this key (specifically when
-    /// the scheme is Ed25519 with the default HD derivation path and no
-    /// encryption password is being used).
+    /// the derivation path and schema matching `DerivationPath::modified_zip32`
+    /// and no encryption password is being used).
     pub fn derive_store_hd_secret_key(
         &mut self,
         scheme: SchemeType,
