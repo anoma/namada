@@ -261,7 +261,9 @@ where
     use masp_primitives::sapling::Node;
     use masp_primitives::transaction::components::I128Sum as MaspAmount;
     use namada_core::arith::CheckedAdd;
-    use namada_core::masp::{encode_asset_type, MaspEpoch};
+    use namada_core::masp::{
+        encode_asset_type, encode_reward_asset_types, MaspEpoch,
+    };
     use namada_core::token::{MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
     use rayon::iter::{
         IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
@@ -297,36 +299,8 @@ where
     // reward tokens with the zeroth epoch to minimize the number of convert
     // notes clients have to use. This trick works under the assumption that
     // reward tokens will then be reinflated back to the current epoch.
-    let reward_assets = [
-        encode_asset_type(
-            native_token.clone(),
-            NATIVE_MAX_DECIMAL_PLACES.into(),
-            MaspDigitPos::Zero,
-            Some(MaspEpoch::zero()),
-        )
-        .into_storage_result()?,
-        encode_asset_type(
-            native_token.clone(),
-            NATIVE_MAX_DECIMAL_PLACES.into(),
-            MaspDigitPos::One,
-            Some(MaspEpoch::zero()),
-        )
-        .into_storage_result()?,
-        encode_asset_type(
-            native_token.clone(),
-            NATIVE_MAX_DECIMAL_PLACES.into(),
-            MaspDigitPos::Two,
-            Some(MaspEpoch::zero()),
-        )
-        .into_storage_result()?,
-        encode_asset_type(
-            native_token.clone(),
-            NATIVE_MAX_DECIMAL_PLACES.into(),
-            MaspDigitPos::Three,
-            Some(MaspEpoch::zero()),
-        )
-        .into_storage_result()?,
-    ];
+    let reward_assets =
+        encode_reward_asset_types(&native_token).into_storage_result()?;
     // Conversions from the previous to current asset for each address
     let mut current_convs = BTreeMap::<
         (Address, Denomination, MaspDigitPos),
