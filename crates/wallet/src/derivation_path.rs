@@ -14,6 +14,7 @@ use tiny_hderive::Error as HDeriveError;
 
 const BIP44_PURPOSE: u32 = 44;
 const ZIP32_PURPOSE: u32 = 32;
+const MODIFIED_ZIP32_ADDR: u32 = 255;
 
 const ETH_COIN_TYPE: u32 = 60;
 const NAMADA_COIN_TYPE: u32 = 877;
@@ -149,6 +150,15 @@ impl DerivationPath {
     /// Check if the path is compliant with Namada's shielded scheme
     pub fn is_namada_shielded_compliant(&self) -> bool {
         self.is_zip32_conform() && self.has_shielded_compatible_coin_type()
+    }
+
+    /// Modified ZIP32 path is used to derive Ed25519 keys to derive shielded
+    /// keys in way that's compatible with the Ledger device app, in which the
+    /// pure ZIP32 cannot be used because its secret is inaccessible.
+    pub fn modified_zip32() -> (Self, SchemeType) {
+        let scheme = SchemeType::Ed25519;
+        let path = Self::bip44(scheme, 0, 0, MODIFIED_ZIP32_ADDR);
+        (path.hardened(scheme), scheme)
     }
 
     fn bip44_base_indexes_for_scheme(scheme: SchemeType) -> Vec<ChildIndex> {
@@ -396,5 +406,13 @@ mod tests {
             !path_z_2.is_namada_transparent_compliant(SchemeType::Secp256k1)
         );
         assert!(path_z_2.is_namada_shielded_compliant());
+
+        let (modified_zip32, zip32_scheme) = DerivationPath::modified_zip32();
+        assert!(matches!(zip32_scheme, SchemeType::Ed25519));
+        assert_eq!(
+            modified_zip32,
+            DerivationPath::from_path_string("m/44'/877'/0'/0'/255'")
+                .expect("Path construction cannot fail.")
+        );
     }
 }
