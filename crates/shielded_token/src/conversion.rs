@@ -90,15 +90,14 @@ where
 pub fn calculate_masp_rewards<S, TransToken>(
     storage: &mut S,
     token: &Address,
+    denomination: Denomination,
+    precision: u128,
     masp_epochs_per_year: u64,
-) -> Result<((u128, u128), Denomination)>
+) -> Result<(u128, u128)>
 where
     S: StorageWrite + StorageRead,
     TransToken: trans_token::Keys + trans_token::Read<S>,
 {
-    let (precision, denomination) =
-        calculate_masp_rewards_precision::<S, TransToken>(storage, token)?;
-
     let masp_addr = MASP;
 
     // Query the storage for information -------------------------
@@ -224,7 +223,7 @@ where
         total_tokens_in_masp,
     )?;
 
-    Ok(((noterized_inflation, precision), denomination))
+    Ok((noterized_inflation, precision))
 }
 
 // This is only enabled when "wasm-runtime" is on, because we're using rayon
@@ -355,12 +354,8 @@ where
     let masp_epochs_per_year =
         checked!(epochs_per_year / masp_epoch_multiplier)?;
     for token in &masp_reward_keys {
-        let ((reward, precision), denom) =
-            calculate_masp_rewards::<S, TransToken>(
-                storage,
-                token,
-                masp_epochs_per_year,
-            )?;
+        let (precision, denom) =
+            calculate_masp_rewards_precision::<S, TransToken>(storage, token)?;
         masp_reward_denoms.insert(token.clone(), denom);
         // Dispense a transparent reward in parallel to the shielded rewards
         let addr_bal = TransToken::read_balance(storage, token, &masp_addr)?;
@@ -370,6 +365,17 @@ where
             .conversion_state_mut()
             .normed_inflation
             .get_or_insert(ref_inflation);
+        let (reward, precision) = calculate_masp_rewards::<S, TransToken>(
+            storage,
+            token,
+            denom,
+            if *token == native_token {
+                normed_inflation
+            } else {
+                precision
+            },
+            masp_epochs_per_year,
+        )?;
 
         for digit in MaspDigitPos::iter() {
             // Provide an allowed conversion from previous timestamp. The
@@ -395,10 +401,7 @@ where
                 // previous epoch
                 let inflation_uint = Uint::from(normed_inflation);
                 let reward = Uint::from(reward);
-                let precision = Uint::from(precision);
-                let new_normed_inflation = checked!(
-                    inflation_uint + (inflation_uint * reward) / precision
-                )?;
+                let new_normed_inflation = checked!(inflation_uint + reward)?;
                 let new_normed_inflation = u128::try_from(new_normed_inflation)
                     .unwrap_or_else(|_| {
                         tracing::warn!(
