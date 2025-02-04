@@ -12,10 +12,8 @@ readme.workspace = true
 repository.workspace = true
 version.workspace = true
 
-[lib]
-
 [dependencies]
-namada_macros = { path = "../macros" }
+namada_macros.workspace = true
 
 lazy_static.workspace = true
 linkme.workspace = true

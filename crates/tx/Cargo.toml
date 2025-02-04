@@ -15,19 +15,20 @@ version.workspace = true
 [features]
 default = []
 testing = ["proptest", "namada_account/testing", "namada_core/testing"]
-migrations = [
-    "namada_migrations",
-    "linkme",
+migrations = ["namada_migrations", "linkme"]
+arbitrary = [
+    "dep:arbitrary",
+    "namada_account/arbitrary",
+    "namada_core/arbitrary",
 ]
-arbitrary = ["dep:arbitrary", "namada_account/arbitrary", "namada_core/arbitrary"]
 
 [dependencies]
-namada_account = { path = "../account" }
-namada_core = { path = "../core" }
-namada_events = { path = "../events", default-features = false }
-namada_gas = { path = "../gas" }
-namada_macros = { path = "../macros" }
-namada_migrations = {path = "../migrations", optional = true }
+namada_account.workspace = true
+namada_core.workspace = true
+namada_events = { workspace = true, default-features = false }
+namada_gas.workspace = true
+namada_macros.workspace = true
+namada_migrations = { workspace = true, optional = true }
 
 arbitrary = { workspace = true, optional = true }
 ark-bls12-381.workspace = true
@@ -36,7 +37,7 @@ borsh.workspace = true
 data-encoding.workspace = true
 either.workspace = true
 konst.workspace = true
-linkme = {workspace = true, optional = true}
+linkme = { workspace = true, optional = true }
 masp_primitives.workspace = true
 num-derive.workspace = true
 num-traits.workspace = true
@@ -50,7 +51,7 @@ sha2.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-namada_core = { path = "../core", features = ["testing"] }
+namada_core = { workspace = true, features = ["testing"] }
 
 assert_matches.workspace = true
 proptest.workspace = true

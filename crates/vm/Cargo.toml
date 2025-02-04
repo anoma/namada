@@ -23,22 +23,18 @@ wasm-runtime = [
   "wasmer-vm",
   "wasmer",
 ]
-testing = [
-  "namada_account/testing",
-  "namada_core/testing",
-  "tempfile",
-]
+testing = ["namada_account/testing", "namada_core/testing", "tempfile"]
 
 [dependencies]
-namada_account = { path = "../account" }
-namada_core = { path = "../core", features = ["control_flow"] }
-namada_events = { path = "../events", default-features = false }
-namada_gas = { path = "../gas" }
-namada_parameters = { path = "../parameters" }
-namada_state = { path = "../state" }
-namada_token = { path = "../token" }
-namada_tx = { path = "../tx" }
-namada_vp = { path = "../vp" }
+namada_account.workspace = true
+namada_core = { workspace = true, features = ["control_flow"] }
+namada_events = { workspace = true, default-features = false }
+namada_gas.workspace = true
+namada_parameters.workspace = true
+namada_state.workspace = true
+namada_token.workspace = true
+namada_tx.workspace = true
+namada_vp.workspace = true
 
 borsh.workspace = true
 clru.workspace = true
@@ -56,12 +52,12 @@ wasmer-vm = { workspace = true, optional = true }
 wasmparser.workspace = true
 
 [dev-dependencies]
-namada_core = { path = "../core", default-features = false, features = [
+namada_core = { workspace = true, default-features = false, features = [
   "testing",
 ] }
-namada_state = { path = "../state", features = ["testing"] }
-namada_test_utils = { path = "../test_utils" }
-namada_tx = { path = "../tx", features = ["testing"] }
+namada_state = { workspace = true, features = ["testing"] }
+namada_test_utils.workspace = true
+namada_tx = { workspace = true, features = ["testing"] }
 
 assert_matches.workspace = true
 byte-unit.workspace = true

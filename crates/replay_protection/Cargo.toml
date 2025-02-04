@@ -12,6 +12,5 @@ readme.workspace = true
 repository.workspace = true
 version.workspace = true
 
-
 [dependencies]
-namada_core = { path = "../core" }
+namada_core.workspace = true

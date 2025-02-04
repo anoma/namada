@@ -12,18 +12,16 @@ readme.workspace = true
 repository.workspace = true
 version.workspace = true
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [features]
 blocking = ["tokio"]
 namada-eth-bridge = ["namada_sdk/namada-eth-bridge"]
 
 [dependencies]
-namada_sdk = { path = "../sdk" }
+namada_sdk.workspace = true
 
 borsh.workspace = true
 prost.workspace = true
 tendermint-config.workspace = true
 tendermint-rpc = { workspace = true, features = ["http-client"] }
-tokio = {workspace = true, features = ["rt"], optional = true}
+tokio = { workspace = true, features = ["rt"], optional = true }
 serde_json = "1.0.108"

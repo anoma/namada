@@ -16,7 +16,8 @@ version.workspace = true
 async-send = []
 
 [dependencies]
-namada_core = { path = "../core" }
+namada_core.workspace = true
+
 async-trait.workspace = true
 tendermint-rpc.workspace = true
 thiserror.workspace = true
