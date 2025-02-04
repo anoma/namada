@@ -33,24 +33,22 @@ harness = false
 path = "wasm_opcodes.rs"
 
 [features]
-namada-eth-bridge = [
-  "namada_apps_lib/namada-eth-bridge",
-]
+namada-eth-bridge = ["namada_apps_lib/namada-eth-bridge"]
 
 [dependencies]
 
 # NOTE: this crate MUST NOT import any dependency with testing features to prevent benchmarking non-production code
 [dev-dependencies]
-namada_apps_lib = { path = "../apps_lib", features = ["benches"] }
-namada_node = { path = "../node", features = ["benches"] }
-namada_vm = { path = "../vm", features = ["wasm-runtime"] }
-namada_vp = { path = "../vp" }
+namada_apps_lib = { workspace = true, features = ["benches"] }
+namada_node = { workspace = true, features = ["benches"] }
+namada_vm = { workspace = true, default-features = true }
+namada_vp.workspace = true
 
 masp_primitives.workspace = true
 masp_proofs = { workspace = true, features = ["benchmarks", "multicore"] }
 borsh.workspace = true
 criterion = { version = "0.5", features = ["html_reports"] }
-lazy_static.workspace= true
+lazy_static.workspace = true
 prost.workspace = true
 rand_core.workspace = true
 rand.workspace = true

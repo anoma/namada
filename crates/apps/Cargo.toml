@@ -56,16 +56,21 @@ migrations = ["namada_apps_lib/migrations"]
 namada-eth-bridge = ["namada_apps_lib/namada-eth-bridge"]
 
 [dependencies]
-namada_apps_lib = {path = "../apps_lib"}
-namada_node = {path = "../node"}
+namada_apps_lib.workspace = true
+namada_node.workspace = true
 
 clap_complete.workspace = true
 clap_complete_nushell.workspace = true
 color-eyre.workspace = true
 eyre.workspace = true
-tokio = {workspace = true, features = ["full"]}
+tokio = { workspace = true, features = ["full"] }
 toml.workspace = true
-tracing-subscriber = { workspace = true, features = ["std", "json", "ansi", "tracing-log"]}
+tracing-subscriber = { workspace = true, features = [
+    "std",
+    "json",
+    "ansi",
+    "tracing-log",
+] }
 tracing.workspace = true
 
 [target.'cfg(windows)'.dependencies]
