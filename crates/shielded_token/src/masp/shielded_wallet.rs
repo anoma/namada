@@ -1938,14 +1938,13 @@ mod test_shielded_wallet {
         assert!(wallet.compute_shielded_balance(&vk).await.is_err())
     }
 
-    // Test that `compute_exchanged_amount` can perform inverse conversions to
-    // match the desired epoch
+    // Test that `compute_exchanged_amount` can perform conversions correctly
     #[tokio::test]
-    async fn test_inverse_conversions() {
+    async fn test_compute_exchanged_amount() {
         let (channel, mut context) = MockNamadaIo::new();
         // the response to the current masp epoch query
         channel
-            .send(MaspEpoch::new(5).serialize_to_vec())
+            .send(MaspEpoch::new(1).serialize_to_vec())
             .expect("Test failed");
         let temp_dir = tempdir().unwrap();
         let mut wallet = TestingContext::new(FsShieldedUtils::new(
@@ -2017,7 +2016,7 @@ mod test_shielded_wallet {
 
         let vk = arbitrary_vk();
         let pa = arbitrary_pa();
-        // Shield at epoch 5
+        // Shield at epoch 1
         let asset_data = AssetData {
             token: native_token.clone(),
             denom: native_token_denom,
@@ -2031,9 +2030,6 @@ mod test_shielded_wallet {
             .await
             .unwrap()
             .unwrap_or_else(ValueSum::zero);
-        // TODO: would be nice to check even earlier epochs but for that we need
-        // to construct conversions properly, just like the protocol does, i.e.
-        // with conversions for non-consecutive epochs
 
         // Query the balance with conversions at epoch 5
         let amount = wallet
