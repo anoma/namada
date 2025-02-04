@@ -18,7 +18,7 @@ default = []
 [dependencies]
 namada_account.workspace = true
 namada_core.workspace = true
-namada_events = { workspace = true, default-features = false }
+namada_events.workspace = true
 namada_gas.workspace = true
 namada_governance.workspace = true
 namada_ibc.workspace = true
@@ -27,7 +27,7 @@ namada_parameters.workspace = true
 namada_proof_of_stake.workspace = true
 namada_storage.workspace = true
 namada_token.workspace = true
-namada_tx = { workspace = true, default-features = false }
+namada_tx.workspace = true
 namada_vm_env.workspace = true
 namada_vp_env.workspace = true
 

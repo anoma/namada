@@ -25,7 +25,10 @@ namada-eth-bridge = ["namada_sdk/namada-eth-bridge"]
 namada_core.workspace = true
 namada_macros.workspace = true
 namada_migrations = { workspace = true, optional = true }
-namada_sdk = { workspace = true, features = ["download-params", "multicore"] }
+namada_sdk = { workspace = true, default-features = true, features = [
+  "download-params",
+  "multicore",
+] }
 namada_vm.workspace = true
 namada_wallet = { workspace = true, features = ["std"] }
 
@@ -48,7 +51,7 @@ jubjub.workspace = true
 kdam.workspace = true
 lazy_static = { workspace = true, optional = true }
 linkme = { workspace = true, optional = true }
-ledger-lib = { workspace = true }
+ledger-lib.workspace = true
 ledger-namada-rs.workspace = true
 ledger-transport.workspace = true
 ledger-transport-hid.workspace = true
@@ -81,7 +84,9 @@ tracing.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
-namada_sdk = { workspace = true, features = ["testing"] }
+namada_sdk = { workspace = true, default-features = true, features = [
+  "testing",
+] }
 
 bit-set.workspace = true
 proptest.workspace = true

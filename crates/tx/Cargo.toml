@@ -25,7 +25,7 @@ arbitrary = [
 [dependencies]
 namada_account.workspace = true
 namada_core.workspace = true
-namada_events = { workspace = true, default-features = false }
+namada_events.workspace = true
 namada_gas.workspace = true
 namada_macros.workspace = true
 namada_migrations = { workspace = true, optional = true }

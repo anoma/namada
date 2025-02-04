@@ -21,9 +21,9 @@ migrations = ["namada_migrations", "linkme"]
 namada_core.workspace = true
 namada_gas.workspace = true
 namada_macros.workspace = true
-namada_merkle_tree = { workspace = true }
+namada_merkle_tree.workspace = true
 namada_migrations = { workspace = true, optional = true }
-namada_replay_protection = { workspace = true }
+namada_replay_protection.workspace = true
 
 borsh.workspace = true
 itertools.workspace = true
