@@ -22,7 +22,7 @@ migrations = ["namada_migrations", "linkme"]
 namada_account.workspace = true
 namada_controller.workspace = true
 namada_core.workspace = true
-namada_events = { workspace = true, default-features = false }
+namada_events.workspace = true
 namada_macros.workspace = true
 namada_migrations = { workspace = true, optional = true }
 namada_state.workspace = true
@@ -47,7 +47,7 @@ namada_events = { workspace = true, features = ["testing"] }
 namada_governance.workspace = true
 namada_parameters.workspace = true
 namada_state = { workspace = true, features = ["testing"] }
-namada_trans_token = { workspace = true }
+namada_trans_token.workspace = true
 
 assert_matches.workspace = true
 itertools.workspace = true

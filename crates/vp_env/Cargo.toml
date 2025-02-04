@@ -15,7 +15,7 @@ version.workspace = true
 [dependencies]
 namada_core.workspace = true
 namada_gas.workspace = true
-namada_events = { workspace = true, default-features = false }
+namada_events.workspace = true
 namada_storage.workspace = true
 namada_tx.workspace = true
 

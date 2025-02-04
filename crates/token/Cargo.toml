@@ -31,7 +31,7 @@ arbitrary = ["dep:arbitrary", "namada_core/arbitrary"]
 [dependencies]
 masp_primitives = { workspace = true, optional = true }
 namada_core.workspace = true
-namada_events = { workspace = true, default-features = false }
+namada_events.workspace = true
 namada_macros.workspace = true
 namada_migrations = { workspace = true, optional = true }
 namada_shielded_token.workspace = true

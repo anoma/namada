@@ -84,7 +84,7 @@ namada_parameters = { version = "0.47.0", path = "crates/parameters" }
 namada_proof_of_stake = { version = "0.47.0", path = "crates/proof_of_stake" }
 namada_replay_protection = { version = "0.47.0", path = "crates/replay_protection" }
 namada_node = { version = "0.47.0", path = "crates/node" }
-namada_sdk = { version = "0.47.0", path = "crates/sdk" }
+namada_sdk = { version = "0.47.0", path = "crates/sdk", default-features = false }
 namada_shielded_token = { version = "0.47.0", path = "crates/shielded_token" }
 namada_state = { version = "0.47.0", path = "crates/state" }
 namada_storage = { version = "0.47.0", path = "crates/storage" }
@@ -96,7 +96,7 @@ namada_trans_token = { version = "0.47.0", path = "crates/trans_token" }
 namada_tx = { version = "0.47.0", path = "crates/tx" }
 namada_tx_env = { version = "0.47.0", path = "crates/tx_env" }
 namada_tx_prelude = { version = "0.47.0", path = "crates/tx_prelude" }
-namada_vm = { version = "0.47.0", path = "crates/vm" }
+namada_vm = { version = "0.47.0", path = "crates/vm", default-features = false }
 namada_vm_env = { version = "0.47.0", path = "crates/vm_env" }
 namada_vote_ext = { version = "0.47.0", path = "crates/vote_ext" }
 namada_vp = { version = "0.47.0", path = "crates/vp" }

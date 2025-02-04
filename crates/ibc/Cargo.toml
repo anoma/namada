@@ -25,7 +25,7 @@ arbitrary = ["dep:arbitrary", "namada_core/arbitrary", "namada_token/arbitrary"]
 
 [dependencies]
 namada_core.workspace = true
-namada_events = { workspace = true, default-features = false }
+namada_events.workspace = true
 namada_gas.workspace = true
 namada_macros.workspace = true
 namada_migrations = { workspace = true, optional = true }
@@ -67,7 +67,9 @@ namada_proof_of_stake = { workspace = true, features = ["testing"] }
 namada_state = { workspace = true, features = ["testing"] }
 namada_token.workspace = true
 namada_tx = { workspace = true, features = ["testing"] }
-namada_vm = { workspace = true, features = ["testing"] }
+namada_vm = { workspace = true, default-features = true, features = [
+  "testing",
+] }
 
 assert_matches.workspace = true
 ibc-testkit.workspace = true

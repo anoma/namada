@@ -28,7 +28,7 @@ testing = ["namada_account/testing", "namada_core/testing", "tempfile"]
 [dependencies]
 namada_account.workspace = true
 namada_core = { workspace = true, features = ["control_flow"] }
-namada_events = { workspace = true, default-features = false }
+namada_events.workspace = true
 namada_gas.workspace = true
 namada_parameters.workspace = true
 namada_state.workspace = true
@@ -52,7 +52,7 @@ wasmer-vm = { workspace = true, optional = true }
 wasmparser.workspace = true
 
 [dev-dependencies]
-namada_core = { workspace = true, default-features = false, features = [
+namada_core = { workspace = true, features = [
   "testing",
 ] }
 namada_state = { workspace = true, features = ["testing"] }
@@ -64,5 +64,5 @@ byte-unit.workspace = true
 itertools.workspace = true
 tempfile.workspace = true
 test-log.workspace = true
-wasmer-compiler = { workspace = true }
-wasmer-types = { workspace = true }
+wasmer-compiler.workspace = true
+wasmer-types.workspace = true

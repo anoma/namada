@@ -33,7 +33,9 @@ namada_tx_env.workspace = true
 namada_tx_prelude.workspace = true
 namada_vp.workspace = true
 namada_vp_prelude.workspace = true
-namada_vm = { workspace = true, features = ["testing"] }
+namada_vm = { workspace = true, default-features = true, features = [
+  "testing",
+] }
 
 concat-idents.workspace = true
 derivative.workspace = true
@@ -72,7 +74,7 @@ borsh.workspace = true
 color-eyre.workspace = true
 data-encoding.workspace = true
 # NOTE: enable "print" feature to see output from builds ran by e2e tests
-escargot = { workspace = true }          # , features = ["print"]}
+escargot.workspace = true          # , features = ["print"]}
 expectrl.workspace = true
 eyre.workspace = true
 flate2.workspace = true

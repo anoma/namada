@@ -34,13 +34,15 @@ migrations = ["namada_migrations", "namada_sdk/migrations", "linkme"]
 namada-eth-bridge = ["namada_sdk/namada-eth-bridge"]
 
 [dependencies]
-namada_apps_lib = { workspace = true }
+namada_apps_lib.workspace = true
 namada_migrations = { workspace = true, optional = true }
-namada_replay_protection = { workspace = true }
-namada_sdk = { workspace = true, features = ["wasm-runtime"] }
+namada_replay_protection.workspace = true
+namada_sdk = { workspace = true, default-features = true, features = [
+  "wasm-runtime",
+] }
 namada_test_utils = { workspace = true, optional = true }
 namada_vm.workspace = true
-namada_vote_ext = { workspace = true }
+namada_vote_ext.workspace = true
 namada_vp.workspace = true
 
 arse-merkle-tree = { workspace = true, features = ["blake2b"] }
@@ -103,8 +105,10 @@ zstd.workspace = true
 
 [dev-dependencies]
 namada_apps_lib = { workspace = true, features = ["testing"] }
-namada_test_utils = { workspace = true }
-namada_vm = { workspace = true, features = ["testing"] }
+namada_test_utils.workspace = true
+namada_vm = { workspace = true, default-features = true, features = [
+  "testing",
+] }
 
 assert_matches.workspace = true
 clap.workspace = true

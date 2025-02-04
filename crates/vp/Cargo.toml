@@ -17,7 +17,7 @@ testing = ["namada_core/testing"]
 
 [dependencies]
 namada_core.workspace = true
-namada_events = { workspace = true, default-features = false }
+namada_events.workspace = true
 namada_gas.workspace = true
 namada_state.workspace = true
 namada_tx.workspace = true

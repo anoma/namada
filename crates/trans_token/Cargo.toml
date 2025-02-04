@@ -18,7 +18,7 @@ migrations = ["linkme"]
 
 [dependencies]
 namada_core.workspace = true
-namada_events = { workspace = true, default-features = false }
+namada_events.workspace = true
 namada_state.workspace = true
 namada_systems.workspace = true
 namada_tx.workspace = true
@@ -39,7 +39,9 @@ namada_parameters = { workspace = true, features = ["testing"] }
 namada_state = { workspace = true, features = ["testing"] }
 namada_tests.workspace = true
 namada_tx = { workspace = true, features = ["testing"] }
-namada_vm = { workspace = true, features = ["testing"] }
+namada_vm = { workspace = true, default-features = true, features = [
+    "testing",
+] }
 namada_vp.workspace = true
 
 assert_matches.workspace = true

@@ -25,22 +25,20 @@ migrations = ["namada_migrations", "linkme"]
 
 [dependencies]
 namada_account = { workspace = true, optional = true }
-namada_core = { workspace = true, default-features = false, features = [
-    "ethers-derive",
-] }
-namada_events = { workspace = true, default-features = false }
+namada_core = { workspace = true, features = ["ethers-derive"] }
+namada_events.workspace = true
 namada_governance = { workspace = true, optional = true }
 namada_macros.workspace = true
 namada_migrations = { workspace = true, optional = true }
 namada_parameters.workspace = true
-namada_proof_of_stake = { workspace = true, default-features = false }
+namada_proof_of_stake.workspace = true
 namada_state.workspace = true
 namada_storage.workspace = true
 namada_systems.workspace = true
-namada_trans_token = { workspace = true }
+namada_trans_token.workspace = true
 namada_tx.workspace = true
-namada_vote_ext = { workspace = true }
-namada_vp_env = { workspace = true }
+namada_vote_ext.workspace = true
+namada_vp_env.workspace = true
 
 borsh.workspace = true
 ethers.workspace = true
@@ -55,19 +53,16 @@ tracing = "0.1.30"
 
 [dev-dependencies]
 namada_account.workspace = true
-namada_core = { workspace = true, default-features = false, features = [
-    "ethers-derive",
-    "testing",
-] }
+namada_core = { workspace = true, features = ["ethers-derive", "testing"] }
 namada_gas.workspace = true
 namada_governance.workspace = true
-namada_proof_of_stake = { workspace = true, default-features = false, features = [
-    "testing",
-] }
+namada_proof_of_stake = { workspace = true, features = ["testing"] }
 namada_state = { workspace = true, features = ["testing"] }
 namada_token = { workspace = true, features = ["testing"] }
 namada_tx = { workspace = true, features = ["testing"] }
-namada_vm = { workspace = true, features = ["testing"] }
+namada_vm = { workspace = true, default-features = true, features = [
+    "testing",
+] }
 namada_vp.workspace = true
 
 assert_matches.workspace = true
