@@ -17,22 +17,22 @@ default = []
 testing = ["namada_core/testing", "namada_token/testing"]
 
 [dependencies]
-namada_account = { path = "../account" }
-namada_core = { path = "../core" }
-namada_events = { path = "../events", default-features = false }
-namada_gas = { path = "../gas" }
-namada_governance = { path = "../governance" }
-namada_ibc = { path = "../ibc" }
-namada_macros = { path = "../macros" }
-namada_parameters = { path = "../parameters" }
-namada_proof_of_stake = { path = "../proof_of_stake" }
-namada_state = { path = "../state" }
-namada_token = { path = "../token" }
-namada_tx = { path = "../tx", default-features = false }
-namada_tx_env = { path = "../tx_env" }
-namada_vm_env = { path = "../vm_env" }
+namada_account.workspace = true
+namada_core.workspace = true
+namada_events = { workspace = true, default-features = false }
+namada_gas.workspace = true
+namada_governance.workspace = true
+namada_ibc.workspace = true
+namada_macros.workspace = true
+namada_parameters.workspace = true
+namada_proof_of_stake.workspace = true
+namada_state.workspace = true
+namada_token.workspace = true
+namada_tx = { workspace = true, default-features = false }
+namada_tx_env.workspace = true
+namada_vm_env.workspace = true
 
 borsh.workspace = true
 
 [dev-dependencies]
-namada_token = { path = "../token", features = ["testing"] }
+namada_token = { workspace = true, features = ["testing"] }

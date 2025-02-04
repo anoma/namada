@@ -21,50 +21,54 @@ testing = [
     "namada_state/testing",
     "namada_governance",
 ]
-migrations = [
-    "namada_migrations",
-    "linkme",
-]
+migrations = ["namada_migrations", "linkme"]
 
 [dependencies]
-namada_account = {path = "../account", optional = true}
-namada_core = {path = "../core", default-features = false, features = ["ethers-derive"]}
-namada_events = { path = "../events", default-features = false }
-namada_governance = {path = "../governance", optional = true}
-namada_macros = {path = "../macros"}
-namada_migrations = {path = "../migrations", optional = true}
-namada_parameters = {path = "../parameters"}
-namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
-namada_state = {path = "../state"}
-namada_storage = {path = "../storage"}
-namada_systems = { path = "../systems" }
-namada_trans_token = {path = "../trans_token"}
-namada_tx = {path = "../tx"}
-namada_vote_ext = {path = "../vote_ext"}
-namada_vp_env = {path = "../vp_env"}
+namada_account = { workspace = true, optional = true }
+namada_core = { workspace = true, default-features = false, features = [
+    "ethers-derive",
+] }
+namada_events = { workspace = true, default-features = false }
+namada_governance = { workspace = true, optional = true }
+namada_macros.workspace = true
+namada_migrations = { workspace = true, optional = true }
+namada_parameters.workspace = true
+namada_proof_of_stake = { workspace = true, default-features = false }
+namada_state.workspace = true
+namada_storage.workspace = true
+namada_systems.workspace = true
+namada_trans_token = { workspace = true }
+namada_tx.workspace = true
+namada_vote_ext = { workspace = true }
+namada_vp_env = { workspace = true }
 
 borsh.workspace = true
 ethers.workspace = true
 eyre.workspace = true
 itertools.workspace = true
 konst.workspace = true
-linkme = {workspace = true, optional = true}
+linkme = { workspace = true, optional = true }
 serde.workspace = true
 smooth-operator.workspace = true
 thiserror.workspace = true
 tracing = "0.1.30"
 
 [dev-dependencies]
-namada_account = {path = "../account"}
-namada_core = {path = "../core", default-features = false, features = ["ethers-derive", "testing"]}
-namada_gas = {path = "../gas"}
-namada_governance = {path = "../governance"}
-namada_proof_of_stake = {path = "../proof_of_stake", default-features = false, features = ["testing"]}
-namada_state = { path = "../state", features = ["testing"] }
-namada_token = {path = "../token", features = ["testing"]}
-namada_tx = {path = "../tx", features = ["testing"]}
-namada_vm = {path = "../vm", features = ["testing"]}
-namada_vp = {path = "../vp"}
+namada_account.workspace = true
+namada_core = { workspace = true, default-features = false, features = [
+    "ethers-derive",
+    "testing",
+] }
+namada_gas.workspace = true
+namada_governance.workspace = true
+namada_proof_of_stake = { workspace = true, default-features = false, features = [
+    "testing",
+] }
+namada_state = { workspace = true, features = ["testing"] }
+namada_token = { workspace = true, features = ["testing"] }
+namada_tx = { workspace = true, features = ["testing"] }
+namada_vm = { workspace = true, features = ["testing"] }
+namada_vp.workspace = true
 
 assert_matches.workspace = true
 data-encoding.workspace = true

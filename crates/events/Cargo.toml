@@ -16,18 +16,16 @@ version.workspace = true
 default = []
 debug = []
 mainnet = []
-migrations = [
-  "namada_migrations",
-  "linkme",
-]
+migrations = ["namada_migrations", "linkme"]
 testing = ["debug"]
 
 [dependencies]
-namada_core = {path = "../core"}
-namada_macros = {path = "../macros"}
-namada_migrations = {path = "../migrations", optional = true}
+namada_core.workspace = true
+namada_macros.workspace = true
+namada_migrations = { workspace = true, optional = true }
+
 borsh.workspace = true
-linkme = {workspace = true, optional = true}
+linkme = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

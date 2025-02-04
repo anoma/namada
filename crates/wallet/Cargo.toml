@@ -1,6 +1,6 @@
 [package]
 name = "namada_wallet"
-description = "Namada wallet"
+description = "Namada wallet library code"
 resolver = "2"
 authors.workspace = true
 edition.workspace = true
@@ -19,17 +19,17 @@ download-params = []
 migrations = ["namada_migrations"]
 
 [dependencies]
-namada_core = { path = "../core", features = ["rand"]}
-namada_ibc = {path = "../ibc" }
-namada_macros = { path = "../macros" }
-namada_migrations = {path = "../migrations", optional = true }
+namada_core = { workspace = true, features = ["rand"] }
+namada_ibc.workspace = true
+namada_macros.workspace = true
+namada_migrations = { workspace = true, optional = true }
 
 bimap.workspace = true
 borsh.workspace = true
 itertools.workspace = true
 derivation-path.workspace = true
 data-encoding.workspace = true
-fd-lock = {workspace = true, optional = true}
+fd-lock = { workspace = true, optional = true }
 masp_primitives.workspace = true
 orion.workspace = true
 rand.workspace = true

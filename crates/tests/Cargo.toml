@@ -1,6 +1,6 @@
 [package]
 name = "namada_tests"
-description = "Namada integration and E2E tests"
+description = "Namada tests setup, integration and E2E tests"
 resolver = "2"
 authors.workspace = true
 edition.workspace = true
@@ -14,32 +14,31 @@ version.workspace = true
 
 [features]
 default = ["namada_sdk/std", "namada_sdk/masp"]
-mainnet = [
-  "namada_sdk/mainnet",
-]
-migrations = [
-  "namada_sdk/migrations",
-  "namada_core/migrations",
-]
+mainnet = ["namada_sdk/mainnet"]
+migrations = ["namada_sdk/migrations", "namada_core/migrations"]
 namada-eth-bridge = [
   "namada_sdk/namada-eth-bridge",
   "namada_apps_lib/namada-eth-bridge",
 ]
 
 [dependencies]
-namada_core = {path = "../core", features = ["testing"]}
-namada_sdk = {path = "../sdk", default-features=false, features = ["download-params", "testing", "wasm-runtime"]}
-namada_test_utils = {path = "../test_utils"}
-namada_tx_env = {path = "../tx_env"}
-namada_tx_prelude = {path = "../tx_prelude"}
-namada_vp = {path = "../vp"}
-namada_vp_prelude = {path = "../vp_prelude"}
-namada_vm = {path = "../vm", features = ["testing"]}
+namada_core = { workspace = true, features = ["testing"] }
+namada_sdk = { workspace = true, default-features = false, features = [
+  "download-params",
+  "testing",
+  "wasm-runtime",
+] }
+namada_test_utils.workspace = true
+namada_tx_env.workspace = true
+namada_tx_prelude.workspace = true
+namada_vp.workspace = true
+namada_vp_prelude.workspace = true
+namada_vm = { workspace = true, features = ["testing"] }
 
 concat-idents.workspace = true
 derivative.workspace = true
 dur.workspace = true
-hyper = {version = "0.14.20", features = ["full"]}
+hyper = { version = "0.14.20", features = ["full"] }
 ibc-middleware-packet-forward.workspace = true
 ibc-testkit.workspace = true
 ics23.workspace = true
@@ -53,16 +52,18 @@ serde_tuple.workspace = true
 sha2.workspace = true
 tempfile.workspace = true
 test-log.workspace = true
-tokio = {workspace = true, features = ["full"]}
+tokio = { workspace = true, features = ["full"] }
 wasmer.workspace = true
 
 [dev-dependencies]
-namada_apps_lib = {path = "../apps_lib", features = ["testing"]}
-namada_node = { path = "../node", features = ["testing"] }
-namada_sdk = {path = "../sdk", default-features = false, features = [
-  "download-params", "testing", "migrations"
-]}
-namada_vm_env = {path = "../vm_env"}
+namada_apps_lib = { workspace = true, features = ["testing"] }
+namada_node = { workspace = true, features = ["testing"] }
+namada_sdk = { workspace = true, default-features = false, features = [
+  "download-params",
+  "testing",
+  "migrations",
+] }
+namada_vm_env.workspace = true
 
 assert_cmd.workspace = true
 assert_matches.workspace = true
@@ -71,7 +72,7 @@ borsh.workspace = true
 color-eyre.workspace = true
 data-encoding.workspace = true
 # NOTE: enable "print" feature to see output from builds ran by e2e tests
-escargot = {workspace = true} # , features = ["print"]}
+escargot = { workspace = true }          # , features = ["print"]}
 expectrl.workspace = true
 eyre.workspace = true
 flate2.workspace = true
