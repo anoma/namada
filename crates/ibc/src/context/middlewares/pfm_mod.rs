@@ -16,7 +16,7 @@ use ibc::core::channel::handler::{
 };
 use ibc::core::channel::types::acknowledgement::Acknowledgement;
 use ibc::core::channel::types::channel::{Counterparty, Order};
-use ibc::core::channel::types::error::{ChannelError, PacketError};
+use ibc::core::channel::types::error::ChannelError;
 use ibc::core::channel::types::packet::Packet;
 use ibc::core::channel::types::timeout::TimeoutTimestamp;
 use ibc::core::channel::types::Version;
@@ -124,7 +124,7 @@ where
             .inner
             .borrow()
             .get_next_sequence_send(&msg.port_id_on_a, &msg.chan_id_on_a)
-            .map_err(|e| Error::Context(Box::new(e)))?;
+            .map_err(|e| Error::TokenTransfer(e.into()))?;
         tracing::debug!(?seq, ?msg, "PFM send_transfer_execute");
 
         let mut ctx = IbcContext::<C, Params>::new(
@@ -199,7 +199,7 @@ where
                     &coin,
                     &String::new().into(),
                 )
-                .map_err(Error::TokenTransfer)
+                .map_err(|e| Error::TokenTransfer(e.into()))
         } else {
             let coin = {
                 let mut c = packet_data.token;
@@ -212,7 +212,7 @@ where
 
             token_transfer_ctx
                 .burn_coins_execute(&IBC_ADDRESS, &coin, &String::new().into())
-                .map_err(Error::TokenTransfer)
+                .map_err(|e| Error::TokenTransfer(e.into()))
         }
     }
 
@@ -226,13 +226,13 @@ where
             self.transfer_module.ctx.inner.clone(),
         );
         commit_packet_acknowledgment(&mut ctx, packet, acknowledgement)
-            .map_err(|e| Error::Context(Box::new(e)))?;
+            .map_err(|e| Error::TokenTransfer(e.into()))?;
         emit_packet_acknowledgement_event(
             &mut ctx,
             packet.clone(),
             acknowledgement.clone(),
         )
-        .map_err(|e| Error::Context(Box::new(e)))
+        .map_err(|e| Error::TokenTransfer(e.into()))
     }
 
     fn override_receiver(

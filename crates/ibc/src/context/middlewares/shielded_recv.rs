@@ -13,13 +13,14 @@ use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 
 use ibc::apps::transfer::context::TokenTransferExecutionContext;
+use ibc::apps::transfer::types::error::TokenTransferError;
 use ibc::apps::transfer::types::packet::PacketData;
 use ibc::apps::transfer::types::{Coin, PrefixedDenom};
 use ibc::core::channel::types::acknowledgement::{
     Acknowledgement, AcknowledgementStatus, StatusValue as AckStatusValue,
 };
 use ibc::core::channel::types::channel::{Counterparty, Order};
-use ibc::core::channel::types::error::{ChannelError, PacketError};
+use ibc::core::channel::types::error::ChannelError;
 use ibc::core::channel::types::packet::Packet;
 use ibc::core::channel::types::Version;
 use ibc::core::host::types::identifiers::{ChannelId, ConnectionId, PortId};
@@ -192,7 +193,7 @@ where
             TokenTransferContext::new(ctx, verifiers);
         token_transfer_context
             .mint_coins_execute(receiver, coin)
-            .map_err(Error::TokenTransfer)
+            .map_err(|e| Error::TokenTransfer(TokenTransferError::Host(e)))
     }
 
     fn unescrow_coins_execute(
@@ -208,6 +209,6 @@ where
             TokenTransferContext::new(ctx, verifiers);
         token_transfer_context
             .unescrow_coins_execute(receiver, port, channel, coin)
-            .map_err(Error::TokenTransfer)
+            .map_err(|e| Error::TokenTransfer(TokenTransferError::Host(e)))
     }
 }

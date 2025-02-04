@@ -8,8 +8,8 @@ use ibc::core::channel::types::packet::Receipt;
 use ibc::core::client::context::ClientExecutionContext;
 use ibc::core::client::types::Height;
 use ibc::core::connection::types::ConnectionEnd;
-use ibc::core::handler::types::error::ContextError;
 use ibc::core::handler::types::events::IbcEvent;
+use ibc::core::host::types::error::HostError;
 use ibc::core::host::types::identifiers::{ClientId, ConnectionId, Sequence};
 use ibc::core::host::types::path::{
     AckPath, ChannelEndPath, ClientConnectionPath, ClientConsensusStatePath,
@@ -36,7 +36,7 @@ where
         &mut self,
         client_state_path: ClientStatePath,
         client_state: Self::ClientStateRef,
-    ) -> Result<(), ContextError> {
+    ) -> Result<(), HostError> {
         self.inner
             .borrow_mut()
             .store_client_state(&client_state_path.0, client_state)
@@ -46,14 +46,19 @@ where
         &mut self,
         consensus_state_path: ClientConsensusStatePath,
         consensus_state: Self::ConsensusStateRef,
-    ) -> Result<(), ContextError> {
-        let client_id = consensus_state_path.client_id;
+    ) -> Result<(), HostError> {
+        let client_id = &consensus_state_path.client_id;
         let height = Height::new(
             consensus_state_path.revision_number,
             consensus_state_path.revision_height,
-        )?;
+        )
+        .map_err(|_| HostError::FailedToStore {
+            description: format!(
+                "Invalid consensus state path: {consensus_state_path}"
+            ),
+        })?;
         self.inner.borrow_mut().store_consensus_state(
-            &client_id,
+            client_id,
             height,
             consensus_state,
         )
@@ -62,15 +67,20 @@ where
     fn delete_consensus_state(
         &mut self,
         consensus_state_path: ClientConsensusStatePath,
-    ) -> Result<(), ContextError> {
-        let client_id = consensus_state_path.client_id;
+    ) -> Result<(), HostError> {
+        let client_id = &consensus_state_path.client_id;
         let height = Height::new(
             consensus_state_path.revision_number,
             consensus_state_path.revision_height,
-        )?;
+        )
+        .map_err(|_| HostError::FailedToStore {
+            description: format!(
+                "Invalid consensus state path: {consensus_state_path}"
+            ),
+        })?;
         self.inner
             .borrow_mut()
-            .delete_consensus_state(&client_id, height)
+            .delete_consensus_state(client_id, height)
     }
 
     fn store_update_meta(
@@ -79,7 +89,7 @@ where
         _height: Height,
         host_timestamp: Timestamp,
         host_height: Height,
-    ) -> Result<(), ContextError> {
+    ) -> Result<(), HostError> {
         self.inner.borrow_mut().store_update_meta(
             &client_id,
             host_timestamp,
@@ -91,7 +101,7 @@ where
         &mut self,
         client_id: ClientId,
         _height: Height,
-    ) -> Result<(), ContextError> {
+    ) -> Result<(), HostError> {
         self.inner.borrow_mut().delete_update_meta(&client_id)
     }
 }
@@ -107,7 +117,7 @@ where
         self
     }
 
-    fn increase_client_counter(&mut self) -> Result<(), ContextError> {
+    fn increase_client_counter(&mut self) -> Result<(), HostError> {
         let key = storage::client_counter_key();
         self.inner.borrow_mut().increment_counter(&key)
     }
@@ -116,7 +126,7 @@ where
         &mut self,
         connection_path: &ConnectionPath,
         connection_end: ConnectionEnd,
-    ) -> Result<(), ContextError> {
+    ) -> Result<(), HostError> {
         self.inner
             .borrow_mut()
             .store_connection(&connection_path.0, connection_end)
@@ -126,13 +136,13 @@ where
         &mut self,
         client_connection_path: &ClientConnectionPath,
         conn_id: ConnectionId,
-    ) -> Result<(), ContextError> {
+    ) -> Result<(), HostError> {
         self.inner
             .borrow_mut()
             .append_connection(&client_connection_path.0, conn_id)
     }
 
-    fn increase_connection_counter(&mut self) -> Result<(), ContextError> {
+    fn increase_connection_counter(&mut self) -> Result<(), HostError> {
         let key = storage::connection_counter_key();
         self.inner.borrow_mut().increment_counter(&key)
     }
@@ -141,7 +151,7 @@ where
         &mut self,
         path: &CommitmentPath,
         commitment: PacketCommitment,
-    ) -> Result<(), ContextError> {
+    ) -> Result<(), HostError> {
         self.inner.borrow_mut().store_packet_commitment(
             &path.port_id,
             &path.channel_id,
@@ -153,7 +163,7 @@ where
     fn delete_packet_commitment(
         &mut self,
         path: &CommitmentPath,
-    ) -> Result<(), ContextError> {
+    ) -> Result<(), HostError> {
         self.inner.borrow_mut().delete_packet_commitment(
             &path.port_id,
             &path.channel_id,
@@ -165,7 +175,7 @@ where
         &mut self,
         path: &ReceiptPath,
         _receipt: Receipt,
-    ) -> Result<(), ContextError> {
+    ) -> Result<(), HostError> {
         self.inner.borrow_mut().store_packet_receipt(
             &path.port_id,
             &path.channel_id,
@@ -177,7 +187,7 @@ where
         &mut self,
         path: &AckPath,
         ack_commitment: AcknowledgementCommitment,
-    ) -> Result<(), ContextError> {
+    ) -> Result<(), HostError> {
         self.inner.borrow_mut().store_packet_ack(
             &path.port_id,
             &path.channel_id,
@@ -189,7 +199,7 @@ where
     fn delete_packet_acknowledgement(
         &mut self,
         path: &AckPath,
-    ) -> Result<(), ContextError> {
+    ) -> Result<(), HostError> {
         self.inner.borrow_mut().delete_packet_ack(
             &path.port_id,
             &path.channel_id,
@@ -201,7 +211,7 @@ where
         &mut self,
         path: &ChannelEndPath,
         channel_end: ChannelEnd,
-    ) -> Result<(), ContextError> {
+    ) -> Result<(), HostError> {
         self.inner
             .borrow_mut()
             .store_channel(&path.0, &path.1, channel_end)
@@ -211,7 +221,7 @@ where
         &mut self,
         path: &SeqSendPath,
         seq: Sequence,
-    ) -> Result<(), ContextError> {
+    ) -> Result<(), HostError> {
         self.inner
             .borrow_mut()
             .store_next_sequence_send(&path.0, &path.1, seq)
@@ -221,7 +231,7 @@ where
         &mut self,
         path: &SeqRecvPath,
         seq: Sequence,
-    ) -> Result<(), ContextError> {
+    ) -> Result<(), HostError> {
         self.inner
             .borrow_mut()
             .store_next_sequence_recv(&path.0, &path.1, seq)
@@ -231,26 +241,26 @@ where
         &mut self,
         path: &SeqAckPath,
         seq: Sequence,
-    ) -> Result<(), ContextError> {
+    ) -> Result<(), HostError> {
         self.inner
             .borrow_mut()
             .store_next_sequence_ack(&path.0, &path.1, seq)
     }
 
-    fn increase_channel_counter(&mut self) -> Result<(), ContextError> {
+    fn increase_channel_counter(&mut self) -> Result<(), HostError> {
         let key = storage::channel_counter_key();
         self.inner.borrow_mut().increment_counter(&key)
     }
 
-    fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), ContextError> {
+    fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), HostError> {
         let event = event.try_into().expect("The event should be converted");
         self.inner
             .borrow_mut()
             .emit_ibc_event(event)
-            .map_err(ContextError::from)
+            .map_err(HostError::from)
     }
 
-    fn log_message(&mut self, message: String) -> Result<(), ContextError> {
+    fn log_message(&mut self, message: String) -> Result<(), HostError> {
         self.inner.borrow().log_string(message);
         Ok(())
     }

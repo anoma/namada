@@ -1,0 +1,1 @@
+- bump ibc-rs to v0.57.0 ([\#4247](https://github.com/anoma/namada/issues/4247))

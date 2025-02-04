@@ -464,6 +464,7 @@ mod tests {
 
     use assert_matches::assert_matches;
     use ibc::core::channel::types::timeout::TimeoutTimestamp;
+    use ibc::primitives::IntoTimestamp;
     use ibc_testkit::testapp::ibc::clients::mock::client_state::{
         client_type, MockClientState, MOCK_CLIENT_TYPE,
     };
@@ -1156,7 +1157,7 @@ mod tests {
         let time = (TmTime::now() - std::time::Duration::new(100, 0)).unwrap();
         let header = MockHeader {
             height,
-            timestamp: time.try_into().unwrap(),
+            timestamp: time.into_timestamp().unwrap(),
         };
         let msg = MsgUpdateClient {
             client_id: client_id.clone(),
