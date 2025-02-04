@@ -735,7 +735,7 @@ pub fn balance_key_with_ibc_prefix(denom: String, owner: &Address) -> Key {
 pub fn transfer_ack_with_error() -> AcknowledgementStatus {
     AcknowledgementStatus::error(
         StatusValue::new(
-            TokenTransferError::PacketDataDeserialization.to_string(),
+            TokenTransferError::FailedToDeserializePacketData.to_string(),
         )
         .expect("Empty message"),
     )

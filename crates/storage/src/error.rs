@@ -148,17 +148,14 @@ impl<T> OptionExt<T> for Option<T> {
     }
 }
 
-/// Convert `namada_storage::Error` into IBC `ContextError`.
-/// It always returns `ClientError::Other` though the storage error could happen
+/// Convert `namada_storage::Error` into IBC `HandlerError`.
+/// It always returns `HostError::Other` though the storage error could happen
 /// in any storage access.
-impl From<Error>
-    for namada_core::ibc::core::handler::types::error::ContextError
-{
+impl From<Error> for namada_core::ibc::core::host::types::error::HostError {
     fn from(error: Error) -> Self {
-        namada_core::ibc::core::client::types::error::ClientError::Other {
+        namada_core::ibc::core::host::types::error::HostError::Other {
             description: format!("Storage error: {error}"),
         }
-        .into()
     }
 }
 
