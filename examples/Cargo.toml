@@ -29,17 +29,24 @@ namada-eth-bridge = ["namada_sdk/namada-eth-bridge"]
 
 [dev-dependencies]
 masp_primitives = { workspace = true, features = ["transparent-inputs"] }
-masp_proofs = { workspace = true, default-features = false, features = ["local-prover", "download-params"] }
-namada_apps_lib = {path = "../crates/apps_lib", features = ["migrations"]}
-namada_macros = {path = "../crates/macros"}
-namada_migrations = {path = "../crates/migrations"}
-namada_parameters = { path = "../crates/parameters"}
-namada_trans_token = {path = "../crates/trans_token", features = ["migrations"]}
-namada_sdk = { path = "../crates/sdk", default-features = false, features = ["std", "testing", "migrations"] }
-namada_shielded_token = { path = "../crates/shielded_token" }
+masp_proofs = { workspace = true, default-features = false, features = [
+    "local-prover",
+    "download-params",
+] }
+namada_apps_lib = { workspace = true, features = ["migrations"] }
+namada_macros = { workspace = true }
+namada_migrations = { workspace = true }
+namada_parameters = { workspace = true }
+namada_trans_token = { workspace = true, features = ["migrations"] }
+namada_sdk = { workspace = true, default-features = false, features = [
+    "std",
+    "testing",
+    "migrations",
+] }
+namada_shielded_token = { workspace = true }
 
 borsh.workspace = true
 data-encoding.workspace = true
 proptest.workspace = true
 serde_json.workspace = true
-tokio = {workspace = true, default-features = false}
+tokio = { workspace = true, default-features = false }

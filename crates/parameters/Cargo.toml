@@ -14,21 +14,18 @@ version.workspace = true
 
 [features]
 default = []
-testing = [
-    "namada_core/testing",
-    "namada_state/testing",
-]
+testing = ["namada_core/testing", "namada_state/testing"]
 
 [dependencies]
-namada_core = { path = "../core" }
-namada_macros = { path = "../macros" }
-namada_state = { path = "../state" }
-namada_systems = { path = "../systems" }
-namada_tx = { path = "../tx" }
-namada_vp_env = { path = "../vp_env" }
+namada_core.workspace = true
+namada_macros.workspace = true
+namada_state.workspace = true
+namada_systems.workspace = true
+namada_tx.workspace = true
+namada_vp_env.workspace = true
 
 smooth-operator.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-namada_state = { path = "../state", features = ["testing"] }
+namada_state = { workspace = true, features = ["testing"] }

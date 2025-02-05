@@ -16,18 +16,10 @@ version.workspace = true
 default = []
 mainnet = []
 rand = ["dep:rand", "rand_core"]
-ethers-derive = [
-  "ethbridge-structs/ethers-derive"
-]
+ethers-derive = ["ethbridge-structs/ethers-derive"]
 # for tests and test utilities
-testing = [
-  "rand",
-  "proptest",
-]
-migrations = [
-  "namada_migrations",
-  "linkme",
-]
+testing = ["rand", "proptest"]
+migrations = ["namada_migrations", "linkme"]
 benches = ["proptest"]
 control_flow = ["lazy_static", "tokio", "wasmtimer"]
 arbitrary = [
@@ -40,8 +32,8 @@ arbitrary = [
 task_env = ["tokio"]
 
 [dependencies]
-namada_macros = {path = "../macros"}
-namada_migrations = {path = "../migrations", optional = true}
+namada_macros.workspace = true
+namada_migrations = { workspace = true, optional = true }
 
 arbitrary = { workspace = true, optional = true }
 arse-merkle-tree.workspace = true
@@ -60,7 +52,7 @@ usize-set.workspace = true
 indexmap.workspace = true
 k256.workspace = true
 lazy_static = { workspace = true, optional = true }
-linkme = {workspace = true, optional = true}
+linkme = { workspace = true, optional = true }
 masp_primitives.workspace = true
 num256.workspace = true
 num_enum = "0.7.0"
@@ -68,24 +60,23 @@ num-integer = "0.1.45"
 num-rational.workspace = true
 num-traits.workspace = true
 primitive-types.workspace = true
-proptest = {workspace = true, optional = true}
+proptest = { workspace = true, optional = true }
 prost-types.workspace = true
-rand = {version = "0.8", optional = true}
-rand_core = {version = "0.6", optional = true}
+rand = { version = "0.8", optional = true }
+rand_core = { version = "0.6", optional = true }
 ripemd.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 smooth-operator.workspace = true
-tendermint = {workspace = true}
-tendermint-proto = {workspace = true}
+tendermint.workspace = true
+tendermint-proto.workspace = true
 thiserror.workspace = true
-tiny-keccak = {version = "2.0.2", features = ["keccak"]}
+tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 tracing.workspace = true
 uint = "0.9.5"
 zeroize.workspace = true
 wasmtimer = { workspace = true, optional = true }
-
 
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
@@ -93,7 +84,9 @@ tokio = { workspace = true, optional = true, features = ["full"] }
 rayon.workspace = true
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-tokio = { workspace = true, optional = true, default-features = false, features = ["sync"] }
+tokio = { workspace = true, optional = true, default-features = false, features = [
+  "sync",
+] }
 
 [dev-dependencies]
 assert_matches.workspace = true

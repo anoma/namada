@@ -14,9 +14,7 @@ version.workspace = true
 
 [features]
 default = ["migrations"]
-mainnet = [
-  "namada_sdk/mainnet",
-]
+mainnet = ["namada_sdk/mainnet"]
 # for tests and test utilities
 testing = [
   "namada_apps_lib/testing",
@@ -29,27 +27,23 @@ benches = [
   "namada_apps_lib/benches",
   "namada_test_utils",
   "tracing-subscriber",
-  "rand_core"
+  "rand_core",
 ]
 jemalloc = ["rocksdb/jemalloc"]
-migrations = [
-  "namada_migrations",
-  "namada_sdk/migrations",
-  "linkme",
-]
-namada-eth-bridge = [
-  "namada_sdk/namada-eth-bridge",
-]
+migrations = ["namada_migrations", "namada_sdk/migrations", "linkme"]
+namada-eth-bridge = ["namada_sdk/namada-eth-bridge"]
 
 [dependencies]
-namada_apps_lib = {path = "../apps_lib"}
-namada_migrations = {path = "../migrations", optional = true}
-namada_replay_protection = {path = "../replay_protection"}
-namada_sdk = {path = "../sdk", features = ["wasm-runtime"]}
-namada_test_utils = {path = "../test_utils", optional = true}
-namada_vm = {path = "../vm"}
-namada_vote_ext = { path = "../vote_ext" }
-namada_vp = {path = "../vp"}
+namada_apps_lib.workspace = true
+namada_migrations = { workspace = true, optional = true }
+namada_replay_protection.workspace = true
+namada_sdk = { workspace = true, default-features = true, features = [
+  "wasm-runtime",
+] }
+namada_test_utils = { workspace = true, optional = true }
+namada_vm.workspace = true
+namada_vote_ext.workspace = true
+namada_vp.workspace = true
 
 arse-merkle-tree = { workspace = true, features = ["blake2b"] }
 async-trait.workspace = true
@@ -72,7 +66,10 @@ itertools.workspace = true
 lazy_static = { workspace = true, optional = true }
 linkme = { workspace = true, optional = true }
 masp_primitives = { workspace = true, features = ["transparent-inputs"] }
-masp_proofs = { workspace = true, features = ["bundled-prover", "download-params"] }
+masp_proofs = { workspace = true, features = [
+  "bundled-prover",
+  "download-params",
+] }
 num_cpus.workspace = true
 num256.workspace = true
 num-rational.workspace = true
@@ -85,30 +82,37 @@ rayon.workspace = true
 regex.workspace = true
 rlimit.workspace = true
 rocksdb.workspace = true
-serde_json = {workspace = true, features = ["raw_value"]}
+serde_json = { workspace = true, features = ["raw_value"] }
 sha2.workspace = true
 smooth-operator.workspace = true
 sysinfo.workspace = true
 tar.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
-tokio = {workspace = true, features = ["full"]}
+tokio = { workspace = true, features = ["full"] }
 toml.workspace = true
 tower-abci.workspace = true
 tower.workspace = true
-tracing-subscriber = { workspace = true, optional = true, features = ["std", "json", "ansi", "tracing-log"]}
+tracing-subscriber = { workspace = true, optional = true, features = [
+  "std",
+  "json",
+  "ansi",
+  "tracing-log",
+] }
 tracing.workspace = true
 warp = "0.3.2"
 zstd.workspace = true
 
 [dev-dependencies]
-namada_apps_lib = {path = "../apps_lib", features = ["testing"]}
-namada_test_utils = {path = "../test_utils"}
-namada_vm = {path = "../vm", features = ["testing"]}
+namada_apps_lib = { workspace = true, features = ["testing"] }
+namada_test_utils.workspace = true
+namada_vm = { workspace = true, default-features = true, features = [
+  "testing",
+] }
 
 assert_matches.workspace = true
 clap.workspace = true
-lazy_static.workspace= true
+lazy_static.workspace = true
 proptest.workspace = true
 rand = { workspace = true, features = ["std"] }
 test-log.workspace = true
