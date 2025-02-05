@@ -13,18 +13,16 @@ repository.workspace = true
 version.workspace = true
 
 [features]
-migrations = [
-    "namada_migrations",
-    "linkme"
-]
+migrations = ["namada_migrations", "linkme"]
 
 [dependencies]
-namada_core = { path = "../core" }
-namada_events = { path = "../events", default-features = false }
-namada_macros = {path = "../macros"}
-namada_migrations = {path = "../migrations", optional = true}
+namada_core.workspace = true
+namada_events.workspace = true
+namada_macros.workspace = true
+namada_migrations = { workspace = true, optional = true }
+
 borsh.workspace = true
-linkme = {workspace = true, optional = true}
+linkme = { workspace = true, optional = true }
 serde.workspace = true
 thiserror.workspace = true
 

@@ -25,7 +25,7 @@ testing = [
   "namada_tx/testing",
   "masp_primitives/test-dependencies",
   "proptest",
-  "std"
+  "std",
 ]
 download-params = ["masp_proofs/download-params"]
 masp = [
@@ -37,19 +37,19 @@ masp = [
 ]
 
 [dependencies]
-namada_account = { path = "../account" }
-namada_controller = { path = "../controller" }
-namada_core = { path = "../core"}
-namada_events = {path = "../events" }
-namada_gas = { path = "../gas" }
-namada_io = { path = "../io", optional = true }
-namada_macros = {path = "../macros" }
-namada_migrations = { path = "../migrations", optional = true }
-namada_state = { path = "../state" }
-namada_systems = { path = "../systems" }
-namada_tx = { path = "../tx" }
-namada_vp_env = { path = "../vp_env" }
-namada_wallet = { path = "../wallet", optional = true }
+namada_account.workspace = true
+namada_controller.workspace = true
+namada_core.workspace = true
+namada_events.workspace = true
+namada_gas.workspace = true
+namada_io = { workspace = true, optional = true }
+namada_macros.workspace = true
+namada_migrations = { workspace = true, optional = true }
+namada_state.workspace = true
+namada_systems.workspace = true
+namada_tx.workspace = true
+namada_vp_env.workspace = true
+namada_wallet = { workspace = true, optional = true }
 
 async-trait.workspace = true
 borsh.workspace = true
@@ -58,10 +58,10 @@ futures.workspace = true
 flume = { workspace = true, optional = true }
 itertools.workspace = true
 lazy_static.workspace = true
-linkme = {workspace = true, optional = true}
+linkme = { workspace = true, optional = true }
 masp_primitives.workspace = true
 masp_proofs.workspace = true
-proptest = {workspace = true, optional = true}
+proptest = { workspace = true, optional = true }
 rand.workspace = true
 rand_core.workspace = true
 rayon = { workspace = true, optional = true }
@@ -78,14 +78,16 @@ xorf.workspace = true
 
 
 [dev-dependencies]
-namada_gas = { path = "../gas" }
-namada_governance = { path = "../governance", features = ["testing"] }
-namada_ibc = { path = "../ibc", features = ["testing"] }
-namada_parameters = { path = "../parameters", features = ["testing"] }
-namada_state = { path = "../state", features = ["testing"] }
-namada_trans_token = { path = "../trans_token" }
-namada_vm = { path = "../vm", features = ["testing"] }
-namada_vp = { path = "../vp" }
+namada_gas.workspace = true
+namada_governance = { workspace = true, features = ["testing"] }
+namada_ibc = { workspace = true, features = ["testing"] }
+namada_parameters = { workspace = true, features = ["testing"] }
+namada_state = { workspace = true, features = ["testing"] }
+namada_trans_token.workspace = true
+namada_vm = { workspace = true, default-features = true, features = [
+  "testing",
+] }
+namada_vp.workspace = true
 
 lazy_static.workspace = true
 masp_primitives = { workspace = true, features = ["test-dependencies"] }
