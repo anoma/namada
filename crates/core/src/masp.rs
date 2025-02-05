@@ -238,6 +238,39 @@ pub fn encode_asset_type(
     .encode()
 }
 
+/// Encode the assets that are used for masp rewards
+pub fn encode_reward_asset_types(
+    native_token: &Address,
+) -> Result<[AssetType; 4], std::io::Error> {
+    use crate::token::{MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
+    Ok([
+        encode_asset_type(
+            native_token.clone(),
+            NATIVE_MAX_DECIMAL_PLACES.into(),
+            MaspDigitPos::Zero,
+            Some(MaspEpoch::zero()),
+        )?,
+        encode_asset_type(
+            native_token.clone(),
+            NATIVE_MAX_DECIMAL_PLACES.into(),
+            MaspDigitPos::One,
+            Some(MaspEpoch::zero()),
+        )?,
+        encode_asset_type(
+            native_token.clone(),
+            NATIVE_MAX_DECIMAL_PLACES.into(),
+            MaspDigitPos::Two,
+            Some(MaspEpoch::zero()),
+        )?,
+        encode_asset_type(
+            native_token.clone(),
+            NATIVE_MAX_DECIMAL_PLACES.into(),
+            MaspDigitPos::Three,
+            Some(MaspEpoch::zero()),
+        )?,
+    ])
+}
+
 /// MASP token map
 pub type TokenMap = BTreeMap<String, Address>;
 
