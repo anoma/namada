@@ -14,7 +14,8 @@ use tiny_hderive::Error as HDeriveError;
 
 const BIP44_PURPOSE: u32 = 44;
 const ZIP32_PURPOSE: u32 = 32;
-const MODIFIED_ZIP32_ADDR: u32 = 255;
+// Maximum allowed value in BIP44
+const MODIFIED_ZIP32_ADDR: u32 = 0x7FFFFFFF;
 
 const ETH_COIN_TYPE: u32 = 60;
 const NAMADA_COIN_TYPE: u32 = 877;
@@ -411,7 +412,7 @@ mod tests {
         assert!(matches!(zip32_scheme, SchemeType::Ed25519));
         assert_eq!(
             modified_zip32,
-            DerivationPath::from_path_string("m/44'/877'/0'/0'/255'")
+            DerivationPath::from_path_string("m/44'/877'/0'/0'/2147483647'")
                 .expect("Path construction cannot fail.")
         );
     }
