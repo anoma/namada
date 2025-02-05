@@ -49,15 +49,15 @@ use rand::prelude::StdRng;
 use rand_core::{OsRng, SeedableRng};
 
 use crate::masp::utils::MaspClient;
-use crate::masp::{
-    cloned_pair, ContextSyncStatus, Conversions, MaspAmount, MaspDataLogEntry,
-    MaspFeeData, MaspSourceTransferData, MaspTargetTransferData,
-    MaspTransferData, MaspTxReorderedData, NoteIndex, ShieldedSyncConfig,
-    ShieldedTransfer, ShieldedUtils, SpentNotesTracker, TransferErr, WalletMap,
-    WitnessMap, NETWORK,
-};
 #[cfg(any(test, feature = "testing"))]
 use crate::masp::{testing, ENV_VAR_MASP_TEST_SEED};
+use crate::masp::{
+    ContextSyncStatus, Conversions, MaspAmount, MaspDataLogEntry, MaspFeeData,
+    MaspSourceTransferData, MaspTargetTransferData, MaspTransferData,
+    MaspTxReorderedData, NoteIndex, ShieldedSyncConfig, ShieldedTransfer,
+    ShieldedUtils, SpentNotesTracker, TransferErr, WalletMap, WitnessMap,
+    NETWORK,
+};
 
 /// Represents the current state of the shielded pool from the perspective of
 /// the chosen viewing keys.
@@ -547,9 +547,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         // Where we will store our exchanged value
         let mut output = I128Sum::zero();
         // Repeatedly exchange assets until it is no longer possible
-        while let Some((asset_type, value)) =
-            input.components().next().map(cloned_pair)
-        {
+        while let Some(asset_type) = input.asset_types().next().cloned() {
             // Get the equivalent to the current asset in the target epoch and
             // note whether this equivalent chronologically comes after the
             // current asset
@@ -574,6 +572,12 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             .await;
             self.query_allowed_conversion(client, asset_type, &mut conversions)
                 .await;
+            // Consolidate the current amount with any dust from output.
+            // Whatever is not used is moved back to output anyway.
+            let dust = output.project(asset_type);
+            input += dust.clone();
+            output -= dust;
+            // Now attempt to apply conversions
             if let (Some((conv, _wit, usage)), false) =
                 (conversions.get_mut(&asset_type), at_target_asset_type)
             {
@@ -588,7 +592,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     io,
                     conv.clone(),
                     asset_type,
-                    value,
+                    input[&asset_type],
                     usage,
                     &mut input,
                     &mut output,
@@ -609,7 +613,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     io,
                     conv.clone(),
                     asset_type,
-                    value,
+                    input[&asset_type],
                     usage,
                     &mut input,
                     &mut output,
