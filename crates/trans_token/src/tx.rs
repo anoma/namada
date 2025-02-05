@@ -50,7 +50,8 @@ impl CreditOrDebit for BTreeMap<(Address, Address), Amount> {
 ///
 /// Returns an `Err` if any source has insufficient balance or if the transfer
 /// to any destination would overflow (This can only happen if the total supply
-/// doesn't fit in `token::Amount`). Returns the set of debited accounts.
+/// doesn't fit in `token::Amount`). Returns a pair comprising the set of
+/// debited accounts and the set of tokens debited and credited by the transfer.
 pub fn multi_transfer<ENV>(
     env: &mut ENV,
     sources: impl CreditOrDebit,
