@@ -122,8 +122,8 @@ where
         TransToken::read_balance(storage, token, &masp_addr)?;
     // Since dated and undated tokens are stored together in the pool, subtract
     // the latter to get the dated balance
-    let masp_dated_balance = read_undated_balance(storage, token)?;
-    Ok(checked!(total_tokens_in_masp - masp_dated_balance)?)
+    let masp_undated_balance = read_undated_balance(storage, token)?;
+    Ok(checked!(total_tokens_in_masp - masp_undated_balance)?)
 }
 
 /// Compute the MASP rewards by applying the PD-controller to the genesis
@@ -539,10 +539,6 @@ where
     // The total transparent value of the rewards being distributed
     let mut total_deflated_reward = Amount::zero();
 
-    // Construct MASP asset type for rewards. Always deflate and timestamp
-    // reward tokens with the zeroth epoch to minimize the number of convert
-    // notes clients have to use. This trick works under the assumption that
-    // reward tokens will then be reinflated back to the current epoch.
     let reward_assets =
         encode_reward_asset_types(&native_token).into_storage_result()?;
     // Conversions from the previous to current asset for each address
