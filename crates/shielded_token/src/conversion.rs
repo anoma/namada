@@ -1,13 +1,30 @@
 //! MASP rewards conversions
 
+#[cfg(any(feature = "multicore", test))]
+use std::collections::BTreeMap;
+
+#[cfg(any(feature = "multicore", test))]
+use masp_primitives::asset_type::AssetType;
+#[cfg(any(feature = "multicore", test))]
+use masp_primitives::convert::AllowedConversion;
+#[cfg(any(feature = "multicore", test))]
+use masp_primitives::transaction::components::I128Sum as MaspAmount;
 use namada_controller::PDController;
 use namada_core::address::{Address, MASP};
 use namada_core::arith::checked;
+#[cfg(any(feature = "multicore", test))]
+use namada_core::arith::CheckedAdd;
 #[cfg(any(feature = "multicore", test))]
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::dec::Dec;
 #[cfg(any(feature = "multicore", test))]
 use namada_core::hash::Hash;
+#[cfg(any(feature = "multicore", test))]
+use namada_core::masp::encode_asset_type;
+#[cfg(any(feature = "multicore", test))]
+use namada_core::masp::MaspEpoch;
+#[cfg(any(feature = "multicore", test))]
+use namada_core::token::MaspDigitPos;
 use namada_core::token::{Amount, DenominatedAmount, Denomination};
 use namada_core::uint::Uint;
 use namada_systems::{parameters, trans_token};
@@ -19,6 +36,8 @@ use crate::storage_key::{
     masp_last_locked_amount_key, masp_locked_amount_target_key,
     masp_max_reward_rate_key,
 };
+#[cfg(any(feature = "multicore", test))]
+use crate::{ConversionLeaf, Error, OptionExt, ResultExt};
 use crate::{Result, StorageRead, StorageWrite, WithConversionState};
 
 /// Compute shielded token inflation amount
@@ -226,18 +245,236 @@ where
     Ok((noterized_inflation, precision))
 }
 
-// This is only enabled when "wasm-runtime" is on, because we're using rayon
-#[cfg(not(any(feature = "multicore", test)))]
-/// Update the MASP's allowed conversions
-pub fn update_allowed_conversions<S, Params, TransToken>(
-    _storage: &mut S,
-) -> Result<()>
+/// Update the conversions for native tokens. Namely calculate the reward using
+/// the normed inflation as the denominator, make a 2-term allowed conversion,
+/// and compute how much needs to be minted in order to back the rewards.
+#[cfg(any(feature = "multicore", test))]
+fn update_native_conversions<S, TransToken>(
+    storage: &mut S,
+    token: &Address,
+    normed_inflation: u128,
+    masp_epochs_per_year: u64,
+    masp_epoch: MaspEpoch,
+    total_reward: &mut Amount,
+    current_convs: &mut BTreeMap<
+        (Address, Denomination, MaspDigitPos),
+        AllowedConversion,
+    >,
+) -> Result<Denomination>
 where
     S: StorageWrite + StorageRead + WithConversionState,
-    Params: parameters::Read<S>,
-    TransToken: trans_token::Keys,
+    TransToken:
+        trans_token::Keys + trans_token::Read<S> + trans_token::Write<S>,
 {
-    Ok(())
+    let prev_masp_epoch =
+        masp_epoch.prev().ok_or_err_msg("MASP epoch underflow")?;
+    let denom = TransToken::read_denom(storage, token)?
+        .expect("failed to read token denomination");
+    let (reward, _precision) = calculate_masp_rewards::<S, TransToken>(
+        storage,
+        token,
+        denom,
+        normed_inflation,
+        masp_epochs_per_year,
+    )?;
+    // The amount that will be given of the new native token for
+    // every amount of the native token given in the
+    // previous epoch
+    let inflation_uint = Uint::from(normed_inflation);
+    let reward = Uint::from(reward);
+    let new_normed_inflation = checked!(inflation_uint + reward)?;
+    let new_normed_inflation = u128::try_from(new_normed_inflation)
+        .unwrap_or_else(|_| {
+            tracing::warn!(
+                "MASP inflation for the native token {} is kept the same as \
+                 in the last epoch because the computed value is too large. \
+                 Please check the inflation parameters.",
+                token
+            );
+            normed_inflation
+        });
+    for digit in MaspDigitPos::iter() {
+        // Provide an allowed conversion from previous timestamp. The
+        // negative sign allows each instance of the old asset to be
+        // cancelled out/replaced with the new asset
+        let old_asset = encode_asset_type(
+            token.clone(),
+            denom,
+            digit,
+            Some(prev_masp_epoch),
+        )
+        .into_storage_result()?;
+        let new_asset =
+            encode_asset_type(token.clone(), denom, digit, Some(masp_epoch))
+                .into_storage_result()?;
+        // The conversion is computed such that if consecutive
+        // conversions are added together, the intermediate native
+        // tokens cancel/telescope out
+        let cur_conv = MaspAmount::from_pair(
+            old_asset,
+            i128::try_from(normed_inflation)
+                .ok()
+                .and_then(i128::checked_neg)
+                .ok_or_err_msg("Current inflation overflow")?,
+        );
+        let new_conv = MaspAmount::from_pair(
+            new_asset,
+            i128::try_from(new_normed_inflation).into_storage_result()?,
+        );
+        current_convs.insert(
+            (token.clone(), denom, digit),
+            checked!(cur_conv + &new_conv)?.into(),
+        );
+        // Add a conversion from the previous asset type
+        storage.conversion_state_mut().assets.insert(
+            old_asset,
+            ConversionLeaf {
+                token: token.clone(),
+                denom,
+                digit_pos: digit,
+                epoch: prev_masp_epoch,
+                conversion: MaspAmount::zero().into(),
+                leaf_pos: 0,
+            },
+        );
+    }
+    // Dispense a transparent reward in parallel to the shielded rewards
+    let addr_bal = TransToken::read_balance(storage, token, &MASP)?;
+    // The reward for each reward.1 units of the current asset
+    // is reward.0 units of the reward token
+    let native_reward = addr_bal
+        .u128_eucl_div_rem((new_normed_inflation, normed_inflation))
+        .ok_or_else(|| Error::new_const("Three digit reward overflow"))?;
+    *total_reward = total_reward
+        .checked_add(
+            native_reward
+                .0
+                .checked_add(native_reward.1)
+                .unwrap_or(Amount::max())
+                .checked_sub(addr_bal)
+                .unwrap_or_default(),
+        )
+        .ok_or_else(|| Error::new_const("Three digit total reward overflow"))?;
+    // Save the new normed inflation
+    let _ = storage
+        .conversion_state_mut()
+        .normed_inflation
+        .insert(new_normed_inflation);
+    Ok(denom)
+}
+
+/// Update the conversions for non-native tokens. Namely calculate the reward,
+/// deflate it to real terms, make a 3-term allowed conversion, and compute how
+/// much needs to be minted in order to back the rewards.
+#[cfg(any(feature = "multicore", test))]
+#[allow(clippy::too_many_arguments)]
+fn update_non_native_conversions<S, TransToken>(
+    storage: &mut S,
+    token: &Address,
+    ref_inflation: u128,
+    normed_inflation: u128,
+    masp_epochs_per_year: u64,
+    masp_epoch: MaspEpoch,
+    reward_assets: [AssetType; 4],
+    total_reward: &mut Amount,
+    current_convs: &mut BTreeMap<
+        (Address, Denomination, MaspDigitPos),
+        AllowedConversion,
+    >,
+) -> Result<Denomination>
+where
+    S: StorageWrite + StorageRead + WithConversionState,
+    TransToken:
+        trans_token::Keys + trans_token::Read<S> + trans_token::Write<S>,
+{
+    let prev_masp_epoch =
+        masp_epoch.prev().ok_or_err_msg("MASP epoch underflow")?;
+    let (precision, denom) =
+        calculate_masp_rewards_precision::<S, TransToken>(storage, token)?;
+    let (reward, precision) = calculate_masp_rewards::<S, TransToken>(
+        storage,
+        token,
+        denom,
+        precision,
+        masp_epochs_per_year,
+    )?;
+    // Express the inflation reward in real terms, that is, with
+    // respect to the native asset in the zeroth epoch
+    let reward_uint = Uint::from(reward);
+    let ref_inflation_uint = Uint::from(ref_inflation);
+    let inflation_uint = Uint::from(normed_inflation);
+    let real_reward =
+        checked!((reward_uint * ref_inflation_uint) / inflation_uint)?
+            .try_into()
+            .unwrap_or_else(|_| {
+                tracing::warn!(
+                    "MASP reward for {} assumed to be 0 because the computed \
+                     value is too large. Please check the inflation \
+                     parameters.",
+                    token
+                );
+                0u128
+            });
+    // The conversion is computed such that if consecutive
+    // conversions are added together, the
+    // intermediate tokens cancel/ telescope out
+    let precision_i128 = i128::try_from(precision).into_storage_result()?;
+    let real_reward_i128 = i128::try_from(real_reward).into_storage_result()?;
+    for digit in MaspDigitPos::iter() {
+        // Provide an allowed conversion from previous timestamp. The
+        // negative sign allows each instance of the old asset to be
+        // cancelled out/replaced with the new asset
+        let old_asset = encode_asset_type(
+            token.clone(),
+            denom,
+            digit,
+            Some(prev_masp_epoch),
+        )
+        .into_storage_result()?;
+        let new_asset =
+            encode_asset_type(token.clone(), denom, digit, Some(masp_epoch))
+                .into_storage_result()?;
+
+        current_convs.insert(
+            (token.clone(), denom, digit),
+            checked!(
+                MaspAmount::from_pair(old_asset, -precision_i128)
+                    + &MaspAmount::from_pair(new_asset, precision_i128)
+                    + &MaspAmount::from_pair(
+                        reward_assets[digit as usize],
+                        real_reward_i128,
+                    )
+            )?
+            .into(),
+        );
+        // Add a conversion from the previous asset type
+        storage.conversion_state_mut().assets.insert(
+            old_asset,
+            ConversionLeaf {
+                token: token.clone(),
+                denom,
+                digit_pos: digit,
+                epoch: prev_masp_epoch,
+                conversion: MaspAmount::zero().into(),
+                leaf_pos: 0,
+            },
+        );
+    }
+    // Dispense a transparent reward in parallel to the shielded rewards
+    let addr_bal = TransToken::read_balance(storage, token, &MASP)?;
+    // The reward for each reward.1 units of the current asset
+    // is reward.0 units of the reward token
+    *total_reward = total_reward
+        .checked_add(
+            addr_bal
+                .u128_eucl_div_rem((reward, precision))
+                .ok_or_else(|| {
+                    Error::new_const("Total reward calculation overflow")
+                })?
+                .0,
+        )
+        .ok_or_else(|| Error::new_const("Total reward overflow"))?;
+    Ok(denom)
 }
 
 #[cfg(any(feature = "multicore", test))]
@@ -252,26 +489,19 @@ where
         trans_token::Keys + trans_token::Read<S> + trans_token::Write<S>,
 {
     use std::cmp::Ordering;
-    use std::collections::BTreeMap;
 
     use masp_primitives::bls12_381;
-    use masp_primitives::convert::AllowedConversion;
     use masp_primitives::ff::PrimeField;
     use masp_primitives::merkle_tree::FrozenCommitmentTree;
     use masp_primitives::sapling::Node;
-    use masp_primitives::transaction::components::I128Sum as MaspAmount;
-    use namada_core::arith::CheckedAdd;
-    use namada_core::masp::{encode_asset_type, MaspEpoch};
-    use namada_core::token::{MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
+    use namada_core::masp::encode_reward_asset_types;
+    use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
     use rayon::iter::{
         IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
     };
     use rayon::prelude::ParallelSlice;
 
-    use crate::{mint_rewards, ConversionLeaf, Error, OptionExt, ResultExt};
-
-    // The derived conversions will be placed in MASP address space
-    let masp_addr = MASP;
+    use crate::mint_rewards;
 
     let token_map_key = masp_token_map_key();
     let token_map: namada_core::masp::TokenMap =
@@ -297,36 +527,8 @@ where
     // reward tokens with the zeroth epoch to minimize the number of convert
     // notes clients have to use. This trick works under the assumption that
     // reward tokens will then be reinflated back to the current epoch.
-    let reward_assets = [
-        encode_asset_type(
-            native_token.clone(),
-            NATIVE_MAX_DECIMAL_PLACES.into(),
-            MaspDigitPos::Zero,
-            Some(MaspEpoch::zero()),
-        )
-        .into_storage_result()?,
-        encode_asset_type(
-            native_token.clone(),
-            NATIVE_MAX_DECIMAL_PLACES.into(),
-            MaspDigitPos::One,
-            Some(MaspEpoch::zero()),
-        )
-        .into_storage_result()?,
-        encode_asset_type(
-            native_token.clone(),
-            NATIVE_MAX_DECIMAL_PLACES.into(),
-            MaspDigitPos::Two,
-            Some(MaspEpoch::zero()),
-        )
-        .into_storage_result()?,
-        encode_asset_type(
-            native_token.clone(),
-            NATIVE_MAX_DECIMAL_PLACES.into(),
-            MaspDigitPos::Three,
-            Some(MaspEpoch::zero()),
-        )
-        .into_storage_result()?,
-    ];
+    let reward_assets =
+        encode_reward_asset_types(&native_token).into_storage_result()?;
     // Conversions from the previous to current asset for each address
     let mut current_convs = BTreeMap::<
         (Address, Denomination, MaspDigitPos),
@@ -346,196 +548,45 @@ where
         masp_epoch_multiplier,
     )
     .map_err(Error::new_const)?;
-    let prev_masp_epoch = match masp_epoch.prev() {
-        Some(epoch) => epoch,
-        None => return Ok(()),
-    };
+    if masp_epoch.prev().is_none() {
+        return Ok(());
+    }
     let epochs_per_year = Params::epochs_per_year(storage)?;
     let masp_epochs_per_year =
         checked!(epochs_per_year / masp_epoch_multiplier)?;
     for token in &masp_reward_keys {
-        let (precision, denom) =
-            calculate_masp_rewards_precision::<S, TransToken>(storage, token)?;
-        masp_reward_denoms.insert(token.clone(), denom);
-        // Dispense a transparent reward in parallel to the shielded rewards
-        let addr_bal = TransToken::read_balance(storage, token, &masp_addr)?;
-
         // Get the last rewarded amount of the native token
         let normed_inflation = *storage
             .conversion_state_mut()
             .normed_inflation
             .get_or_insert(ref_inflation);
-        let (reward, precision) = calculate_masp_rewards::<S, TransToken>(
-            storage,
-            token,
-            denom,
-            if *token == native_token {
-                normed_inflation
-            } else {
-                precision
-            },
-            masp_epochs_per_year,
-        )?;
 
-        for digit in MaspDigitPos::iter() {
-            // Provide an allowed conversion from previous timestamp. The
-            // negative sign allows each instance of the old asset to be
-            // cancelled out/replaced with the new asset
-            let old_asset = encode_asset_type(
-                token.clone(),
-                denom,
-                digit,
-                Some(prev_masp_epoch),
+        // Generate conversions from the last epoch to the current and update
+        // the reward backing accumulator
+        let denom = if *token == native_token {
+            update_native_conversions::<_, TransToken>(
+                storage,
+                token,
+                normed_inflation,
+                masp_epochs_per_year,
+                masp_epoch,
+                &mut total_reward,
+                &mut current_convs,
             )
-            .into_storage_result()?;
-            let new_asset = encode_asset_type(
-                token.clone(),
-                denom,
-                digit,
-                Some(masp_epoch),
+        } else {
+            update_non_native_conversions::<_, TransToken>(
+                storage,
+                token,
+                ref_inflation,
+                normed_inflation,
+                masp_epochs_per_year,
+                masp_epoch,
+                reward_assets,
+                &mut total_reward,
+                &mut current_convs,
             )
-            .into_storage_result()?;
-            if *token == native_token {
-                // The amount that will be given of the new native token for
-                // every amount of the native token given in the
-                // previous epoch
-                let inflation_uint = Uint::from(normed_inflation);
-                let reward = Uint::from(reward);
-                let new_normed_inflation = checked!(inflation_uint + reward)?;
-                let new_normed_inflation = u128::try_from(new_normed_inflation)
-                    .unwrap_or_else(|_| {
-                        tracing::warn!(
-                            "MASP inflation for the native token {} is kept \
-                             the same as in the last epoch because the \
-                             computed value is too large. Please check the \
-                             inflation parameters.",
-                            token
-                        );
-                        normed_inflation
-                    });
-                // The conversion is computed such that if consecutive
-                // conversions are added together, the intermediate native
-                // tokens cancel/telescope out
-                let cur_conv = MaspAmount::from_pair(
-                    old_asset,
-                    i128::try_from(normed_inflation)
-                        .ok()
-                        .and_then(i128::checked_neg)
-                        .ok_or_err_msg("Current inflation overflow")?,
-                );
-                let new_conv = MaspAmount::from_pair(
-                    new_asset,
-                    i128::try_from(new_normed_inflation)
-                        .into_storage_result()?,
-                );
-                current_convs.insert(
-                    (token.clone(), denom, digit),
-                    checked!(cur_conv + &new_conv)?.into(),
-                );
-                // Operations that happen exactly once for each token
-                if digit == MaspDigitPos::Three {
-                    // The reward for each reward.1 units of the current asset
-                    // is reward.0 units of the reward token
-                    let native_reward = addr_bal
-                        .u128_eucl_div_rem((
-                            new_normed_inflation,
-                            normed_inflation,
-                        ))
-                        .ok_or_else(|| {
-                            Error::new_const("Three digit reward overflow")
-                        })?;
-                    total_reward = total_reward
-                        .checked_add(
-                            native_reward
-                                .0
-                                .checked_add(native_reward.1)
-                                .unwrap_or(Amount::max())
-                                .checked_sub(addr_bal)
-                                .unwrap_or_default(),
-                        )
-                        .ok_or_else(|| {
-                            Error::new_const(
-                                "Three digit total reward overflow",
-                            )
-                        })?;
-                    // Save the new normed inflation
-
-                    let _ = storage
-                        .conversion_state_mut()
-                        .normed_inflation
-                        .insert(new_normed_inflation);
-                }
-            } else {
-                // Express the inflation reward in real terms, that is, with
-                // respect to the native asset in the zeroth epoch
-                let reward_uint = Uint::from(reward);
-                let ref_inflation_uint = Uint::from(ref_inflation);
-                let inflation_uint = Uint::from(normed_inflation);
-                let real_reward = checked!(
-                    (reward_uint * ref_inflation_uint) / inflation_uint
-                )?
-                .try_into()
-                .unwrap_or_else(|_| {
-                    tracing::warn!(
-                        "MASP reward for {} assumed to be 0 because the \
-                         computed value is too large. Please check the \
-                         inflation parameters.",
-                        token
-                    );
-                    0u128
-                });
-                // The conversion is computed such that if consecutive
-                // conversions are added together, the
-                // intermediate tokens cancel/ telescope out
-                let precision_i128 =
-                    i128::try_from(precision).into_storage_result()?;
-                let real_reward_i128 =
-                    i128::try_from(real_reward).into_storage_result()?;
-                current_convs.insert(
-                    (token.clone(), denom, digit),
-                    checked!(
-                        MaspAmount::from_pair(old_asset, -precision_i128)
-                            + &MaspAmount::from_pair(new_asset, precision_i128)
-                            + &MaspAmount::from_pair(
-                                reward_assets[digit as usize],
-                                real_reward_i128,
-                            )
-                    )?
-                    .into(),
-                );
-                // Operations that happen exactly once for each token
-                if digit == MaspDigitPos::Three {
-                    // The reward for each reward.1 units of the current asset
-                    // is reward.0 units of the reward token
-                    total_reward = total_reward
-                        .checked_add(
-                            addr_bal
-                                .u128_eucl_div_rem((reward, precision))
-                                .ok_or_else(|| {
-                                    Error::new_const(
-                                        "Total reward calculation overflow",
-                                    )
-                                })?
-                                .0,
-                        )
-                        .ok_or_else(|| {
-                            Error::new_const("Total reward overflow")
-                        })?;
-                }
-            }
-            // Add a conversion from the previous asset type
-            storage.conversion_state_mut().assets.insert(
-                old_asset,
-                ConversionLeaf {
-                    token: token.clone(),
-                    denom,
-                    digit_pos: digit,
-                    epoch: prev_masp_epoch,
-                    conversion: MaspAmount::zero().into(),
-                    leaf_pos: 0,
-                },
-            );
-        }
+        }?;
+        masp_reward_denoms.insert(token.clone(), denom);
     }
 
     // Try to distribute Merkle leaf updating as evenly as possible across
@@ -645,6 +696,20 @@ where
         Hash::sha256(storage.conversion_state().assets.serialize_to_vec());
     storage.write(&masp_assets_hash_key(), assets_hash)?;
 
+    Ok(())
+}
+
+// This is only enabled when "wasm-runtime" is on, because we're using rayon
+#[cfg(not(any(feature = "multicore", test)))]
+/// Update the MASP's allowed conversions
+pub fn update_allowed_conversions<S, Params, TransToken>(
+    _storage: &mut S,
+) -> Result<()>
+where
+    S: StorageWrite + StorageRead + WithConversionState,
+    Params: parameters::Read<S>,
+    TransToken: trans_token::Keys,
+{
     Ok(())
 }
 
