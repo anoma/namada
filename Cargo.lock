@@ -4987,7 +4987,7 @@ dependencies = [
 
 [[package]]
 name = "namada_apps"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "clap_complete",
  "clap_complete_nushell",
