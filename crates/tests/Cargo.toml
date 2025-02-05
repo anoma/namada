@@ -74,7 +74,7 @@ borsh.workspace = true
 color-eyre.workspace = true
 data-encoding.workspace = true
 # NOTE: enable "print" feature to see output from builds ran by e2e tests
-escargot.workspace = true          # , features = ["print"]}
+escargot = { workspace = true } # , features = ["print"] }
 expectrl.workspace = true
 eyre.workspace = true
 flate2.workspace = true
