@@ -2049,7 +2049,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(wrap!(
-                    "Query the latest rewards available to claim for a given \
+                    "Query the rewards available to claim for a given \
                      delegation (or self-bond)."
                 ))
                 .add_args::<args::QueryRewards<args::CliTypes>>()
@@ -7309,6 +7309,7 @@ pub mod args {
                 query: self.query.to_sdk(ctx)?,
                 validator: ctx.borrow_chain_or_exit().get(&self.validator),
                 source: self.source.map(|x| ctx.borrow_chain_or_exit().get(&x)),
+                epoch: self.epoch,
             })
         }
     }
@@ -7318,10 +7319,12 @@ pub mod args {
             let query = Query::parse(matches);
             let source = SOURCE_OPT.parse(matches);
             let validator = VALIDATOR.parse(matches);
+            let epoch = EPOCH.parse(matches);
             Self {
                 query,
                 source,
                 validator,
+                epoch,
             }
         }
 
@@ -7336,6 +7339,12 @@ pub mod args {
                         "Validator address for the rewards query."
                     )),
                 )
+                .arg(EPOCH.def().help(wrap!(
+                    "The epoch at which to query (corresponding to the last \
+                     committed block, if not specified). Note: when querying \
+                     by epoch, this returns the accumulated rewards that were \
+                     available to claim at the start of the epoch."
+                )))
         }
     }
 

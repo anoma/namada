@@ -35,7 +35,7 @@ env:
   AWS_REGION: us-west-2
   NIGHTLY: nightly-2024-09-08
   NAMADA_MASP_PARAMS_DIR: /masp/.masp-params
-  LEDGER_APP_VERSION: "2.0.3"
+  LEDGER_APP_VERSION: "2.0.4"
   ROLE: arn:aws:iam::375643557360:role/github-runners-ci-shared
 
 jobs:
@@ -547,6 +547,7 @@ jobs:
             /tmp/.*/logs/
             /tmp/.*/setup/validator-*/logs/
             /tmp/.*/setup/validator-*/e2e-test.*/*.toml
+            /tmp/.*/hermes/logs/
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 5
@@ -604,6 +605,7 @@ jobs:
           git checkout "v$LEDGER_APP_VERSION"
           git submodule update --init --recursive
           sudo update-alternatives --install /usr/bin/python python /usr/bin/python3 10
+          sudo apt-get update
           make deps
       - name: Install rust
         uses: actions-rs/toolchain@v1
@@ -614,7 +616,7 @@ jobs:
           # The path where the Ledger app test suite will locate test vectors
           TESTVEC_PATH="../ledger-namada/tests/testvectors.json"
           TESTDBG_PATH="../ledger-namada/tests/testdebugs.txt"
-          sudo apt-get install -y protobuf-compiler
+          sudo apt-get install -y protobuf-compiler libudev-dev
           cargo run --example generate-txs -- $TESTVEC_PATH $TESTDBG_PATH
       - name: Check test vectors
         run: |

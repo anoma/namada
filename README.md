@@ -81,7 +81,7 @@ Please see the [contributing page](./CONTRIBUTING.md).
 
 ### Dependencies
 
-The ledger currently requires [CometBFT v0.37.11](https://github.com/cometbft/cometbft/releases/tag/v0.37.11) is installed and available on path. This can be achieved through following [these instructions](https://github.com/cometbft/cometbft/blob/main/docs/tutorials/install.md).
+The ledger currently requires [CometBFT v0.37.15](https://github.com/cometbft/cometbft/releases/tag/v0.37.15) is installed and available on path. This can be achieved through following [these instructions](https://github.com/cometbft/cometbft/blob/main/docs/tutorials/install.md).
 
 #### Hermes
 
@@ -91,4 +91,5 @@ Compatibility table with Namada:
 
 | Namada binaries | Hermes |
 | ----------- | ----------- |
+| v1.1.0 | [1.10.5-namada-beta18](https://github.com/heliaxdev/hermes/releases/tag/v1.10.5-namada-beta18) |
 | v1.0.0 | [1.10.4-namada-beta17-rc2](https://github.com/heliaxdev/hermes/releases/tag/v1.10.4-namada-beta17-rc2) |

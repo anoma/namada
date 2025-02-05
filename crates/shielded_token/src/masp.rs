@@ -297,11 +297,6 @@ pub type MaspAmount = ValueSum<(Option<MaspEpoch>, Address), token::Change>;
 /// transaction
 pub type SpentNotesTracker = HashMap<ViewingKey, HashSet<usize>>;
 
-/// An extension of Option's cloned method for pair types
-fn cloned_pair<T: Clone, U: Clone>((a, b): (&T, &U)) -> (T, U) {
-    (a.clone(), b.clone())
-}
-
 /// Represents the amount used of different conversions
 pub type Conversions =
     BTreeMap<AssetType, (AllowedConversion, MerklePath<Node>, i128)>;

@@ -15,26 +15,23 @@ version.workspace = true
 [features]
 testing = ["proptest"]
 arbitrary = ["dep:arbitrary", "namada_core/arbitrary"]
-migrations = [
-    "namada_migrations",
-    "linkme",
-]
+migrations = ["namada_migrations", "linkme"]
 
 [dependencies]
-namada_account = { path = "../account" }
-namada_core = { path = "../core" }
-namada_events = { path = "../events", default-features = false }
-namada_macros = { path = "../macros" }
-namada_migrations = { path= "../migrations", optional = true }
-namada_state = { path = "../state" }
-namada_systems = { path = "../systems" }
-namada_tx = { path = "../tx" }
-namada_vp_env = { path = "../vp_env" }
+namada_account.workspace = true
+namada_core.workspace = true
+namada_events.workspace = true
+namada_macros.workspace = true
+namada_migrations = { workspace = true, optional = true }
+namada_state.workspace = true
+namada_systems.workspace = true
+namada_tx.workspace = true
+namada_vp_env.workspace = true
 
 arbitrary = { workspace = true, optional = true }
 borsh.workspace = true
 itertools.workspace = true
-linkme = {workspace = true, optional = true}
+linkme = { workspace = true, optional = true }
 konst.workspace = true
 proptest = { workspace = true, optional = true }
 serde_json.workspace = true
@@ -45,15 +42,17 @@ tracing.workspace = true
 
 
 [dev-dependencies]
-namada_core = { path = "../core", default-features = false, features = ["testing"] }
-namada_gas = { path = "../gas" }
-namada_parameters = { path = "../parameters" }
-namada_proof_of_stake = { path = "../proof_of_stake", features = ["testing"] }
-namada_state = { path = "../state", features = ["testing"] }
-namada_token = { path = "../token", features = ["testing"] }
-namada_tx = { path = "../tx", features = ["testing"] }
-namada_vm = { path = "../vm", features = ["testing"] }
-namada_vp = { path = "../vp" }
+namada_core = { workspace = true, features = ["testing"] }
+namada_gas.workspace = true
+namada_parameters.workspace = true
+namada_proof_of_stake = { workspace = true, features = ["testing"] }
+namada_state = { workspace = true, features = ["testing"] }
+namada_token = { workspace = true, features = ["testing"] }
+namada_tx = { workspace = true, features = ["testing"] }
+namada_vm = { workspace = true, default-features = true, features = [
+    "testing",
+] }
+namada_vp.workspace = true
 
 assert_matches.workspace = true
 proptest.workspace = true

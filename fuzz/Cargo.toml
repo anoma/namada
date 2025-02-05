@@ -1,6 +1,6 @@
 [package]
 name = "namada_fuzz"
-version = "0.47.0"
+version = "0.47.1"
 publish = false
 edition = "2021"
 
@@ -8,11 +8,11 @@ edition = "2021"
 cargo-fuzz = true
 
 [dependencies]
-namada_apps_lib = { path = "../crates/apps_lib", features = ["testing"] }
-namada_core = { path = "../crates/core", features = ["testing"] }
-namada_node = { path = "../crates/node", features = ["testing"] }
-namada_sdk = { path = "../crates/sdk", features = ["testing", "arbitrary"] }
-namada_tx = { path = "../crates/tx", features = ["arbitrary"] }
+namada_apps_lib = { workspace = true, features = ["testing"] }
+namada_core = { workspace = true, features = ["testing"] }
+namada_node = { workspace = true, features = ["testing"] }
+namada_sdk = { workspace = true, features = ["testing", "arbitrary"] }
+namada_tx = { workspace = true, features = ["arbitrary"] }
 
 arbitrary = { workspace = true }
 data-encoding = { workspace = true }
