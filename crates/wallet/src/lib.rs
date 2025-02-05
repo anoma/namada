@@ -598,20 +598,13 @@ impl<U: WalletIo> Wallet<U> {
             seed.as_bytes()
         } else {
             // Path to obtain the ZIP32 seed
-            let zip32_seed_path =
-                DerivationPath::default_for_transparent_scheme(
-                    SchemeType::Ed25519,
-                );
+            let (zip32_seed_path, scheme) = DerivationPath::modified_zip32();
             // Obtain the ZIP32 seed using SLIP10
-            &derive_hd_secret_key(
-                SchemeType::Ed25519,
-                seed.as_bytes(),
-                zip32_seed_path,
-            )
-            .try_to_sk::<ed25519::SecretKey>()
-            .expect("Expected Ed25519 key")
-            .0
-            .to_bytes()[..]
+            &derive_hd_secret_key(scheme, seed.as_bytes(), zip32_seed_path)
+                .try_to_sk::<ed25519::SecretKey>()
+                .expect("Expected Ed25519 key")
+                .0
+                .to_bytes()[..]
         };
         // Now ZIP32 derive the extended spending key from the new seed
         let spend_key = derive_hd_spending_key(seed, derivation_path.clone());
@@ -649,8 +642,8 @@ impl<U: WalletIo> Wallet<U> {
     ///
     /// Any usage of this function should be careful not expose a shielded key
     /// that may be derived via modified ZIP32 from this key (specifically when
-    /// the scheme is Ed25519 with the default HD derivation path and no
-    /// encryption password is being used).
+    /// the derivation path and schema matching `DerivationPath::modified_zip32`
+    /// and no encryption password is being used).
     #[allow(clippy::too_many_arguments)]
     pub fn derive_store_key_from_mnemonic_code(
         &mut self,
@@ -781,8 +774,8 @@ impl<U: WalletIo> Wallet<U> {
     ///
     /// Any usage of this function should be careful not expose a shielded key
     /// that may be derived via modified ZIP32 from this key (specifically when
-    /// the scheme is Ed25519 with the default HD derivation path and no
-    /// encryption password is being used).
+    /// the derivation path and schema matching `DerivationPath::modified_zip32`
+    /// and no encryption password is being used).
     pub fn derive_store_hd_secret_key(
         &mut self,
         scheme: SchemeType,
