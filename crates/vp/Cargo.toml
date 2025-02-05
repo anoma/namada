@@ -16,12 +16,12 @@ version.workspace = true
 testing = ["namada_core/testing"]
 
 [dependencies]
-namada_core = { path = "../core" }
-namada_events = { path = "../events", default-features = false }
-namada_gas = { path = "../gas" }
-namada_state = { path = "../state" }
-namada_tx = { path = "../tx" }
-namada_vp_env = { path = "../vp_env" }
+namada_core.workspace = true
+namada_events.workspace = true
+namada_gas.workspace = true
+namada_state.workspace = true
+namada_tx.workspace = true
+namada_vp_env.workspace = true
 
 smooth-operator.workspace = true
 thiserror.workspace = true

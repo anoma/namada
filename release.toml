@@ -1,7 +1,7 @@
 allow-branch               = ["main", "maint-*"]
 consolidate-commits        = true
 pre-release-commit-message = "Namada libs {{version}}"
-publish                    = false
+publish                    = true
 push                       = false
 shared-version             = true
 tag                        = false

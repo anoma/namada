@@ -16,27 +16,24 @@ version.workspace = true
 default = []
 # testing helpers
 testing = ["proptest"]
-migrations = [
-    "namada_migrations",
-    "linkme",
-]
+migrations = ["namada_migrations", "linkme"]
 
 [dependencies]
-namada_account = { path = "../account" }
-namada_controller = { path = "../controller" }
-namada_core = { path = "../core" }
-namada_events = { path = "../events", default-features = false }
-namada_macros = { path = "../macros" }
-namada_migrations = { path = "../migrations", optional = true }
-namada_state = { path = "../state" }
-namada_systems = { path = "../systems" }
-namada_tx = { path = "../tx" }
-namada_vp_env = { path = "../vp_env" }
+namada_account.workspace = true
+namada_controller.workspace = true
+namada_core.workspace = true
+namada_events.workspace = true
+namada_macros.workspace = true
+namada_migrations = { workspace = true, optional = true }
+namada_state.workspace = true
+namada_systems.workspace = true
+namada_tx.workspace = true
+namada_vp_env.workspace = true
 
 borsh.workspace = true
 konst.workspace = true
 itertools.workspace = true
-linkme = {workspace = true, optional = true}
+linkme = { workspace = true, optional = true }
 once_cell.workspace = true
 proptest = { workspace = true, optional = true }
 serde.workspace = true
@@ -44,14 +41,13 @@ smooth-operator.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
-
 [dev-dependencies]
-namada_core = { path = "../core", features = ["testing"] }
-namada_events = { path = "../events", features = ["testing"] }
-namada_governance = { path = "../governance" }
-namada_parameters = { path = "../parameters" }
-namada_state = { path = "../state", features = ["testing"] }
-namada_trans_token = { path = "../trans_token" }
+namada_core = { workspace = true, features = ["testing"] }
+namada_events = { workspace = true, features = ["testing"] }
+namada_governance.workspace = true
+namada_parameters.workspace = true
+namada_state = { workspace = true, features = ["testing"] }
+namada_trans_token.workspace = true
 
 assert_matches.workspace = true
 itertools.workspace = true

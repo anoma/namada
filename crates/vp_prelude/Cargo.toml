@@ -16,20 +16,20 @@ version.workspace = true
 default = []
 
 [dependencies]
-namada_account = { path = "../account" }
-namada_core = { path = "../core" }
-namada_events = { path = "../events", default-features = false }
-namada_gas = { path = "../gas" }
-namada_governance = { path = "../governance" }
-namada_ibc = { path = "../ibc" }
-namada_macros = { path = "../macros" }
-namada_parameters = { path = "../parameters" }
-namada_proof_of_stake = { path = "../proof_of_stake" }
-namada_storage = { path = "../storage" }
-namada_token = { path = "../token" }
-namada_tx = { path = "../tx", default-features = false }
-namada_vm_env = { path = "../vm_env" }
-namada_vp_env = { path = "../vp_env" }
+namada_account.workspace = true
+namada_core.workspace = true
+namada_events.workspace = true
+namada_gas.workspace = true
+namada_governance.workspace = true
+namada_ibc.workspace = true
+namada_macros.workspace = true
+namada_parameters.workspace = true
+namada_proof_of_stake.workspace = true
+namada_storage.workspace = true
+namada_token.workspace = true
+namada_tx.workspace = true
+namada_vm_env.workspace = true
+namada_vp_env.workspace = true
 
 borsh.workspace = true
 sha2.workspace = true

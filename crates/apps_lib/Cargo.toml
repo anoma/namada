@@ -14,28 +14,23 @@ version.workspace = true
 
 [features]
 default = ["migrations"]
-mainnet = [
-  "namada_sdk/mainnet",
-]
+mainnet = ["namada_sdk/mainnet"]
 # for tests and test utilities
 testing = ["lazy_static", "namada_sdk/testing"]
 benches = ["lazy_static", "namada_sdk/benches"]
-migrations = [
-  "namada_migrations",
-  "namada_sdk/migrations",
-  "linkme"
-]
-namada-eth-bridge = [
-  "namada_sdk/namada-eth-bridge",
-]
+migrations = ["namada_migrations", "namada_sdk/migrations", "linkme"]
+namada-eth-bridge = ["namada_sdk/namada-eth-bridge"]
 
 [dependencies]
-namada_core = {path = "../core"}
-namada_macros = {path = "../macros"}
-namada_migrations = {path = "../migrations", optional = true}
-namada_sdk = {path = "../sdk", features = ["download-params", "multicore"]}
-namada_vm = {path = "../vm"}
-namada_wallet = { path = "../wallet", features = ["std"]}
+namada_core.workspace = true
+namada_macros.workspace = true
+namada_migrations = { workspace = true, optional = true }
+namada_sdk = { workspace = true, default-features = true, features = [
+  "download-params",
+  "multicore",
+] }
+namada_vm.workspace = true
+namada_wallet = { workspace = true, features = ["std"] }
 
 async-trait.workspace = true
 base64.workspace = true
@@ -56,7 +51,7 @@ jubjub.workspace = true
 kdam.workspace = true
 lazy_static = { workspace = true, optional = true }
 linkme = { workspace = true, optional = true }
-ledger-lib = { workspace = true }
+ledger-lib.workspace = true
 ledger-namada-rs.workspace = true
 ledger-transport.workspace = true
 ledger-transport-hid.workspace = true
@@ -66,7 +61,7 @@ rand_core = { workspace = true, features = ["std"] }
 rand = { workspace = true, features = ["std"] }
 reqwest.workspace = true
 rpassword.workspace = true
-serde_json = {workspace = true, features = ["raw_value"]}
+serde_json = { workspace = true, features = ["raw_value"] }
 serde.workspace = true
 sha2.workspace = true
 tar.workspace = true
@@ -75,20 +70,27 @@ tendermint-config.workspace = true
 tendermint-rpc = { workspace = true, features = ["http-client"] }
 textwrap-macros = "0.3.0"
 thiserror.workspace = true
-tokio = {workspace = true, features = ["full"]}
+tokio = { workspace = true, features = ["full"] }
 toml.workspace = true
 tracing-appender.workspace = true
 tracing-log.workspace = true
-tracing-subscriber = { workspace = true, features = ["std", "json", "ansi", "tracing-log"]}
+tracing-subscriber = { workspace = true, features = [
+  "std",
+  "json",
+  "ansi",
+  "tracing-log",
+] }
 tracing.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
-namada_sdk = {path = "../sdk", features = ["testing"]}
+namada_sdk = { workspace = true, default-features = true, features = [
+  "testing",
+] }
 
 bit-set.workspace = true
 proptest.workspace = true
-lazy_static.workspace= true
+lazy_static.workspace = true
 pretty_assertions.workspace = true
 
 [build-dependencies]
