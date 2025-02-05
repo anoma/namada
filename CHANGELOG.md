@@ -18,6 +18,52 @@ Namada v1.0.0 is the first stable release of the Namada apps.
 - updated namada libraries to libs-v0.46.1
   ([\#4123](https://github.com/anoma/namada/pull/4123))
 
+## libs-v0.47.1
+
+Namada libraries v0.47.1 patch release.
+
+### BUG FIXES
+
+- Fix underestimation of MASP balances
+  ([\#4287](https://github.com/anoma/namada/pull/4287))
+
+### CI
+
+- Ensure the CI installs libudev-dev for the test-ledger-app job
+  ([\#4286](https://github.com/anoma/namada/pull/4286))
+
+### IMPROVEMENTS
+
+- Require the hardware wallet to display transaction fees in normal mode.
+  ([\#4218](https://github.com/anoma/namada/pull/4218))
+- bump ibc-rs to v0.57.0 ([\#4247](https://github.com/anoma/namada/issues/4247))
+- Optimize shielded balance queries for non-native tokens.
+  ([\#4291](https://github.com/anoma/namada/pull/4291))
+- Upgraded recommended CometBFT version to v0.37.15.
+  ([\#4299](https://github.com/anoma/namada/pull/4299))
+- Changed the modified ZIP32 derivation path to a non-default value 
+  (`"m/44'/877'/0'/0'/2147483647'"`).
+  ([\#4307](https://github.com/anoma/namada/pull/4307))
+- Improve the accuracy of shielded rewards for native tokens
+  ([\#4308](https://github.com/anoma/namada/pull/4308))
+- Split the reward distribution logic for native tokens away from that for non-
+  native tokens ([\#4311](https://github.com/anoma/namada/pull/4311))
+
+### MISCELLANEOUS
+
+- Update Hermes version in README and the script
+  ([\#4280](https://github.com/anoma/namada/issues/4280))
+
+### SDK
+
+- Allow querying PoS rewards at a specified epoch
+  ([\#4196](https://github.com/anoma/namada/pull/4196))
+
+### TESTING
+
+- Added more test cases for multisig verification
+  ([\#4289](https://github.com/anoma/namada/pull/4289))
+
 ## libs-v0.47.0
 
 Namada libs v0.47.0 release
