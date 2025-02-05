@@ -106,10 +106,8 @@ pub fn is_masp_undated_balance_key(key: &storage::Key) -> Option<Address> {
 /// Obtain the storage key for the undated balance of a token
 pub fn masp_undated_balance_key(token_address: &Address) -> storage::Key {
     storage::Key::from(address::MASP.to_db_key())
-        .push(&MASP_UNDATED_BALANCE_KEY.to_owned())
-        .expect("Cannot obtain a storage key")
-        .push(&token_address.to_string().to_db_key())
-        .expect("Cannot obtain a storage key")
+        .with_segment(MASP_UNDATED_BALANCE_KEY.to_owned())
+        .with_segment(token_address.to_string().to_db_key())
 }
 
 /// Check if the given storage key is MASP transparent balance key

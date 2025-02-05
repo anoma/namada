@@ -104,7 +104,9 @@ where
     )))?;
     // Record undated balance changes
     let mut undated_balances = BTreeMap::new();
-    let mut asset_types = BTreeMap::new();
+    let mut undated_asset_types = BTreeMap::new();
+    let asset_type_err =
+        |err| Error::new_alloc(format!("unable to create asset type: {err}"));
     // First construct a map to decode asset types
     for token in tokens {
         let Some(denom) = read_denom(env, &token)? else {
@@ -115,20 +117,18 @@ where
         let undated_balance = read_undated_balance(env, &token)?;
         // Save the undated balance in a map for updating
         undated_balances.insert(token.clone(), I320::from(undated_balance));
-        let asset_type_err = |err| {
-            Error::new_alloc(format!("unable to create asset type: {err}"))
-        };
         // Store the encoding for each digit
         for digit in MaspDigitPos::iter() {
             let atype = encode_asset_type(token.clone(), denom, digit, None)
                 .map_err(asset_type_err)?;
-            asset_types.insert(atype, (token.clone(), denom, digit));
+            undated_asset_types.insert(atype, (token.clone(), denom, digit));
         }
     }
     // Update the undated balances with the Sapling value balance
     for (asset_type, val) in shielded.sapling_value_balance().components() {
-        let Some((token, _denom, digit)) = asset_types.get(asset_type) else {
-            // Assume that token cannot be decoded because it's epoched
+        let Some((token, _denom, digit)) = undated_asset_types.get(asset_type)
+        else {
+            // Assume that token cannot be decoded because it's dated
             continue;
         };
         // Retrieve the current undated balance

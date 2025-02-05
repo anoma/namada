@@ -47,8 +47,8 @@ pub struct MaspVp<'ctx, CTX, Params, Gov, Ibc, TransToken, Transfer> {
 // Balances changed by a transaction
 #[derive(Debug, Clone)]
 struct ChangedBalances {
-    // Maps unepoched asset types to their decodings
-    unepoched_tokens:
+    // Maps undated asset types to their decodings
+    undated_tokens:
         BTreeMap<AssetType, (Address, token::Denomination, MaspDigitPos)>,
     // Map between MASP transparent address and Namada types
     decoder: BTreeMap<TransparentAddress, TAddrData>,
@@ -66,7 +66,7 @@ struct ChangedBalances {
 impl Default for ChangedBalances {
     fn default() -> Self {
         Self {
-            unepoched_tokens: Default::default(),
+            undated_tokens: Default::default(),
             decoder: Default::default(),
             pre: Default::default(),
             post: Default::default(),
@@ -225,26 +225,26 @@ where
         for token in keys_changed.iter().filter_map(is_masp_undated_balance_key)
         {
             // Read and store the undated balance before this tx is applied
-            let pre_reward_balance: Amount = ctx
+            let pre_undated_balance: Amount = ctx
                 .read_pre(&masp_undated_balance_key(&token))?
                 .unwrap_or_default();
             // Attach the token type to the undated balance
-            let pre_reward_balance =
-                ValueSum::from_pair(token.clone(), pre_reward_balance);
+            let pre_undated_balance =
+                ValueSum::from_pair(token.clone(), pre_undated_balance);
             // Now finally record the undated balance
             result.undated_pre =
-                checked!(result.undated_pre.clone() + &pre_reward_balance)
+                checked!(result.undated_pre.clone() + &pre_undated_balance)
                     .map_err(Error::new)?;
             // Read and store the undated balance after this tx is applied
-            let post_reward_balance: Amount = ctx
+            let post_undated_balance: Amount = ctx
                 .read_post(&masp_undated_balance_key(&token))?
                 .unwrap_or_default();
             // Attach the token type to the undated balance
-            let post_reward_balance =
-                ValueSum::from_pair(token, post_reward_balance);
+            let post_undated_balance =
+                ValueSum::from_pair(token, post_undated_balance);
             // Now finally record the undated balance
             result.undated_post =
-                checked!(result.undated_post.clone() + &post_reward_balance)
+                checked!(result.undated_post.clone() + &post_undated_balance)
                     .map_err(Error::new)?;
         }
         Ok(result)
@@ -357,7 +357,7 @@ where
             "No denomination found in storage for the given token",
         )?;
         // Record the token without an epoch to facilitate later decoding
-        unepoched_tokens(token, denom, &mut result.unepoched_tokens)?;
+        undated_tokens(token, denom, &mut result.undated_tokens)?;
         let counterpart_balance_key =
             TransToken::balance_key(token, counterpart);
         let pre_balance: Amount =
@@ -423,7 +423,7 @@ where
 
         // Note the balance changes they imply
         let ChangedBalances {
-            unepoched_tokens,
+            undated_tokens,
             decoder,
             pre,
             post,
@@ -438,7 +438,7 @@ where
                 keys_changed,
             )?;
         Ok(ChangedBalances {
-            unepoched_tokens,
+            undated_tokens,
             decoder,
             pre,
             post,
@@ -522,7 +522,7 @@ where
             &changed_balances.undated_post,
             &shielded_tx.sapling_value_balance(),
             masp_epoch,
-            &changed_balances.unepoched_tokens,
+            &changed_balances.undated_tokens,
             conversion_state,
         )?;
 
@@ -671,7 +671,7 @@ where
 }
 
 // Make a map to help recognize asset types lacking an epoch
-fn unepoched_tokens(
+fn undated_tokens(
     token: &Address,
     denom: token::Denomination,
     tokens: &mut BTreeMap<
@@ -730,18 +730,18 @@ fn validate_transparent_input<A: Authorization>(
         }
         // Maybe the asset type has no attached epoch
         None if changed_balances
-            .unepoched_tokens
+            .undated_tokens
             .contains_key(&vin.asset_type) =>
         {
             let (token, denom, digit) =
-                &changed_balances.unepoched_tokens[&vin.asset_type];
-            // Determine what the asset type would be if it were epoched
-            let epoched_asset_type =
+                &changed_balances.undated_tokens[&vin.asset_type];
+            // Determine what the asset type would be if it were dated
+            let dated_asset_type =
                 encode_asset_type(token.clone(), *denom, *digit, Some(epoch))
                     .wrap_err("unable to create asset type")?;
-            if conversion_state.assets.contains_key(&epoched_asset_type) {
-                // If such an epoched asset type is available in the
-                // conversion tree, then we must reject the unepoched
+            if conversion_state.assets.contains_key(&dated_asset_type) {
+                // If such a dated asset type is available in the
+                // conversion tree, then we must reject the undated
                 // variant
                 let error =
                     Error::new_const("epoch is missing from asset type");
@@ -814,12 +814,12 @@ fn validate_transparent_output(
         }
         // Maybe the asset type has no attached epoch
         None if changed_balances
-            .unepoched_tokens
+            .undated_tokens
             .contains_key(&out.asset_type) =>
         {
             // Otherwise note the contribution to this transparent output
             let (token, _denom, digit) =
-                &changed_balances.unepoched_tokens[&out.asset_type];
+                &changed_balances.undated_tokens[&out.asset_type];
             let amount =
                 token::Amount::from_masp_denominated(out.value, *digit);
             *bal_ref = bal_ref
