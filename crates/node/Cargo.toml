@@ -104,11 +104,9 @@ warp = "0.3.2"
 zstd.workspace = true
 
 [dev-dependencies]
-namada_apps_lib = { workspace = true, features = ["testing"] }
-namada_test_utils.workspace = true
-namada_vm = { workspace = true, default-features = true, features = [
-  "testing",
-] }
+namada_apps_lib = { path = "../apps_lib", features = ["testing"] }
+namada_test_utils.path = "../test_utils"
+namada_vm = { path = "../vm", default-features = true, features = ["testing"] }
 
 assert_matches.workspace = true
 clap.workspace = true

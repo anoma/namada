@@ -84,7 +84,7 @@ tracing.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
-namada_sdk = { workspace = true, default-features = true, features = [
+namada_sdk = { path = "../sdk", default-features = true, features = [
   "testing",
 ] }
 
