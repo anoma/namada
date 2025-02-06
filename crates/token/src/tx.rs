@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use namada_core::arith::CheckedSub;
 use namada_core::collections::HashSet;
 use namada_core::masp::encode_asset_type;
+use namada_core::masp_primitives::transaction::Transaction;
 use namada_core::token::MaspDigitPos;
 use namada_core::uint::I320;
 use namada_core::{masp, token};
@@ -75,33 +76,19 @@ where
     Ok((debited_accounts, tokens))
 }
 
-/// Apply a shielded transfer
-pub fn apply_shielded_transfer<ENV>(
+/// Update the undated balance keys to reflect the net changes implied by the
+/// given shielded transaction.
+///
+/// This function takes the set of token addresses impacted by the transaction
+/// in order to help it decode the asset types in its value balance.
+pub fn update_undated_balances<ENV>(
     env: &mut ENV,
-    masp_section_ref: MaspTxId,
-    debited_accounts: HashSet<Address>,
+    shielded: &Transaction,
     tokens: HashSet<Address>,
-    tx_data: &BatchedTx,
 ) -> Result<()>
 where
     ENV: TxEnv + EmitEvents + action::Write<Err = Error>,
 {
-    let shielded = tx_data
-        .tx
-        .get_masp_section(&masp_section_ref)
-        .cloned()
-        .ok_or_err_msg("Unable to find required shielded section in tx data")
-        .inspect_err(|_err| {
-            env.set_commitment_sentinel();
-        })?;
-    utils::handle_masp_tx(env, &shielded)
-        .wrap_err("Encountered error while handling MASP transaction")?;
-    ENV::update_masp_note_commitment_tree(&shielded)
-        .wrap_err("Failed to update the MASP commitment tree")?;
-
-    env.push_action(Action::Masp(MaspAction::MaspSectionRef(
-        masp_section_ref,
-    )))?;
     // Record undated balance changes
     let mut undated_balances = BTreeMap::new();
     let mut undated_asset_types = BTreeMap::new();
@@ -163,6 +150,37 @@ where
         // Save the unddated balance back into storage
         env.write(&undated_balance_key, balance)?;
     }
+    Ok(())
+}
+
+/// Apply a shielded transfer
+pub fn apply_shielded_transfer<ENV>(
+    env: &mut ENV,
+    masp_section_ref: MaspTxId,
+    debited_accounts: HashSet<Address>,
+    tokens: HashSet<Address>,
+    tx_data: &BatchedTx,
+) -> Result<()>
+where
+    ENV: TxEnv + EmitEvents + action::Write<Err = Error>,
+{
+    let shielded = tx_data
+        .tx
+        .get_masp_section(&masp_section_ref)
+        .cloned()
+        .ok_or_err_msg("Unable to find required shielded section in tx data")
+        .inspect_err(|_err| {
+            env.set_commitment_sentinel();
+        })?;
+    utils::handle_masp_tx(env, &shielded)
+        .wrap_err("Encountered error while handling MASP transaction")?;
+    ENV::update_masp_note_commitment_tree(&shielded)
+        .wrap_err("Failed to update the MASP commitment tree")?;
+
+    env.push_action(Action::Masp(MaspAction::MaspSectionRef(
+        masp_section_ref,
+    )))?;
+    update_undated_balances(env, &shielded, tokens)?;
     // Extract the debited accounts for the masp part of the transfer and
     // push the relative actions
     let vin_addresses =
