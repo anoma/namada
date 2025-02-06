@@ -490,12 +490,27 @@ pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
     let mut all_inners_successful = true;
     for (inner_hash, result) in batch_results {
         match result {
-            InnerTxResult::Success(_) => {
+            InnerTxResult::Success(result) => {
                 display_line!(
                     context.io(),
                     "Transaction {} was successfully applied.",
                     inner_hash,
                 );
+                if !result.events.is_empty() {
+                    display_line!(context.io(), "Events:");
+                    for event in result.events.clone() {
+                        display_line!(
+                            context.io(),
+                            "{:2} - {} - {}:",
+                            "",
+                            event.level(),
+                            event.kind(),
+                        );
+                        for (k, v) in event.into_attributes() {
+                            display_line!(context.io(), "{:4} - {k}: {v}", "")
+                        }
+                    }
+                }
             }
             InnerTxResult::VpsRejected(inner) => {
                 let changed_keys: Vec<_> = inner
