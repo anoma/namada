@@ -42,17 +42,15 @@ tracing.workspace = true
 
 
 [dev-dependencies]
-namada_core = { workspace = true, features = ["testing"] }
-namada_gas.workspace = true
-namada_parameters.workspace = true
-namada_proof_of_stake = { workspace = true, features = ["testing"] }
-namada_state = { workspace = true, features = ["testing"] }
-namada_token = { workspace = true, features = ["testing"] }
-namada_tx = { workspace = true, features = ["testing"] }
-namada_vm = { workspace = true, default-features = true, features = [
-    "testing",
-] }
-namada_vp.workspace = true
+namada_core = { path = "../core", features = ["testing"] }
+namada_gas.path = "../gas"
+namada_parameters.path = "../parameters"
+namada_proof_of_stake = { path = "../proof_of_stake", features = ["testing"] }
+namada_state = { path = "../state", features = ["testing"] }
+namada_token = { path = "../token", features = ["testing"] }
+namada_tx = { path = "../tx", features = ["testing"] }
+namada_vm = { path = "../vm", default-features = true, features = ["testing"] }
+namada_vp.path = "../vp"
 
 assert_matches.workspace = true
 proptest.workspace = true
