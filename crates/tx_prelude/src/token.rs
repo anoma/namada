@@ -1,6 +1,7 @@
 //! Shielded and transparent tokens related functions
 
 use namada_core::collections::HashSet;
+use namada_core::masp_primitives::transaction::Transaction;
 #[cfg(any(test, feature = "testing"))]
 pub use namada_token::testing;
 pub use namada_token::tx::apply_shielded_transfer;
@@ -34,6 +35,19 @@ pub fn multi_transfer(
     tx_data: &BatchedTx,
 ) -> TxResult {
     namada_token::tx::multi_transfer(ctx, transfers, tx_data, EVENT_DESC.into())
+}
+
+/// Update the undated balance keys to reflect the net changes implied by the
+/// given shielded transaction.
+///
+/// This function takes the set of token addresses impacted by the transaction
+/// in order to help it decode the asset types in its value balance.
+pub fn update_undated_balances(
+    ctx: &mut Ctx,
+    shielded: &Transaction,
+    tokens: HashSet<Address>,
+) -> Result<()> {
+    namada_token::tx::update_undated_balances(ctx, shielded, tokens)
 }
 
 /// Transfer tokens from `sources` to `targets` and submit a transfer event.

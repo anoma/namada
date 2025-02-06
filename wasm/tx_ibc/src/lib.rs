@@ -12,16 +12,18 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         .execute::<token::Transfer>(&data)
         .into_storage_result()?;
 
-    let masp_section_ref = if let Some(transfers) = transfer {
-        if let Some(transparent) = transfers.transparent_part() {
-            let _debited_accounts =
+    let (masp_section_ref, token_addrs) = if let Some(transfers) = transfer {
+        let (_debited_accounts, tokens) =
+            if let Some(transparent) = transfers.transparent_part() {
                 token::apply_transparent_transfers(ctx, transparent)
-                    .wrap_err("Transparent token transfer failed")?;
-        }
+                    .wrap_err("Transparent token transfer failed")?
+            } else {
+                Default::default()
+            };
 
-        transfers.shielded_section_hash
+        (transfers.shielded_section_hash, tokens)
     } else {
-        None
+        (None, Default::default())
     };
 
     let shielded = if let Some(masp_section_ref) = masp_section_ref {
@@ -52,6 +54,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         } else {
             ctx.push_action(Action::IbcShielding)?;
         }
+        token::update_undated_balances(ctx, &shielded, token_addrs)?;
     }
 
     Ok(())

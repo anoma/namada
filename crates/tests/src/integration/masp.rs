@@ -4987,6 +4987,8 @@ fn identical_output_descriptions() -> Result<()> {
                 "1000",
                 "--gas-payer",
                 bradley_alias.as_ref(),
+                "--gas-limit",
+                "60000",
                 "--output-folder-path",
                 tempdir.path().to_str().unwrap(),
                 "--dump-wrapper-tx",
