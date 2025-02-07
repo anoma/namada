@@ -3597,15 +3597,6 @@ checksum = "469fb0b9cefa57e3ef31275ee7cacb78f2fdca44e4765491884a2b119d4eb130"
 
 [[package]]
 name = "itertools"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
@@ -4166,7 +4157,7 @@ dependencies = [
  "borsh",
  "ethers",
  "eyre",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "konst",
  "namada_account",
  "namada_core",
@@ -4218,7 +4209,7 @@ name = "namada_governance"
 version = "0.47.0"
 dependencies = [
  "borsh",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "konst",
  "namada_account",
  "namada_core",
@@ -4328,7 +4319,7 @@ name = "namada_proof_of_stake"
 version = "0.47.0"
 dependencies = [
  "borsh",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "konst",
  "namada_account",
  "namada_controller",
@@ -4373,7 +4364,7 @@ dependencies = [
  "fd-lock",
  "futures",
  "init-once",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "lazy_static",
  "masp_primitives",
  "masp_proofs",
@@ -4434,7 +4425,7 @@ dependencies = [
  "eyre",
  "flume",
  "futures",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "lazy_static",
  "masp_primitives",
  "masp_proofs",
@@ -4472,7 +4463,7 @@ version = "0.47.0"
 dependencies = [
  "borsh",
  "clru",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "namada_core",
  "namada_events",
  "namada_gas",
@@ -4494,7 +4485,7 @@ name = "namada_storage"
 version = "0.47.0"
 dependencies = [
  "borsh",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "namada_core",
  "namada_gas",
  "namada_macros",
@@ -4538,7 +4529,7 @@ dependencies = [
  "ibc-middleware-packet-forward",
  "ibc-testkit",
  "ics23",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "namada_core",
  "namada_sdk",
  "namada_test_utils",
@@ -4761,7 +4752,7 @@ dependencies = [
  "data-encoding",
  "derivation-path",
  "fd-lock",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "masp_primitives",
  "nam-tiny-hderive",
  "namada_core",
@@ -5174,9 +5165,9 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "patricia_tree"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31f2f4539bffe53fc4b4da301df49d114b845b077bd5727b7fe2bd9d8df2ae68"
+checksum = "edb45b6331bbdbb54c9a29413703e892ab94f83a31e4a546c778495a91e7fbca"
 dependencies = [
  "bitflags 2.8.0",
 ]
