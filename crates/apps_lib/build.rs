@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::Write;
-use std::str;
+use std::path::PathBuf;
+use std::{env, str};
 
 use cargo_metadata::MetadataCommand;
 use git2::{DescribeFormatOptions, DescribeOptions, Repository};
@@ -23,8 +24,10 @@ fn main() {
         Some(describe) => describe.format(Some(&describe_format)).ok(),
         None => None,
     };
+    let out_dir = env::var("OUT_DIR").unwrap();
     let mut version_rs =
-        File::create("./version.rs").expect("cannot write version");
+        File::create(PathBuf::from_iter([&out_dir, "version.rs"]))
+            .expect("cannot write version");
     let pre = "pub fn namada_version() -> &'static str { \"";
     let post = "\" }";
     match version_string {

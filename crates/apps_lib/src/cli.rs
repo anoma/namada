@@ -22,7 +22,8 @@ pub use utils::{safe_exit, Cmd};
 pub use self::context::Context;
 use crate::cli::api::CliIo;
 
-include!("../version.rs");
+// Imports `pub fn namada_version() -> &'static str` made by build script
+include!(concat!(env!("OUT_DIR"), "/version.rs"));
 
 const APP_NAME: &str = "Namada";
 
