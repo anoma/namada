@@ -14,6 +14,7 @@ use core::time::Duration;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
+use base64::prelude::{Engine, BASE64_STANDARD};
 use color_eyre::eyre::Result;
 use eyre::eyre;
 use ibc_middleware_packet_forward::ForwardMetadata;
@@ -3489,7 +3490,7 @@ fn nft_transfer_from_cosmos(
         "memo": memo
     })
     .to_string();
-    let encoded_msg = base64::encode(&msg);
+    let encoded_msg = BASE64_STANDARD.encode(&msg);
     let json = serde_json::json!({
         "send_nft": {
             "contract": ics721_contract.as_ref(),
