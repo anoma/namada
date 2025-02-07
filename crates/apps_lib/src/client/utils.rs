@@ -3,6 +3,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use base64::prelude::{Engine, BASE64_STANDARD};
 use color_eyre::owo_colors::OwoColorize;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
@@ -858,7 +859,7 @@ pub fn write_tendermint_node_key(
     let tm_node_keypair_json = json!({
         "priv_key": {
             "type": format!("tendermint/PrivKey{}",key_str),
-            "value": base64::encode(node_keypair),
+            "value": BASE64_STANDARD.encode(node_keypair),
         }
     });
     let tm_config_dir = tm_home_dir.join("config");
