@@ -30,7 +30,7 @@ use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use byte_unit::Byte;
+use byte_unit::{Byte, UnitType};
 use data_encoding::HEXUPPER;
 pub use dry_run_tx::dry_run_tx;
 use futures::future::TryFutureExt;
@@ -518,8 +518,9 @@ async fn run_aux_setup(
         let available_memory_bytes = sys.available_memory();
         tracing::info!(
             "Available memory: {}",
-            Byte::from_bytes(u128::from(available_memory_bytes))
-                .get_appropriate_unit(true)
+            Byte::from_u128(u128::from(available_memory_bytes))
+                .unwrap()
+                .get_appropriate_unit(UnitType::Binary)
         );
         available_memory_bytes
     });
@@ -543,8 +544,9 @@ async fn run_aux_setup(
         };
     tracing::info!(
         "VP WASM compilation cache size: {}",
-        Byte::from_bytes(u128::from(vp_wasm_compilation_cache))
-            .get_appropriate_unit(true)
+        Byte::from_u128(u128::from(vp_wasm_compilation_cache))
+            .unwrap()
+            .get_appropriate_unit(UnitType::Binary)
     );
 
     // Find the tx WASM compilation cache size
@@ -566,8 +568,9 @@ async fn run_aux_setup(
         };
     tracing::info!(
         "Tx WASM compilation cache size: {}",
-        Byte::from_bytes(u128::from(tx_wasm_compilation_cache))
-            .get_appropriate_unit(true)
+        Byte::from_u128(u128::from(tx_wasm_compilation_cache))
+            .unwrap()
+            .get_appropriate_unit(UnitType::Binary)
     );
 
     // Find the RocksDB block cache size
@@ -586,8 +589,9 @@ async fn run_aux_setup(
     };
     tracing::info!(
         "RocksDB block cache size: {}",
-        Byte::from_bytes(u128::from(db_block_cache_size_bytes))
-            .get_appropriate_unit(true)
+        Byte::from_u128(u128::from(db_block_cache_size_bytes))
+            .unwrap()
+            .get_appropriate_unit(UnitType::Binary)
     );
 
     RunAuxSetup {

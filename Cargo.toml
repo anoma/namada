@@ -119,7 +119,7 @@ bimap = {version = "0.6", features = ["serde"]}
 bit-set = "0.8"
 bitflags = { version = "2.5", features = ["serde"] }
 blake2b-rs = "0.2"
-byte-unit = "4.0.13"
+byte-unit = "5.1"
 byteorder = "1.4"
 borsh = {version = "1.2", features = ["unstable__schema", "derive"]}
 cargo_metadata = "0.19"

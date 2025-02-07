@@ -639,7 +639,7 @@ mod test {
     use std::cmp::max;
 
     use assert_matches::assert_matches;
-    use byte_unit::Byte;
+    use byte_unit::{Byte, UnitType};
     use namada_test_utils::TestWasms;
     use tempfile::{tempdir, TempDir};
     use test_log::test;
@@ -659,7 +659,9 @@ mod test {
             let max_bytes = max(tx_read_storage_key.size, tx_no_op.size) + 1;
             println!(
                 "Using cache with max_bytes {} ({})",
-                Byte::from_bytes(max_bytes as u128).get_appropriate_unit(true),
+                Byte::from_u128(max_bytes as u128)
+                    .unwrap()
+                    .get_appropriate_unit(UnitType::Binary),
                 max_bytes
             );
             let (mut cache, _tmp_dir) = cache(max_bytes);
@@ -918,7 +920,9 @@ mod test {
             let max_bytes = max(vp_always_true.size, vp_eval.size) + 1;
             println!(
                 "Using cache with max_bytes {} ({})",
-                Byte::from_bytes(max_bytes as u128).get_appropriate_unit(true),
+                Byte::from_u128(max_bytes as u128)
+                    .unwrap()
+                    .get_appropriate_unit(UnitType::Binary),
                 max_bytes
             );
             let (mut cache, _tmp_dir) = cache(max_bytes);
@@ -1080,7 +1084,9 @@ mod test {
         println!(
             "Compiled module {} size including the hash: {} ({})",
             file.to_string_lossy(),
-            Byte::from_bytes(size as u128).get_appropriate_unit(true),
+            Byte::from_u128(size as u128)
+                .unwrap()
+                .get_appropriate_unit(UnitType::Binary),
             size,
         );
         WasmWithMeta { code, hash, size }

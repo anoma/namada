@@ -826,10 +826,11 @@ checksum = "c3ac9f8b63eca6fd385229b3675f6cc0dc5c8a5c8a54a59d4f52ffd670d87b0c"
 
 [[package]]
 name = "byte-unit"
-version = "4.0.19"
+version = "5.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da78b32057b8fdfc352504708feeba7216dcd65a2c9ab02978cbd288d1279b6c"
+checksum = "e1cd29c3c585209b0cbc7309bfe3ed7efd8c84c21b7af29c8bfae908f8777174"
 dependencies = [
+ "rust_decimal",
  "serde",
  "utf8-width",
 ]
