@@ -15,7 +15,6 @@ fn main() {
     println!("cargo:rerun-if-changed={}", PROTO_SRC);
 
     tonic_build::configure()
-        .out_dir("src/proto/generated")
         .protoc_arg("--experimental_allow_proto3_optional")
         .compile_protos(&[format!("{}/types.proto", PROTO_SRC)], &[PROTO_SRC])
         .unwrap();
