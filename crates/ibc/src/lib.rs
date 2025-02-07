@@ -572,6 +572,17 @@ where
     Ok(accum)
 }
 
+/// Internal transfer data extracted from the wrapping IBC transaction
+#[derive(Debug)]
+pub struct InternalData<Transfer> {
+    /// The transparent transfer that happens in parallel to IBC processes
+    pub transparent: Option<Transfer>,
+    /// The shielded transaction that happens in parallel to IBC processes
+    pub shielded: Option<MaspTransaction>,
+    /// IBC tokens that are credited/debited to internal accounts
+    pub ibc_tokens: BTreeSet<Address>,
+}
+
 /// IBC actions to handle IBC operations
 #[derive(Debug)]
 pub struct IbcActions<'a, C, Params, Token>
@@ -617,7 +628,7 @@ where
     pub fn execute<Transfer: BorshDeserialize>(
         &mut self,
         tx_data: &[u8],
-    ) -> Result<(Option<Transfer>, Option<MaspTransaction>), Error> {
+    ) -> Result<InternalData<Transfer>, Error> {
         let message = decode_message::<Transfer>(tx_data)?;
         let result = match message {
             IbcMessage::Transfer(msg) => {
@@ -643,13 +654,22 @@ where
                 if msg.transfer.is_some() {
                     token_transfer_ctx.enable_shielded_transfer();
                 }
+                // Record the token credited/debited in this transfer
+                let denom = msg.message.packet_data.token.denom.to_string();
+                let token = convert_to_address(denom)
+                    .into_storage_result()
+                    .map_err(Error::Storage)?;
                 send_transfer_execute(
                     &mut self.ctx,
                     &mut token_transfer_ctx,
                     msg.message,
                 )
                 .map_err(Error::TokenTransfer)?;
-                Ok((msg.transfer, None))
+                Ok(InternalData {
+                    transparent: msg.transfer,
+                    shielded: None,
+                    ibc_tokens: [token].into(),
+                })
             }
             IbcMessage::NftTransfer(msg) => {
                 let mut nft_transfer_ctx =
@@ -672,13 +692,38 @@ where
                             )
                         })?,
                 );
+                // Record the tokens credited/debited in this NFT transfer
+                let ibc_traces: Vec<_> = msg
+                    .message
+                    .packet_data
+                    .token_ids
+                    .0
+                    .iter()
+                    .map(|token_id| {
+                        ibc_trace_for_nft(
+                            &msg.message.packet_data.class_id,
+                            token_id,
+                        )
+                    })
+                    .collect();
+                let mut tokens = BTreeSet::new();
+                for ibc_trace in ibc_traces {
+                    let token = convert_to_address(ibc_trace)
+                        .into_storage_result()
+                        .map_err(Error::Storage)?;
+                    tokens.insert(token);
+                }
                 send_nft_transfer_execute(
                     &mut self.ctx,
                     &mut nft_transfer_ctx,
                     msg.message,
                 )
                 .map_err(Error::NftTransfer)?;
-                Ok((msg.transfer, None))
+                Ok(InternalData {
+                    transparent: msg.transfer,
+                    shielded: None,
+                    ibc_tokens: tokens,
+                })
             }
             IbcMessage::Envelope(envelope) => {
                 if let Some(verifier) = get_envelope_verifier(envelope.as_ref())
@@ -696,24 +741,91 @@ where
                     .map_err(|e| Error::Handler(Box::new(e)))?;
 
                 // Extract MASP tx from the memo in the packet if needed
-                let masp_tx = match &*envelope {
+                let (masp_tx, tokens) = match &*envelope {
                     MsgEnvelope::Packet(PacketMsg::Recv(msg))
                         if self
                             .is_receiving_success(msg)?
                             .is_some_and(|ack_succ| ack_succ) =>
                     {
-                        extract_masp_tx_from_packet(&msg.packet)
+                        let tokens = if msg.packet.port_id_on_b.as_str()
+                            == PORT_ID_STR
+                        {
+                            // Record the token credited/debited in this
+                            // transfer
+                            let packet_data =
+                                serde_json::from_slice::<PacketData>(
+                                    &msg.packet.data,
+                                )
+                                .map_err(StorageError::new)
+                                .map_err(Error::Storage)?;
+                            let ibc_denom = packet_data.token.denom.to_string();
+                            // Get the received token
+                            let token = received_ibc_token(
+                                ibc_denom,
+                                &msg.packet.port_id_on_a,
+                                &msg.packet.chan_id_on_a,
+                                &msg.packet.port_id_on_b,
+                                &msg.packet.chan_id_on_b,
+                            )
+                            .into_storage_result()
+                            .map_err(Error::Storage)?;
+                            [token].into()
+                        } else if msg.packet.port_id_on_b.as_str()
+                            == NFT_PORT_ID_STR
+                        {
+                            // Record the tokenS credited/debited in this NFT
+                            // transfer
+                            let packet_data =
+                                serde_json::from_slice::<NftPacketData>(
+                                    &msg.packet.data,
+                                )
+                                .map_err(StorageError::new)
+                                .map_err(Error::Storage)?;
+                            let ibc_traces: Vec<_> = packet_data
+                                .token_ids
+                                .0
+                                .iter()
+                                .map(|token_id| {
+                                    ibc_trace_for_nft(
+                                        &packet_data.class_id,
+                                        token_id,
+                                    )
+                                })
+                                .collect();
+                            let mut tokens = BTreeSet::new();
+                            for ibc_trace in ibc_traces {
+                                // Get the received token
+                                let token = received_ibc_token(
+                                    ibc_trace,
+                                    &msg.packet.port_id_on_a,
+                                    &msg.packet.chan_id_on_a,
+                                    &msg.packet.port_id_on_b,
+                                    &msg.packet.chan_id_on_b,
+                                )
+                                .into_storage_result()
+                                .map_err(Error::Storage)?;
+                                tokens.insert(token);
+                            }
+                            tokens
+                        } else {
+                            BTreeSet::new()
+                        };
+                        (extract_masp_tx_from_packet(&msg.packet), tokens)
                     }
                     #[cfg(is_apple_silicon)]
                     MsgEnvelope::Packet(PacketMsg::Ack(msg)) => {
                         // NOTE: This is unneeded but wasm compilation error
                         // happened if deleted on macOS with Apple Silicon
                         let _ = extract_masp_tx_from_packet(&msg.packet);
-                        None
+                        (None, BTreeSet::new())
                     }
-                    _ => None,
+                    _ => (None, BTreeSet::new()),
                 };
-                Ok((None, masp_tx))
+                Ok(InternalData {
+                    transparent: None,
+                    shielded: masp_tx,
+                    ibc_tokens: tokens,
+                })
             }
         };
         self.insert_verifiers()?;
