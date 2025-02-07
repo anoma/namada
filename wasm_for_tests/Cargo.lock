@@ -2102,15 +2102,6 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
@@ -2539,7 +2530,7 @@ name = "namada_governance"
 version = "0.47.2"
 dependencies = [
  "borsh",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "konst",
  "namada_account",
  "namada_core",
@@ -2634,7 +2625,7 @@ name = "namada_proof_of_stake"
 version = "0.47.2"
 dependencies = [
  "borsh",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "konst",
  "namada_account",
  "namada_controller",
@@ -2667,7 +2658,7 @@ dependencies = [
  "borsh",
  "eyre",
  "futures",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "lazy_static",
  "masp_primitives",
  "masp_proofs",
@@ -2701,7 +2692,7 @@ version = "0.47.2"
 dependencies = [
  "borsh",
  "clru",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "namada_core",
  "namada_events",
  "namada_gas",
@@ -2722,7 +2713,7 @@ name = "namada_storage"
 version = "0.47.2"
 dependencies = [
  "borsh",
- "itertools 0.12.1",
+ "itertools 0.14.0",
  "namada_core",
  "namada_gas",
  "namada_macros",
