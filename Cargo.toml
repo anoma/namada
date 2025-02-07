@@ -113,7 +113,7 @@ assert_cmd = "2.0"
 assert_matches = "1.5"
 async-trait = {version = "0.1"}
 base58 = "0.2"
-base64 = "0.13.0"
+base64 = "0.22"
 bech32 = "0.8.0"
 bimap = {version = "0.6", features = ["serde"]}
 bit-set = "0.8"
