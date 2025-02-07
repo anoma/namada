@@ -442,15 +442,15 @@ dependencies = [
 
 [[package]]
 name = "bech32"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf9ff0bbfd639f15c74af777d81383cf53efb7c93613f6cab67c6c11e05bbf8b"
-
-[[package]]
-name = "bech32"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d86b93f97252c47b41663388e6d155714a9d0c398b99f1005cbc5f978b29f445"
+
+[[package]]
+name = "bech32"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d965446196e3b7decd44aa7ee49e31d630118f90ef12f97900f262eb915c951d"
 
 [[package]]
 name = "bellman"
@@ -4116,7 +4116,7 @@ dependencies = [
 name = "namada_core"
 version = "0.47.2"
 dependencies = [
- "bech32 0.8.1",
+ "bech32 0.11.0",
  "borsh",
  "chrono",
  "data-encoding",
@@ -4361,7 +4361,7 @@ name = "namada_sdk"
 version = "0.47.2"
 dependencies = [
  "async-trait",
- "bech32 0.8.1",
+ "bech32 0.11.0",
  "bimap",
  "borsh",
  "circular-queue",
