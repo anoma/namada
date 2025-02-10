@@ -12,7 +12,7 @@ use eyre::Result;
 use namada_apps_lib::cli;
 
 pub fn main() -> Result<()> {
-    let (cmd, raw_sub_cmd) = cli::namada_cli();
+    let (cmd, raw_sub_cmd) = cli::namada_cli(namada_apps::namada_version());
     handle_command(cmd, raw_sub_cmd)
 }
 
@@ -69,12 +69,13 @@ fn handle_command(cmd: cli::cmds::Namada, raw_sub_cmd: String) -> Result<()> {
             use clap_complete::{generate, shells};
             use clap_complete_nushell::Nushell;
 
+            let version = namada_apps::namada_version();
             for (mut app, name) in [
-                (cli::namada_app(), "namada"),
-                (cli::namada_node_app(), "namadan"),
-                (cli::namada_client_app(), "namadac"),
-                (cli::namada_wallet_app(), "namadaw"),
-                (cli::namada_relayer_app(), "namadar"),
+                (cli::namada_app(version), "namada"),
+                (cli::namada_node_app(version), "namadan"),
+                (cli::namada_client_app(version), "namadac"),
+                (cli::namada_wallet_app(version), "namadaw"),
+                (cli::namada_relayer_app(version), "namadar"),
             ] {
                 match shell {
                     cli::args::Shell::Bash => {
