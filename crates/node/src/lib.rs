@@ -287,6 +287,7 @@ pub fn run(
     config: config::Config,
     wasm_dir: PathBuf,
     scheduled_migration: Option<ScheduledMigration>,
+    namada_version: &'static str,
 ) {
     handle_tendermint_mode_change(&config);
 
@@ -325,7 +326,12 @@ pub fn run(
         .enable_all()
         .build()
         .unwrap()
-        .block_on(run_aux(config.ledger, wasm_dir, scheduled_migration));
+        .block_on(run_aux(
+            config.ledger,
+            wasm_dir,
+            scheduled_migration,
+            namada_version,
+        ));
 }
 
 /// Check the `tendermint_mode` has changed from validator to non-validator
@@ -453,6 +459,7 @@ async fn run_aux(
     config: config::Ledger,
     wasm_dir: PathBuf,
     scheduled_migration: Option<ScheduledMigration>,
+    namada_version: &'static str,
 ) {
     let setup_data =
         run_aux_setup(&config, &wasm_dir, scheduled_migration).await;
@@ -462,7 +469,7 @@ async fn run_aux(
     let mut spawner = AbortableSpawner::new();
 
     // Start Tendermint node
-    start_tendermint(&mut spawner, &config);
+    start_tendermint(&mut spawner, &config, namada_version);
 
     // Start oracle if necessary
     let eth_oracle_channels =
@@ -753,7 +760,11 @@ async fn run_abci(
 
 /// Launches a new task managing a Tendermint process into the asynchronous
 /// runtime, and returns its [`task::JoinHandle`].
-fn start_tendermint(spawner: &mut AbortableSpawner, config: &config::Ledger) {
+fn start_tendermint(
+    spawner: &mut AbortableSpawner,
+    config: &config::Ledger,
+    namada_version: &'static str,
+) {
     let tendermint_dir = config.cometbft_dir();
     let chain_id = config.chain_id.clone();
     let proxy_app_address = config.cometbft.proxy_app.to_string();
@@ -777,6 +788,7 @@ fn start_tendermint(spawner: &mut AbortableSpawner, config: &config::Ledger) {
                 proxy_app_address,
                 config,
                 tm_abort_recv,
+                namada_version,
             )
             .map_err(Error::Tendermint)
             .await;

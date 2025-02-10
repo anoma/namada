@@ -12,7 +12,7 @@ async fn main() -> Result<()> {
     // init logging
     logging::init_from_env_or(LevelFilter::INFO)?;
 
-    let cmd = cli::namada_relayer_cli()?;
+    let cmd = cli::namada_relayer_cli(namada_apps::namada_version())?;
     // run the CLI
     CliApi::handle_relayer_command::<HttpClient>(None, cmd, CliIo).await
 }

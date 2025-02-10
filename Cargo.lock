@@ -4989,6 +4989,7 @@ dependencies = [
 name = "namada_apps"
 version = "1.1.0"
 dependencies = [
+ "cargo_metadata",
  "clap_complete",
  "clap_complete_nushell",
  "color-eyre",
@@ -5011,7 +5012,6 @@ dependencies = [
  "base64 0.13.1",
  "bit-set",
  "borsh",
- "cargo_metadata",
  "clap",
  "color-eyre",
  "config",
@@ -5023,7 +5023,6 @@ dependencies = [
  "fd-lock",
  "flate2",
  "futures",
- "git2",
  "itertools 0.12.1",
  "kdam",
  "lazy_static",
