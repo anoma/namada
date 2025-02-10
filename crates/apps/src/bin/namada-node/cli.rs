@@ -11,7 +11,7 @@ use namada_apps_lib::time::{DateTimeUtc, Utc};
 use namada_node as node;
 
 pub fn main() -> Result<()> {
-    let cmd = cli::namada_node_cli()?;
+    let cmd = cli::namada_node_cli(namada_apps::namada_version())?;
     match cmd {
         cli::NamadaNode::Ledger(cmd, ctx) => match cmd {
             cmds::Ledger::Run(cmds::LedgerRun(args)) => {
@@ -28,7 +28,12 @@ pub fn main() -> Result<()> {
                     );
                     ScheduledMigration::from_path(p, hash, height).unwrap()
                 });
-                node::run(chain_ctx.config, wasm_dir, scheduled_migration);
+                node::run(
+                    chain_ctx.config,
+                    wasm_dir,
+                    scheduled_migration,
+                    namada_apps::namada_version(),
+                );
             }
             cmds::Ledger::RunUntil(cmds::LedgerRunUntil(args)) => {
                 let mut chain_ctx = ctx.take_chain_or_exit();
@@ -36,7 +41,12 @@ pub fn main() -> Result<()> {
                 sleep_until(args.time);
                 chain_ctx.config.ledger.shell.action_at_height =
                     Some(args.action_at_height);
-                node::run(chain_ctx.config, wasm_dir, None);
+                node::run(
+                    chain_ctx.config,
+                    wasm_dir,
+                    None,
+                    namada_apps::namada_version(),
+                );
             }
             cmds::Ledger::Reset(_) => {
                 let chain_ctx = ctx.take_chain_or_exit();
