@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::str::FromStr;
 
-use namada_apps_lib::cli::namada_version;
 use namada_apps_lib::config;
 pub use namada_apps_lib::tendermint_node::*;
 use namada_sdk::chain::{BlockHeight, ChainId};
@@ -78,9 +77,16 @@ pub async fn run(
     proxy_app_address: String,
     config: config::Ledger,
     abort_recv: Receiver<Sender<()>>,
+    namada_version: &'static str,
 ) -> Result<()> {
-    let (home_dir_string, tendermint_path) =
-        initalize_config(home_dir, chain_id, genesis_time, config).await?;
+    let (home_dir_string, tendermint_path) = initalize_config(
+        home_dir,
+        chain_id,
+        genesis_time,
+        config,
+        namada_version,
+    )
+    .await?;
     let tendermint_node =
         start_node(proxy_app_address, home_dir_string, tendermint_path)?;
 
@@ -96,6 +102,7 @@ async fn initalize_config(
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
     config: config::Ledger,
+    namada_version: &'static str,
 ) -> Result<(String, String)> {
     let home_dir_string = home_dir.to_string_lossy().to_string();
     let tendermint_path = from_env_or_default()?;
@@ -113,7 +120,8 @@ async fn initalize_config(
 
     write_tm_genesis(&home_dir, chain_id, genesis_time).await?;
 
-    update_tendermint_config(&home_dir, config.cometbft).await?;
+    update_tendermint_config(&home_dir, config.cometbft, namada_version)
+        .await?;
     Ok((home_dir_string, tendermint_path))
 }
 
@@ -274,14 +282,15 @@ pub fn rollback(tendermint_dir: impl AsRef<Path>) -> Result<BlockHeight> {
 async fn update_tendermint_config(
     home_dir: impl AsRef<Path>,
     mut config: TendermintConfig,
+    namada_version: &'static str,
 ) -> Result<()> {
     let path: PathBuf = configuration(home_dir);
     let actual_moniker = config.moniker.to_string();
     let actual_moniker = actual_moniker
-        .strip_suffix(namada_version())
+        .strip_suffix(namada_version)
         .unwrap_or(&actual_moniker);
     config.moniker =
-        Moniker::from_str(&format!("{}-{}", actual_moniker, namada_version()))
+        Moniker::from_str(&format!("{}-{}", actual_moniker, namada_version))
             .expect("Invalid moniker");
 
     config.consensus.create_empty_blocks = true;
