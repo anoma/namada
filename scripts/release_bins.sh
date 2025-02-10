@@ -27,12 +27,12 @@ cargo release version --execute $VERSION
 git commit -am "Namada $VERSION"
 HASH_AFTER=$(git rev-parse HEAD)
 
-# update the changelog (1 fixup)
+# update the changelog
 cd $REPO_ROOT
 unclog release $TAG_NAME
 unclog build > CHANGELOG.md
 git add .changelog CHANGELOG.md
-git commit --fixup=$HASH_AFTER
+git commit --message "Changelog: Release apps $VERSION"
 
 # show the user the result
 git rebase --interactive --autosquash --keep-base $HASH_BEFORE
