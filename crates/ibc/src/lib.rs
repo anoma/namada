@@ -693,26 +693,22 @@ where
                         })?,
                 );
                 // Record the tokens credited/debited in this NFT transfer
-                let ibc_traces: Vec<_> = msg
+                let tokens = msg
                     .message
                     .packet_data
                     .token_ids
                     .0
                     .iter()
                     .map(|token_id| {
-                        ibc_trace_for_nft(
+                        convert_to_address(ibc_trace_for_nft(
                             &msg.message.packet_data.class_id,
                             token_id,
-                        )
-                    })
-                    .collect();
-                let mut tokens = BTreeSet::new();
-                for ibc_trace in ibc_traces {
-                    let token = convert_to_address(ibc_trace)
+                        ))
                         .into_storage_result()
-                        .map_err(Error::Storage)?;
-                    tokens.insert(token);
-                }
+                        .map_err(Error::Storage)
+                    })
+                    .collect::<Result<_, _>>()?;
+
                 send_nft_transfer_execute(
                     &mut self.ctx,
                     &mut nft_transfer_ctx,
@@ -747,21 +743,14 @@ where
                             .is_receiving_success(msg)?
                             .is_some_and(|ack_succ| ack_succ) =>
                     {
-                        let tokens = if msg.packet.port_id_on_b.as_str()
-                            == PORT_ID_STR
-                        {
-                            // Record the token credited/debited in this
-                            // transfer
-                            let packet_data =
-                                serde_json::from_slice::<PacketData>(
-                                    &msg.packet.data,
-                                )
-                                .map_err(StorageError::new)
-                                .map_err(Error::Storage)?;
-                            let ibc_denom = packet_data.token.denom.to_string();
+                        let ibc_traces = extract_traces_from_recv_msg(msg)
+                            .map_err(StorageError::new)
+                            .map_err(Error::Storage)?;
+                        let mut tokens = BTreeSet::new();
+                        for ibc_trace in ibc_traces {
                             // Get the received token
                             let token = received_ibc_token(
-                                ibc_denom,
+                                ibc_trace,
                                 &msg.packet.port_id_on_a,
                                 &msg.packet.chan_id_on_a,
                                 &msg.packet.port_id_on_b,
@@ -769,47 +758,8 @@ where
                             )
                             .into_storage_result()
                             .map_err(Error::Storage)?;
-                            [token].into()
-                        } else if msg.packet.port_id_on_b.as_str()
-                            == NFT_PORT_ID_STR
-                        {
-                            // Record the tokenS credited/debited in this NFT
-                            // transfer
-                            let packet_data =
-                                serde_json::from_slice::<NftPacketData>(
-                                    &msg.packet.data,
-                                )
-                                .map_err(StorageError::new)
-                                .map_err(Error::Storage)?;
-                            let ibc_traces: Vec<_> = packet_data
-                                .token_ids
-                                .0
-                                .iter()
-                                .map(|token_id| {
-                                    ibc_trace_for_nft(
-                                        &packet_data.class_id,
-                                        token_id,
-                                    )
-                                })
-                                .collect();
-                            let mut tokens = BTreeSet::new();
-                            for ibc_trace in ibc_traces {
-                                // Get the received token
-                                let token = received_ibc_token(
-                                    ibc_trace,
-                                    &msg.packet.port_id_on_a,
-                                    &msg.packet.chan_id_on_a,
-                                    &msg.packet.port_id_on_b,
-                                    &msg.packet.chan_id_on_b,
-                                )
-                                .into_storage_result()
-                                .map_err(Error::Storage)?;
-                                tokens.insert(token);
-                            }
-                            tokens
-                        } else {
-                            BTreeSet::new()
-                        };
+                            tokens.insert(token);
+                        }
                         (extract_masp_tx_from_packet(&msg.packet), tokens)
                     }
                     #[cfg(is_apple_silicon)]
