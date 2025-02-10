@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v1.1.2
+
+Namada apps v1.1.2 patch release.
+
+### MISCELLANEOUS
+
+- Updated Namada libraries to lib-v0.47.2
+  ([\#4363](https://github.com/anoma/namada/pull/4363))
+
 ## v1.1.1
 
 Namada apps v1.1.1 patch release.
