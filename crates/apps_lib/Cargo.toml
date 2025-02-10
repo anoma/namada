@@ -92,7 +92,3 @@ bit-set.workspace = true
 proptest.workspace = true
 lazy_static.workspace = true
 pretty_assertions.workspace = true
-
-[build-dependencies]
-cargo_metadata.workspace = true
-git2.workspace = true
