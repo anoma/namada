@@ -42,12 +42,12 @@ git add Cargo.lock
 git add Cargo.toml
 git commit --fixup=$HASH_AFTER
 
-# update the changelog (1 fixup)
+# update the changelog
 cd $REPO_ROOT
 unclog release $TAG_NAME
 unclog build > CHANGELOG.md
 git add .changelog CHANGELOG.md
-git commit --fixup=$HASH_AFTER
+git commit --message "Changelog: Release libs $VERSION"
 
 # show the user the result
 git rebase --interactive --autosquash --keep-base $HASH_BEFORE

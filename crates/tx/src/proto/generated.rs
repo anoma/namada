@@ -1,3 +1,6 @@
 #![allow(missing_docs)]
 
-pub mod types;
+/// Tonic tx types generated from protobuf definitions at build
+pub mod types {
+    include!(concat!(env!("OUT_DIR"), "/types.rs"));
+}

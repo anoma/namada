@@ -28,4 +28,4 @@ smooth-operator.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-namada_state = { workspace = true, features = ["testing"] }
+namada_state = { path = "../state", features = ["testing"] }

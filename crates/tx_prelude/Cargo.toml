@@ -35,4 +35,4 @@ namada_vm_env.workspace = true
 borsh.workspace = true
 
 [dev-dependencies]
-namada_token = { workspace = true, features = ["testing"] }
+namada_token = { path = "../token", features = ["testing"] }

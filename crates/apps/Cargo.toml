@@ -79,4 +79,5 @@ winapi.workspace = true
 [dev-dependencies]
 
 [build-dependencies]
+cargo_metadata.workspace = true
 git2.workspace = true
