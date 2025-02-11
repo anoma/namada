@@ -515,7 +515,7 @@ jobs:
         run: |
           HERMES_VERSION=$(cat .github/workflows/scripts/hermes.txt)
           echo "Using hermes version: ${HERMES_VERSION}"
-          curl -o hermes.zip -LO https://github.com/heliaxdev/hermes/releases/download/v${HERMES_VERSION}/hermes-v${HERMES_VERSION}-x86_64-unknown-linux-gnu.zip
+          curl -o hermes.zip -LO https://github.com/informalsystems/hermes/releases/download/v${HERMES_VERSION}/hermes-v${HERMES_VERSION}-x86_64-unknown-linux-gnu.zip
           unzip hermes.zip
           mv hermes /usr/local/bin
       - name: Change permissions
