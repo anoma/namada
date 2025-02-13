@@ -551,9 +551,11 @@ where
                     let validator_local_config: Option<ValidatorLocalConfig> =
                         if Path::is_file(&validator_local_config_path) {
                             Some(
-                                toml::from_slice(
-                                    &std::fs::read(validator_local_config_path)
-                                        .unwrap(),
+                                toml::from_str(
+                                    &std::fs::read_to_string(
+                                        validator_local_config_path,
+                                    )
+                                    .unwrap(),
                                 )
                                 .unwrap(),
                             )
@@ -564,8 +566,9 @@ where
                     let local_config: Option<NodeLocalConfig> =
                         if Path::is_file(&local_config_path) {
                             Some(
-                                toml::from_slice(
-                                    &std::fs::read(local_config_path).unwrap(),
+                                toml::from_str(
+                                    &std::fs::read_to_string(local_config_path)
+                                        .unwrap(),
                                 )
                                 .unwrap(),
                             )
@@ -616,8 +619,9 @@ where
                     let local_config: Option<NodeLocalConfig> =
                         if Path::is_file(local_config_path) {
                             Some(
-                                toml::from_slice(
-                                    &std::fs::read(local_config_path).unwrap(),
+                                toml::from_str(
+                                    &std::fs::read_to_string(local_config_path)
+                                        .unwrap(),
                                 )
                                 .unwrap(),
                             )
