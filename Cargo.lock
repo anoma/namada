@@ -6193,7 +6193,7 @@ dependencies = [
  "wasmer-compiler-singlepass",
  "wasmer-types",
  "wasmer-vm",
- "wasmparser 0.107.0",
+ "wasmparser",
 ]
 
 [[package]]
@@ -9929,7 +9929,7 @@ dependencies = [
  "thiserror 1.0.69",
  "wasmer-types",
  "wasmer-vm",
- "wasmparser 0.121.2",
+ "wasmparser",
  "windows-sys 0.59.0",
  "xxhash-rust",
 ]
@@ -10030,16 +10030,6 @@ dependencies = [
  "thiserror 1.0.69",
  "wasmer-types",
  "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "wasmparser"
-version = "0.107.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29e3ac9b780c7dda0cac7a52a5d6d2d6707cc6e3451c9db209b6c758f40d7acb"
-dependencies = [
- "indexmap 1.9.3",
- "semver",
 ]
 
 [[package]]
