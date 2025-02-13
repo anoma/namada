@@ -219,7 +219,7 @@ signal-hook = "0.3"
 slip10_ed25519 = "0.1"
 smooth-operator = "0.7"
 # sysinfo with disabled multithread feature
-sysinfo = {version = "0.27.8", default-features = false}
+sysinfo = {version = "0.33", default-features = false, features = ["system"]}
 tar = "0.4"
 tempfile = {version = "3.2"}
 tendermint = {version = "0.40.1", features = ["secp256k1"]}
