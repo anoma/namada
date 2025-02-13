@@ -11,13 +11,11 @@ use std::fmt::Display;
 use std::ops::Deref;
 use std::str::FromStr;
 
-use bech32::{FromBase32, ToBase32, Variant};
+use bech32::Bech32m;
+pub use bech32::Hrp;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-
-/// We're using "Bech32m" variant
-pub const BECH32M_VARIANT: bech32::Variant = Variant::Bech32m;
 
 // Human-readable parts of Bech32m encoding
 //
@@ -40,13 +38,9 @@ pub const COMMON_SIG_HRP: &str = "signam";
 #[derive(Error, Debug)]
 pub enum DecodeError {
     #[error("Error decoding from Bech32m: {0}")]
-    DecodeBech32(bech32::Error),
-    #[error("Error decoding from base32: {0}")]
-    DecodeBase32(bech32::Error),
+    DecodeBech32(bech32::DecodeError),
     #[error("Unexpected Bech32m human-readable part {0}, expected {1}")]
     UnexpectedBech32Hrp(String, String),
-    #[error("Unexpected Bech32m variant {0:?}, expected {BECH32M_VARIANT:?}")]
-    UnexpectedBech32Variant(bech32::Variant),
     #[error("Invalid address encoding: {0}")]
     InvalidInnerEncoding(String),
     #[error("Invalid bytes: {0}")]
@@ -58,7 +52,7 @@ pub enum DecodeError {
 /// Format to string with bech32m
 pub trait Format: Sized {
     /// Human-readable part
-    const HRP: &'static str;
+    const HRP: Hrp;
 
     /// Encoded bytes representation of `Self`.
     type EncodedBytes<'a>: AsRef<[u8]>
@@ -67,34 +61,25 @@ pub trait Format: Sized {
 
     /// Encode `Self` to a string
     fn encode(&self) -> String {
-        let base32 = self.to_bytes().to_base32();
-        bech32::encode(Self::HRP, base32, BECH32M_VARIANT).unwrap_or_else(
-            |_| {
+        bech32::encode::<Bech32m>(Self::HRP, self.to_bytes().as_ref())
+            .unwrap_or_else(|_| {
                 panic!(
                     "The human-readable part {} should never cause a failure",
                     Self::HRP
                 )
-            },
-        )
+            })
     }
 
     /// Try to decode `Self` from a string
     fn decode(string: impl AsRef<str>) -> Result<Self, DecodeError> {
-        let (hrp, hash_base32, variant) = bech32::decode(string.as_ref())
+        let (hrp, bytes) = bech32::decode(string.as_ref())
             .map_err(DecodeError::DecodeBech32)?;
         if hrp != Self::HRP {
             return Err(DecodeError::UnexpectedBech32Hrp(
-                hrp,
-                Self::HRP.into(),
+                hrp.to_string(),
+                Self::HRP.to_string(),
             ));
         }
-        match variant {
-            BECH32M_VARIANT => {}
-            _ => return Err(DecodeError::UnexpectedBech32Variant(variant)),
-        }
-        let bytes: Vec<u8> = FromBase32::from_base32(&hash_base32)
-            .map_err(DecodeError::DecodeBase32)?;
-
         Self::decode_bytes(&bytes)
     }
 
@@ -126,11 +111,12 @@ macro_rules! impl_display_and_from_str_via_format {
     };
 }
 
-/// Get the length of the human-readable part
-// Not in the `Format` trait, cause functions in traits cannot be const
-pub const fn hrp_len<T: Format>() -> usize {
-    T::HRP.len()
-}
+// Not const in bench32 0.10. Requires <https://github.com/rust-bitcoin/rust-bech32/pull/212>
+// /// Get the length of the human-readable part
+// // Not in the `Format` trait, cause functions in traits cannot be const
+// pub const fn hrp_len<T: Format>() -> usize {
+//     T::HRP.len()
+// }
 
 /// Wrapper for `T` to serde encode via `Display` and decode via `FromStr`
 #[derive(
@@ -223,6 +209,22 @@ where
 {
     let val_str: String = serde::Deserialize::deserialize(deserializer)?;
     FromStr::from_str(&val_str).map_err(serde::de::Error::custom)
+}
+
+#[cfg(test)]
+pub mod test {
+    use super::*;
+
+    #[test]
+    fn test_hrps() {
+        // Make sure that all HRPs are valid
+        assert!(Hrp::parse(ADDRESS_HRP).is_ok());
+        assert!(Hrp::parse(MASP_EXT_FULL_VIEWING_KEY_HRP).is_ok());
+        assert!(Hrp::parse(MASP_PAYMENT_ADDRESS_HRP).is_ok());
+        assert!(Hrp::parse(MASP_EXT_SPENDING_KEY_HRP).is_ok());
+        assert!(Hrp::parse(COMMON_PK_HRP).is_ok());
+        assert!(Hrp::parse(COMMON_SIG_HRP).is_ok());
+    }
 }
 
 /// Testing helpers

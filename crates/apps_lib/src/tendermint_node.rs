@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use base64::prelude::{Engine, BASE64_STANDARD};
 use namada_sdk::borsh::BorshSerializeExt;
 use namada_sdk::key::*;
 use rand_core::OsRng;
@@ -72,11 +73,11 @@ pub fn validator_key_to_json(
         "address": raw_hash,
         "pub_key": {
             "type": format!("tendermint/PubKey{}",id_str),
-            "value": base64::encode(pk_arr),
+            "value": BASE64_STANDARD.encode(pk_arr),
         },
         "priv_key": {
             "type": format!("tendermint/PrivKey{}",id_str),
-            "value": base64::encode(kp_arr),
+            "value": BASE64_STANDARD.encode(kp_arr),
         }
     }))
 }

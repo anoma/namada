@@ -327,12 +327,7 @@ impl Config {
         } else {
             let mut file =
                 File::create(file_path).map_err(Error::WriteError)?;
-            let toml = toml::ser::to_string(&self).map_err(|err| {
-                if let toml::ser::Error::ValueAfterTable = err {
-                    tracing::error!("{}", VALUE_AFTER_TABLE_ERROR_MSG);
-                }
-                Error::TomlError(err)
-            })?;
+            let toml = toml::ser::to_string(&self).map_err(Error::TomlError)?;
             file.write_all(toml.as_bytes()).map_err(Error::WriteError)
         }
     }
@@ -354,29 +349,6 @@ pub fn get_default_namada_folder() -> PathBuf {
         DEFAULT_BASE_DIR.into()
     }
 }
-
-pub const VALUE_AFTER_TABLE_ERROR_MSG: &str = r#"
-Error while serializing to toml. It means that some nested structure is followed
- by simple fields.
-This fails:
-    struct Nested{
-       i:int
-    }
-
-    struct Broken{
-       nested:Nested,
-       simple:int
-    }
-And this is correct
-    struct Nested{
-       i:int
-    }
-
-    struct Correct{
-       simple:int
-       nested:Nested,
-    }
-"#;
 
 // TODO(informalsystems/tendermint-rs#1368): Replaced
 // `block_sync` and `blocksync` with `fast_sync` and `fastsync`

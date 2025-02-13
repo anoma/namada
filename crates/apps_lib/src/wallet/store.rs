@@ -78,7 +78,7 @@ mod test_wallet {
             validator_keys,
         );
         let data = store.encode();
-        let _ = Store::decode(data).expect("Test failed");
+        let _ = Store::decode(&data).expect("Test failed");
     }
 
     #[test]
@@ -92,6 +92,6 @@ mod test_wallet {
             validator_keys,
         );
         let data = store.encode();
-        let _ = Store::decode(data).expect("Test failed");
+        let _ = Store::decode(&data).expect("Test failed");
     }
 }

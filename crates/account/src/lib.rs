@@ -18,6 +18,7 @@
     clippy::print_stdout,
     clippy::print_stderr
 )]
+#![cfg_attr(feature = "arbitrary", allow(clippy::disallowed_methods))]
 
 mod auth;
 mod storage;

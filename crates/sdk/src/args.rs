@@ -640,7 +640,7 @@ impl TxOsmosisSwap<SdkTypes> {
 
         // validate `local_recovery_addr` and the contract addr
         if !bech32::decode(&local_recovery_addr)
-            .is_ok_and(|(hrp, _, _)| hrp == "osmo")
+            .is_ok_and(|(hrp, _)| hrp.as_str() == "osmo")
         {
             // TODO: validate that addr has 20 bytes?
             return Err(Error::Other(format!(
@@ -648,7 +648,7 @@ impl TxOsmosisSwap<SdkTypes> {
             )));
         }
         if !bech32::decode(&transfer.receiver)
-            .is_ok_and(|(hrp, _, _)| hrp == "osmo")
+            .is_ok_and(|(hrp, _)| hrp.as_str() == "osmo")
         {
             // TODO: validate that addr has 32 bytes?
             return Err(Error::Other(format!(

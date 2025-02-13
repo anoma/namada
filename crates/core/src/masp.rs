@@ -18,7 +18,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use ripemd::Digest as RipemdDigest;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 
 use crate::address::{Address, DecodeError, HASH_HEX_LEN, IBC, MASP};
 use crate::borsh::BorshSerializeExt;
@@ -329,7 +329,8 @@ impl ExtendedViewingKey {
 impl string_encoding::Format for ExtendedViewingKey {
     type EncodedBytes<'a> = Vec<u8>;
 
-    const HRP: &'static str = MASP_EXT_FULL_VIEWING_KEY_HRP;
+    const HRP: string_encoding::Hrp =
+        string_encoding::Hrp::parse_unchecked(MASP_EXT_FULL_VIEWING_KEY_HRP);
 
     fn to_bytes(&self) -> Vec<u8> {
         self.to_bytes()
@@ -347,7 +348,8 @@ impl_display_and_from_str_via_format!(ExtendedViewingKey);
 impl string_encoding::Format for PaymentAddress {
     type EncodedBytes<'a> = Vec<u8>;
 
-    const HRP: &'static str = MASP_PAYMENT_ADDRESS_HRP;
+    const HRP: string_encoding::Hrp =
+        string_encoding::Hrp::parse_unchecked(MASP_PAYMENT_ADDRESS_HRP);
 
     fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(PAYMENT_ADDRESS_SIZE);
@@ -507,7 +509,8 @@ pub struct ExtendedSpendingKey(masp_primitives::zip32::ExtendedSpendingKey);
 impl string_encoding::Format for ExtendedSpendingKey {
     type EncodedBytes<'a> = Vec<u8>;
 
-    const HRP: &'static str = MASP_EXT_SPENDING_KEY_HRP;
+    const HRP: string_encoding::Hrp =
+        string_encoding::Hrp::parse_unchecked(MASP_EXT_SPENDING_KEY_HRP);
 
     fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = [0; 169];
@@ -688,7 +691,7 @@ impl TAddrData {
     /// Convert transparent address data into a transparent address
     pub fn taddress(&self) -> TransparentAddress {
         TransparentAddress(<[u8; 20]>::from(ripemd::Ripemd160::digest(
-            sha2::Sha256::digest(&self.serialize_to_vec()),
+            sha2::Sha256::digest(self.serialize_to_vec()),
         )))
     }
 }

@@ -54,14 +54,14 @@ pub struct ValidatorStore {
 }
 
 impl ValidatorStore {
-    /// Decode from TOML string bytes
-    pub fn decode(data: Vec<u8>) -> Result<Self, toml::de::Error> {
-        toml::from_slice(&data)
+    /// Decode from TOML string
+    pub fn decode(data: &str) -> Result<Self, toml::de::Error> {
+        toml::from_str(data)
     }
 
-    /// Encode in TOML string bytes
-    pub fn encode(&self) -> Vec<u8> {
-        toml::to_vec(self).expect(
+    /// Encode in TOML string
+    pub fn encode(&self) -> String {
+        toml::to_string(self).expect(
             "Serializing of validator pre-genesis wallet shouldn't fail",
         )
     }
