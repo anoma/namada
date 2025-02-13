@@ -234,7 +234,7 @@ tiny-keccak = { version = "2.0", features = ["keccak"] }
 thiserror = "2.0"
 tokio = {version = "1.8", default-features = false}
 tokio-test = "0.4"
-toml = "0.5.8"
+toml = "0.8"
 tonic = "0.12"
 tonic-build = "0.12"
 tower = "0.5"

@@ -1848,7 +1848,7 @@ dependencies = [
  "serde",
  "serde_json",
  "syn 2.0.98",
- "toml 0.8.20",
+ "toml",
  "walkdir",
 ]
 
@@ -4442,7 +4442,7 @@ dependencies = [
  "thiserror 2.0.11",
  "tiny-bip39",
  "tokio",
- "toml 0.5.11",
+ "toml",
  "tracing",
  "xorf",
  "zeroize",
@@ -4798,7 +4798,7 @@ dependencies = [
  "smooth-operator",
  "thiserror 2.0.11",
  "tiny-bip39",
- "toml 0.5.11",
+ "toml",
  "zeroize",
 ]
 
@@ -6790,7 +6790,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tendermint 0.40.1",
- "toml 0.8.20",
+ "toml",
  "url",
 ]
 
@@ -7141,15 +7141,6 @@ dependencies = [
  "futures-sink",
  "pin-project-lite",
  "tokio",
-]
-
-[[package]]
-name = "toml"
-version = "0.5.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4f7f0dd8d50a853a531c426359045b1998f04219d88799810762cd4ad314234"
-dependencies = [
- "serde",
 ]
 
 [[package]]
