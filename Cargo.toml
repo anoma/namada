@@ -205,7 +205,7 @@ rayon = "1.5"
 regex = "1.10"
 reqwest = { version = "0.12", features = ["json"] }
 ripemd = "0.1"
-rlimit = "0.5.4"
+rlimit = "0.10"
 rocksdb = {version = "0.22.0", features = ['zstd'], default-features = false}
 rpassword = "5.0.1"
 rustversion = "1.0"
