@@ -18,7 +18,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use ripemd::Digest as RipemdDigest;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 
 use crate::address::{Address, DecodeError, HASH_HEX_LEN, IBC, MASP};
 use crate::borsh::BorshSerializeExt;
@@ -691,7 +691,7 @@ impl TAddrData {
     /// Convert transparent address data into a transparent address
     pub fn taddress(&self) -> TransparentAddress {
         TransparentAddress(<[u8; 20]>::from(ripemd::Ripemd160::digest(
-            sha2::Sha256::digest(&self.serialize_to_vec()),
+            sha2::Sha256::digest(self.serialize_to_vec()),
         )))
     }
 }
