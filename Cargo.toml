@@ -207,7 +207,7 @@ reqwest = { version = "0.12", features = ["json"] }
 ripemd = "0.1"
 rlimit = "0.10"
 rocksdb = {version = "0.22.0", features = ['zstd'], default-features = false}
-rpassword = "5.0.1"
+rpassword = "7.3"
 rustversion = "1.0"
 serde = {version = "1.0", features = ["derive"]}
 serde_bytes = "0.11"
