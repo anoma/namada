@@ -24,4 +24,4 @@ prost.workspace = true
 tendermint-config.workspace = true
 tendermint-rpc = { workspace = true, features = ["http-client"] }
 tokio = { workspace = true, features = ["rt"], optional = true }
-serde_json = "1.0.108"
+serde_json.workspace = true
