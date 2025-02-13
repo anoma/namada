@@ -438,10 +438,11 @@ impl Shell<crate::storage::PersistentDB, Sha256Hasher> {
             );
 
             config.ledger.shell.block_cache_bytes.unwrap_or_else(|| {
-                use sysinfo::{RefreshKind, System, SystemExt};
+                use sysinfo::{MemoryRefreshKind, RefreshKind, System};
 
                 let sys = System::new_with_specifics(
-                    RefreshKind::new().with_memory(),
+                    RefreshKind::nothing()
+                        .with_memory(MemoryRefreshKind::everything()),
                 );
                 let available_memory_bytes = sys.available_memory();
 
