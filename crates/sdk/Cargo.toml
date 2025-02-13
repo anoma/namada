@@ -97,7 +97,7 @@ bech32.workspace = true
 bimap.workspace = true
 borsh.workspace = true
 circular-queue.workspace = true
-clap = { version = "4.3", default-features = false, features = ["std"] }
+clap = { workspace = true, default-features = false, features = ["std"] }
 data-encoding.workspace = true
 duration-str.workspace = true
 either.workspace = true

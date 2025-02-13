@@ -18,4 +18,4 @@ namada_state.workspace = true
 
 borsh.workspace = true
 prost.workspace = true
-strum = {version = "0.24", features = ["derive"]}
+strum.workspace = true
