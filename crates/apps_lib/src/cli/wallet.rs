@@ -254,6 +254,22 @@ async fn shielded_key_derive(
                 cli::safe_exit(1)
             }),
         );
+        let version = app.version().await.unwrap_or_else(|err| {
+            edisplay_line!(io, "Failed to retrieve Ledger app version: {err}");
+            cli::safe_exit(1)
+        });
+        if version.major < 3 {
+            edisplay_line!(
+                io,
+                "Minimum supported Ledger app version is 3.0.0 due to a \
+                 change in modified ZIP32 derivation path. Got v{}.{}.{}.",
+                version.major,
+                version.minor,
+                version.patch
+            );
+            cli::safe_exit(1)
+        }
+
         let response = app
             .retrieve_keys(
                 &BIP44Path {
