@@ -103,9 +103,10 @@ pub fn main() -> Result<()> {
                 cmds::ValidatorLocalConfig(args),
             ) => {
                 // Validate the new config
-                let updated_config = std::fs::read(args.config_path).unwrap();
+                let updated_config =
+                    std::fs::read_to_string(args.config_path).unwrap();
                 let _validator_local_config: ValidatorLocalConfig =
-                    toml::from_slice(&updated_config).unwrap();
+                    toml::from_str(&updated_config).unwrap();
 
                 // Update the validator configuration file with the new one
                 let config_path = ctx
@@ -120,9 +121,10 @@ pub fn main() -> Result<()> {
             }
             cmds::Config::UpdateLocalConfig(cmds::LocalConfig(args)) => {
                 // Validate the new config
-                let updated_config = std::fs::read(args.config_path).unwrap();
+                let updated_config =
+                    std::fs::read_to_string(args.config_path).unwrap();
                 let _local_config: NodeLocalConfig =
-                    toml::from_slice(&updated_config).unwrap();
+                    toml::from_str(&updated_config).unwrap();
 
                 // Update the configuration file with the new one
                 let config_path = ctx
