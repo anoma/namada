@@ -51,7 +51,7 @@ use namada_sdk::tendermint::abci::request::CheckTxKind;
 use namada_sdk::tendermint::abci::response::ProcessProposal;
 use namada_sdk::time::DateTimeUtc;
 use once_cell::unsync::Lazy;
-use sysinfo::{RefreshKind, System, SystemExt};
+use sysinfo::{MemoryRefreshKind, RefreshKind, System};
 use tokio::sync::mpsc;
 
 use self::abortable::AbortableSpawner;
@@ -514,7 +514,9 @@ async fn run_aux_setup(
 
     // Find the system available memory
     let available_memory_bytes = Lazy::new(|| {
-        let sys = System::new_with_specifics(RefreshKind::new().with_memory());
+        let sys = System::new_with_specifics(
+            RefreshKind::nothing().with_memory(MemoryRefreshKind::everything()),
+        );
         let available_memory_bytes = sys.available_memory();
         tracing::info!(
             "Available memory: {}",
