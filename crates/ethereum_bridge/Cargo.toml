@@ -49,7 +49,7 @@ linkme = { workspace = true, optional = true }
 serde.workspace = true
 smooth-operator.workspace = true
 thiserror.workspace = true
-tracing = "0.1.30"
+tracing.workspace = true
 
 [dev-dependencies]
 namada_account.path = "../account"
