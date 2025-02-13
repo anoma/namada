@@ -164,7 +164,7 @@ pub mod fs {
                 LoadStoreError::StoreNewWallet(err.to_string())
             })?;
             guard
-                .write_all(&data)
+                .write_all(data.as_bytes())
                 .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))
         }
 
@@ -194,15 +194,15 @@ pub mod fs {
                     err.to_string(),
                 )
             })?;
-            let mut store = Vec::<u8>::new();
-            (&*guard).read_to_end(&mut store).map_err(|err| {
+            let mut store = String::new();
+            (&*guard).read_to_string(&mut store).map_err(|err| {
                 LoadStoreError::ReadWallet(
                     self.store_dir().to_str().unwrap().parse().unwrap(),
                     err.to_string(),
                 )
             })?;
             wallet.store =
-                Store::decode(store).map_err(LoadStoreError::Decode)?;
+                Store::decode(&store).map_err(LoadStoreError::Decode)?;
             Ok(())
         }
     }

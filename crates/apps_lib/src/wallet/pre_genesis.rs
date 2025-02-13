@@ -41,7 +41,7 @@ pub fn gen_and_store(
     options.create(true).write(true).truncate(true);
     let mut lock = RwLock::new(options.open(wallet_path)?);
     let mut guard = lock.write()?;
-    guard.write_all(&data)?;
+    guard.write_all(data.as_bytes())?;
     Ok(validator)
 }
 
@@ -63,14 +63,14 @@ pub fn load(store_dir: &Path) -> Result<ValidatorWallet, ReadError> {
             err.to_string(),
         )
     })?;
-    let mut store = Vec::<u8>::new();
-    (&*guard).read_to_end(&mut store).map_err(|err| {
+    let mut store = String::new();
+    (&*guard).read_to_string(&mut store).map_err(|err| {
         ReadError::ReadWallet(
             store_dir.to_str().unwrap().into(),
             err.to_string(),
         )
     })?;
-    let store = ValidatorStore::decode(store).map_err(ReadError::Decode)?;
+    let store = ValidatorStore::decode(&store).map_err(ReadError::Decode)?;
 
     let password = if store.consensus_key.is_encrypted() {
         Some(CliWalletUtils::read_password(false, Some("consensus key")))
