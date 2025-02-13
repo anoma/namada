@@ -35,7 +35,7 @@ namada_wallet = { workspace = true, features = ["std"] }
 async-trait.workspace = true
 base64.workspace = true
 borsh.workspace = true
-clap.workspace = true
+clap = { workspace = true, default-features = true }
 color-eyre.workspace = true
 config.workspace = true
 data-encoding.workspace = true
@@ -68,7 +68,7 @@ tar.workspace = true
 tempfile.workspace = true
 tendermint-config.workspace = true
 tendermint-rpc = { workspace = true, features = ["http-client"] }
-textwrap-macros = "0.3.0"
+textwrap-macros.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["full"] }
 toml.workspace = true

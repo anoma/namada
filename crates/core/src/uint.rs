@@ -3,6 +3,8 @@
 
 // Used in `construct_uint!`
 #![allow(clippy::assign_op_pattern)]
+// Missing in `construct_uint!`
+#![allow(missing_docs)]
 
 use std::cmp::Ordering;
 use std::fmt;
