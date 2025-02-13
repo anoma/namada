@@ -2498,7 +2498,7 @@ dependencies = [
  "ripemd",
  "serde",
  "serde_json",
- "sha2 0.9.9",
+ "sha2 0.10.8",
  "smooth-operator",
  "tendermint",
  "tendermint-proto",
@@ -2585,7 +2585,7 @@ dependencies = [
  "prost",
  "serde",
  "serde_json",
- "sha2 0.9.9",
+ "sha2 0.10.8",
  "smooth-operator",
  "thiserror 2.0.11",
  "tracing",
@@ -2598,7 +2598,7 @@ dependencies = [
  "data-encoding",
  "proc-macro2",
  "quote",
- "sha2 0.9.9",
+ "sha2 0.10.8",
  "syn 1.0.109",
 ]
 
@@ -2687,7 +2687,7 @@ dependencies = [
  "ripemd",
  "serde",
  "serde_json",
- "sha2 0.9.9",
+ "sha2 0.10.8",
  "smooth-operator",
  "tempfile",
  "thiserror 2.0.11",
@@ -2812,7 +2812,7 @@ dependencies = [
  "rand_core",
  "serde",
  "serde_json",
- "sha2 0.9.9",
+ "sha2 0.10.8",
  "thiserror 2.0.11",
  "tonic-build",
 ]
@@ -2902,7 +2902,7 @@ dependencies = [
  "namada_tx",
  "namada_vm_env",
  "namada_vp_env",
- "sha2 0.9.9",
+ "sha2 0.10.8",
 ]
 
 [[package]]
