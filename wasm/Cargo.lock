@@ -4666,6 +4666,7 @@ dependencies = [
  "eyre",
  "fd-lock",
  "futures",
+ "getrandom 0.3.1",
  "init-once",
  "itertools 0.14.0",
  "lazy_static",
