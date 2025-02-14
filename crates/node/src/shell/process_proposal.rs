@@ -1922,4 +1922,57 @@ mod test_process_proposal {
             assert!(rsp.is_ok());
         }
     }
+
+    /// Process Proposal should reject a block containing a tx with a number of
+    /// sections exceeding the limit
+    #[test]
+    fn test_max_sections_exceeded_tx_rejected() {
+        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
+
+        let keypair = namada_apps_lib::wallet::defaults::daewon_keypair();
+
+        // Make a transaction that exceeds the number of max number of allowed
+        // sections
+        let mut tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: DenominatedAmount::native(100.into()),
+                token: shell.state.in_mem().native_token.clone(),
+            },
+            keypair.ref_to(),
+            (GAS_LIMIT * 10).into(),
+        ))));
+        tx.header.chain_id = shell.chain_id.clone();
+        tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
+
+        // Wrapper sig and header
+        const OTHER_SECTIONS: usize = 2;
+        for _ in 0..(MAX_TX_SECTIONS_LEN - OTHER_SECTIONS + 1) {
+            tx.set_data(Data::new(vec![0]));
+        }
+        tx.sign_wrapper(keypair);
+
+        assert_eq!(tx.sections.len(), MAX_TX_SECTIONS_LEN + 1);
+
+        let response = {
+            let request = ProcessProposal {
+                txs: vec![tx.to_bytes()],
+            };
+            if let Err(TestError::RejectProposal(resp)) =
+                shell.process_proposal(request)
+            {
+                if let [resp] = resp.as_slice() {
+                    resp.clone()
+                } else {
+                    panic!("Test failed")
+                }
+            } else {
+                panic!("Test failed")
+            }
+        };
+        assert_eq!(response.result.code, u32::from(ResultCode::InvalidTx));
+        assert_eq!(
+            response.result.info,
+            format!("Tx contains more than {MAX_TX_SECTIONS_LEN} sections."),
+        );
+    }
 }
