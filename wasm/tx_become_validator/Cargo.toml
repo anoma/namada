@@ -14,5 +14,10 @@ namada_tx_prelude.workspace = true
 rlsf.workspace = true
 getrandom.workspace = true
 
+[dev-dependencies]
+namada_tests = {path = "../../crates/tests"}
+
+test-log = {version = "0.2.14", default-features = false, features = ["trace"]}
+
 [lib]
 crate-type = ["cdylib"]
