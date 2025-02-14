@@ -956,3 +956,53 @@ where
     )?))
     .map_err(S::Error::custom)
 }
+
+#[cfg(test)]
+mod test {
+    use testing::gen_keypair;
+
+    use super::*;
+
+    #[test]
+    fn auth_verify_sig_cannot_overflow() {
+        // The number of PKs in a multi-sig is limited to `u8::MAX`.
+        // We're checking that having an extra one is handled correctly.
+        const ABOVE_LIMIT: usize = u8::MAX as usize + 1;
+
+        let sk: common::SecretKey =
+            gen_keypair::<ed25519::SigScheme>().try_to_sk().unwrap();
+        let pk = sk.to_public();
+
+        // Repeat the same PK - they don't have to be unique
+        let pks: Vec<common::PublicKey> =
+            std::iter::repeat(pk.clone()).take(ABOVE_LIMIT).collect();
+        let raw_auth = Authorization {
+            targets: vec![],
+            signer: Signer::PubKeys(pks),
+            signatures: Default::default(),
+        };
+        let hash = raw_auth.get_raw_hash();
+        let sig = common::SigScheme::sign(&sk, hash);
+
+        // Add the same signature for each PK index
+        let signatures = BTreeMap::from_iter(
+            (0..ABOVE_LIMIT).map(|ix| (u8::try_from(ix).unwrap(), sig.clone())),
+        );
+        let auth = Authorization {
+            signatures,
+            ..raw_auth
+        };
+
+        let mut verified_pks = HashSet::new();
+        let public_keys_index_map = AccountPublicKeysMap::from_iter([pk]);
+
+        // This call must not panic
+        let res = auth.verify_signature(
+            &mut verified_pks,
+            &public_keys_index_map,
+            &None,
+            &mut || Ok(()),
+        );
+        assert!(matches!(res.unwrap_err(), VerifySigError::PksOverflow))
+    }
+}
