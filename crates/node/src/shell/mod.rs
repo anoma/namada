@@ -2967,6 +2967,54 @@ mod shell_tests {
         assert_eq!(result.code, ResultCode::TooLarge.into());
     }
 
+    /// Test max tx sections limit in CheckTx
+    #[test]
+    fn test_max_tx_sections_check_tx() {
+        let (shell, _recv, _, _) = test_utils::setup();
+
+        let new_tx = |num_of_sections: usize| {
+            let keypair = super::test_utils::gen_keypair();
+            let mut wrapper =
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount_per_gas_unit: DenominatedAmount::native(
+                            100.into(),
+                        ),
+                        token: shell.state.in_mem().native_token.clone(),
+                    },
+                    keypair.ref_to(),
+                    (GAS_LIMIT * 10).into(),
+                ))));
+            wrapper.header.chain_id = shell.chain_id.clone();
+            wrapper
+                .set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
+
+            // Wrapper sig and header
+            const OTHER_SECTIONS: usize = 2;
+            for _ in 0..(num_of_sections - OTHER_SECTIONS) {
+                wrapper.set_data(Data::new(vec![0]));
+            }
+            wrapper.sign_wrapper(keypair);
+
+            assert_eq!(wrapper.sections.len(), num_of_sections);
+            wrapper
+        };
+
+        // test a tx on the limit of number of sections
+        let result = shell.mempool_validate(
+            new_tx(MAX_TX_SECTIONS_LEN).to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert!(result.code != ResultCode::InvalidTx.into());
+
+        // test a tx exceeding the limit of number of sections
+        let result = shell.mempool_validate(
+            new_tx(MAX_TX_SECTIONS_LEN + 1).to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, ResultCode::InvalidTx.into());
+    }
+
     /// Test the that the shell can restore it's state
     /// from a snapshot if it is not syncing
     #[test]
