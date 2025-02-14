@@ -68,6 +68,7 @@ pub fn gen_automation_e2e_pos_bonds() -> Automation {
                 action: Some(PressAndRelease(Button::Right)),
             },
         ],
+        fee_steps(),
         vec![Step::Expect {
             text: Text("APPROVE"),
             action: Some(PressAndRelease(Button::Both)),
@@ -110,6 +111,7 @@ pub fn gen_automation_e2e_pos_bonds() -> Automation {
                 action: Some(PressAndRelease(Button::Right)),
             },
         ],
+        fee_steps(),
         vec![Step::Expect {
             text: Text("APPROVE"),
             action: Some(PressAndRelease(Button::Both)),
@@ -147,6 +149,7 @@ pub fn gen_automation_e2e_pos_bonds() -> Automation {
                 action: Some(PressAndRelease(Button::Right)),
             },
         ],
+        fee_steps(),
         vec![Step::Expect {
             text: Text("APPROVE"),
             action: Some(PressAndRelease(Button::Both)),
@@ -184,6 +187,7 @@ pub fn gen_automation_e2e_pos_bonds() -> Automation {
                 action: Some(PressAndRelease(Button::Right)),
             },
         ],
+        fee_steps(),
         vec![Step::Expect {
             text: Text("APPROVE"),
             action: Some(PressAndRelease(Button::Both)),
@@ -211,6 +215,7 @@ pub fn gen_automation_e2e_pos_bonds() -> Automation {
             action: None,
         }],
         address_steps(),
+        fee_steps(),
         vec![Step::Expect {
             text: Text("APPROVE"),
             action: Some(PressAndRelease(Button::Both)),
@@ -238,6 +243,7 @@ pub fn gen_automation_e2e_pos_bonds() -> Automation {
             action: None,
         }],
         address_steps(),
+        fee_steps(),
         vec![Step::Expect {
             text: Text("APPROVE"),
             action: Some(PressAndRelease(Button::Both)),
@@ -309,6 +315,27 @@ fn address_steps() -> Steps {
             action: Some(PressAndRelease(Button::Right)),
         },
     ]
+}
+
+fn fee_steps() -> Steps {
+    [
+        vec![Step::Expect {
+            text: Text("Fee token"),
+            action: None,
+        }],
+        address_steps(),
+        vec![
+            Step::Expect {
+                text: Text("Fee"),
+                action: None,
+            },
+            Step::Expect {
+                text: Regex(r"\d+\.\d+"),
+                action: Some(PressAndRelease(Button::Right)),
+            },
+        ],
+    ]
+    .concat()
 }
 
 fn gen_automation(steps: Steps) -> Automation {
