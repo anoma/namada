@@ -145,6 +145,7 @@ tokio = { workspace = true, features = ["full"] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 tokio = { workspace = true, default-features = false, features = ["sync"] }
+getrandom = { workspace = true, features = ["wasm_js"] }
 
 [dev-dependencies]
 namada_account = { path = "../account", features = ["testing"] }
