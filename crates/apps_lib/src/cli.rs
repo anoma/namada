@@ -22,8 +22,6 @@ pub use utils::{safe_exit, Cmd};
 pub use self::context::Context;
 use crate::cli::api::CliIo;
 
-include!("../version.rs");
-
 const APP_NAME: &str = "Namada";
 
 // Main Namada sub-commands
@@ -9045,8 +9043,8 @@ pub mod args {
     }
 }
 
-pub fn namada_cli() -> (cmds::Namada, String) {
-    let app = namada_app();
+pub fn namada_cli(version: &'static str) -> (cmds::Namada, String) {
+    let app = namada_app(version);
     let matches = app.get_matches();
     let raw_sub_cmd =
         matches.subcommand().map(|(raw, _matches)| raw.to_string());
@@ -9054,7 +9052,7 @@ pub fn namada_cli() -> (cmds::Namada, String) {
     match (result, raw_sub_cmd) {
         (Some(cmd), Some(raw_sub)) => return (cmd, raw_sub),
         _ => {
-            namada_app().print_help().unwrap();
+            namada_app(version).print_help().unwrap();
         }
     }
     safe_exit(2);
@@ -9067,8 +9065,8 @@ pub enum NamadaNode {
     Utils(cmds::NodeUtils, args::Global),
 }
 
-pub fn namada_node_cli() -> Result<NamadaNode> {
-    let app = namada_node_app();
+pub fn namada_node_cli(version: &'static str) -> Result<NamadaNode> {
+    let app = namada_node_app(version);
     let matches = app.clone().get_matches();
     match Cmd::parse(&matches) {
         Some(cmd) => {
@@ -9101,8 +9099,8 @@ pub enum NamadaClient {
     WithContext(Box<(cmds::NamadaClientWithContext, Context)>),
 }
 
-pub fn namada_client_cli() -> Result<NamadaClient> {
-    let app = namada_client_app();
+pub fn namada_client_cli(version: &'static str) -> Result<NamadaClient> {
+    let app = namada_client_app(version);
     let matches = app.clone().get_matches();
     match Cmd::parse(&matches) {
         Some(cmd) => {
@@ -9128,8 +9126,10 @@ pub fn namada_client_cli() -> Result<NamadaClient> {
     }
 }
 
-pub fn namada_wallet_cli() -> Result<(cmds::NamadaWallet, Context)> {
-    let app = namada_wallet_app();
+pub fn namada_wallet_cli(
+    version: &'static str,
+) -> Result<(cmds::NamadaWallet, Context)> {
+    let app = namada_wallet_app(version);
     cmds::NamadaWallet::parse_or_print_help(app)
 }
 
@@ -9139,8 +9139,8 @@ pub enum NamadaRelayer {
     ValidatorSet(cmds::ValidatorSet),
 }
 
-pub fn namada_relayer_cli() -> Result<NamadaRelayer> {
-    let app = namada_relayer_app();
+pub fn namada_relayer_cli(version: &'static str) -> Result<NamadaRelayer> {
+    let app = namada_relayer_app(version);
     let matches = app.clone().get_matches();
     match Cmd::parse(&matches) {
         Some(cmd) => match cmd {
@@ -9168,9 +9168,9 @@ pub fn namada_relayer_cli() -> Result<NamadaRelayer> {
     }
 }
 
-pub fn namada_app() -> App {
+pub fn namada_app(version: &'static str) -> App {
     let app = App::new(APP_NAME)
-        .version(namada_version())
+        .version(version)
         .about("Namada command line interface.")
         .color(ColorChoice::Auto)
         .subcommand_required(true)
@@ -9178,9 +9178,9 @@ pub fn namada_app() -> App {
     cmds::Namada::add_sub(args::Global::def(app))
 }
 
-pub fn namada_node_app() -> App {
+pub fn namada_node_app(version: &'static str) -> App {
     let app = App::new(APP_NAME)
-        .version(namada_version())
+        .version(version)
         .about("Namada node command line interface.")
         .color(ColorChoice::Auto)
         .subcommand_required(true)
@@ -9188,9 +9188,9 @@ pub fn namada_node_app() -> App {
     cmds::NamadaNode::add_sub(args::Global::def(app))
 }
 
-pub fn namada_client_app() -> App {
+pub fn namada_client_app(version: &'static str) -> App {
     let app = App::new(APP_NAME)
-        .version(namada_version())
+        .version(version)
         .about("Namada client command line interface.")
         .color(ColorChoice::Auto)
         .subcommand_required(true)
@@ -9198,9 +9198,9 @@ pub fn namada_client_app() -> App {
     cmds::NamadaClient::add_sub(args::Global::def(app))
 }
 
-pub fn namada_wallet_app() -> App {
+pub fn namada_wallet_app(version: &'static str) -> App {
     let app = App::new(APP_NAME)
-        .version(namada_version())
+        .version(version)
         .about("Namada wallet command line interface.")
         .color(ColorChoice::Auto)
         .subcommand_required(true)
@@ -9208,9 +9208,9 @@ pub fn namada_wallet_app() -> App {
     cmds::NamadaWallet::add_sub(args::Global::def(app))
 }
 
-pub fn namada_relayer_app() -> App {
+pub fn namada_relayer_app(version: &'static str) -> App {
     let app = App::new(APP_NAME)
-        .version(namada_version())
+        .version(version)
         .about("Namada relayer command line interface.")
         .subcommand_required(true);
     cmds::NamadaRelayer::add_sub(args::Global::def(app))
