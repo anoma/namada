@@ -48,5 +48,6 @@ namada_shielded_token = { workspace = true }
 borsh.workspace = true
 data-encoding.workspace = true
 proptest.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, default-features = false }
