@@ -681,7 +681,7 @@ jobs:
           chmod +x /usr/local/bin/hermes
       - name: Run e2e tests with device automation
         id: e2e
-        run: cargo +${{ env.NIGHTLY }} test --lib "e2e::ledger_tests::pos_bonds" -- --exact
+        run: cargo +${{ env.NIGHTLY }} test --lib -- "e2e::ledger_tests::pos_bonds" "e2e::ledger_tests::masp_txs_and_queries" --exact
         env:
           NAMADA_SPECULOS_PATH: "/root/.local/pipx/venvs/speculos/bin/speculos"
           NAMADA_SPECULOS_APP_ELF: "/ledger-namada/app_s2.elf"

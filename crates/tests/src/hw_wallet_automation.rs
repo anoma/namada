@@ -254,6 +254,343 @@ pub fn gen_automation_e2e_pos_bonds() -> Automation {
     gen_automation(steps)
 }
 
+// Generate automation file for `e2e::ledger_tests::masp_tx_and_queries`
+pub fn gen_automation_e2e_masp_tx_and_queries() -> Automation {
+    let view_key_steps = || -> Steps {
+        [
+            please_review_steps(),
+            vec![Step::Expect {
+                text: Text("Ext Full View Key (1/6)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Ext Full View Key (2/6)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Ext Full View Key (3/6)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Ext Full V...w Key (4/6)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Ext Full View Key (5/6)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Ext Full V...w Key (6/6)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("HD Path"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("APPROVE"),
+                action: Some(PressAndRelease(Button::Both)),
+            }],
+        ]
+        .concat()
+    };
+
+    let shielded_transfer_steps = || -> Steps {
+        [
+            please_review_steps(),
+            vec![
+                Step::Expect {
+                    text: Text("Type"),
+                    action: None,
+                },
+                Step::Expect {
+                    text: Text("Transfer"),
+                    action: Some(PressAndRelease(Button::Right)),
+                },
+            ],
+            vec![Step::Expect {
+                text: Text("Sender (1/6)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Sender (2/6)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Sender (3/6)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Sender (4/6)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Sender (5/6)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Sender (6/6)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Sending Token"),
+                action: None,
+            }],
+            address_steps(),
+            vec![
+                Step::Expect {
+                    text: Text("Sending Amount"),
+                    action: None,
+                },
+                Step::Expect {
+                    text: Text("20.0"),
+                    action: Some(PressAndRelease(Button::Right)),
+                },
+            ],
+            // Receiver of the transferred amount
+            vec![Step::Expect {
+                text: Text("Destination (1/2)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Destination (2/2)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Receiving Token"),
+                action: None,
+            }],
+            address_steps(),
+            vec![
+                Step::Expect {
+                    text: Text("Receiving Amount"),
+                    action: None,
+                },
+                Step::Expect {
+                    text: Text("7.0"),
+                    action: Some(PressAndRelease(Button::Right)),
+                },
+            ],
+            // The change of balance that is kept by the sender
+            vec![Step::Expect {
+                text: Text("Destination (1/2)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Destination (2/2)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Receiving Token"),
+                action: None,
+            }],
+            address_steps(),
+            vec![
+                Step::Expect {
+                    text: Text("Receiving Amount"),
+                    action: None,
+                },
+                Step::Expect {
+                    text: Text("13.0"),
+                    action: Some(PressAndRelease(Button::Right)),
+                },
+            ],
+            vec![Step::Expect {
+                text: Text("APPROVE"),
+                action: Some(PressAndRelease(Button::Both)),
+            }],
+        ]
+        .concat()
+    };
+
+    let unshielding_transfer_steps = || -> Steps {
+        [
+            please_review_steps(),
+            vec![
+                Step::Expect {
+                    text: Text("Type"),
+                    action: None,
+                },
+                Step::Expect {
+                    text: Text("Transfer"),
+                    action: Some(PressAndRelease(Button::Right)),
+                },
+            ],
+            vec![Step::Expect {
+                text: Text("Sender (1/6)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Sender (2/6)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Sender (3/6)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Sender (4/6)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Sender (5/6)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Sender (6/6)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Sending Token"),
+                action: None,
+            }],
+            address_steps(),
+            vec![
+                Step::Expect {
+                    text: Text("Sending Amount"),
+                    action: None,
+                },
+                Step::Expect {
+                    text: Text("7.0"),
+                    action: Some(PressAndRelease(Button::Right)),
+                },
+            ],
+            // Receiver of the unshielded amount
+            vec![Step::Expect {
+                text: Text("Destination"),
+                action: None,
+            }],
+            address_steps(),
+            vec![Step::Expect {
+                text: Text("Receiving Token"),
+                action: None,
+            }],
+            address_steps(),
+            vec![
+                Step::Expect {
+                    text: Text("Receiving Amount"),
+                    action: None,
+                },
+                Step::Expect {
+                    text: Text("5.0"),
+                    action: Some(PressAndRelease(Button::Right)),
+                },
+            ],
+            // The change of balance that is kept by the sender
+            vec![Step::Expect {
+                text: Text("Destination (1/2)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Destination (2/2)"),
+                action: Some(PressAndRelease(Button::Right)),
+            }],
+            vec![Step::Expect {
+                text: Text("Receiving Token"),
+                action: None,
+            }],
+            address_steps(),
+            vec![
+                Step::Expect {
+                    text: Text("Receiving Amount"),
+                    action: None,
+                },
+                Step::Expect {
+                    text: Text("2.0"),
+                    action: Some(PressAndRelease(Button::Right)),
+                },
+            ],
+            vec![Step::Expect {
+                text: Text("APPROVE"),
+                action: Some(PressAndRelease(Button::Both)),
+            }],
+        ]
+        .concat()
+    };
+
+    let steps: Steps = [
+        // _____________________________________________________________________
+        // 1. tx - shield
+        please_review_steps(),
+        vec![
+            Step::Expect {
+                text: Text("Type"),
+                action: None,
+            },
+            Step::Expect {
+                text: Text("Transfer"),
+                action: Some(PressAndRelease(Button::Right)),
+            },
+        ],
+        vec![Step::Expect {
+            text: Text("Sender"),
+            action: None,
+        }],
+        address_steps(),
+        vec![Step::Expect {
+            text: Text("Sending Token"),
+            action: None,
+        }],
+        address_steps(),
+        vec![
+            Step::Expect {
+                text: Text("Sending Amount"),
+                action: None,
+            },
+            Step::Expect {
+                text: Text("20.0"),
+                action: Some(PressAndRelease(Button::Right)),
+            },
+        ],
+        vec![Step::Expect {
+            text: Text("Destination (1/2)"),
+            action: Some(PressAndRelease(Button::Right)),
+        }],
+        vec![Step::Expect {
+            text: Text("Destination (2/2)"),
+            action: Some(PressAndRelease(Button::Right)),
+        }],
+        vec![Step::Expect {
+            text: Text("Receiving Token"),
+            action: None,
+        }],
+        address_steps(),
+        vec![
+            Step::Expect {
+                text: Text("Receiving Amount"),
+                action: None,
+            },
+            Step::Expect {
+                text: Text("20.0"),
+                action: Some(PressAndRelease(Button::Right)),
+            },
+        ],
+        vec![Step::Expect {
+            text: Text("APPROVE"),
+            action: Some(PressAndRelease(Button::Both)),
+        }],
+        // _____________________________________________________________________
+        // 2. tx - shielded transfer
+        view_key_steps(),
+        // The same steps are repeated twice, first to generate the signature
+        // on the device ...
+        shielded_transfer_steps(),
+        // ... then to obtain the signature out of the device
+        shielded_transfer_steps(),
+        // _____________________________________________________________________
+        // 3. tx - unshielding transfer
+        view_key_steps(),
+        // The same steps are repeated twice, first to generate the signature
+        // on the device ...
+        unshielding_transfer_steps(),
+        // ... then to obtain the signature out of the device
+        unshielding_transfer_steps(),
+    ]
+    .concat();
+
+    gen_automation(steps)
+}
+
 type Steps = Vec<Step>;
 
 #[derive(Debug, Clone)]
