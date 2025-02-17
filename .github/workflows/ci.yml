@@ -625,6 +625,52 @@ jobs:
           cd ../ledger-namada
           make cpp_test
 
+  test-ledger-app-zemu:
+    timeout-minutes: 600
+    runs-on: [ubuntu-latest]
+
+    env:
+      RUSTC_WRAPPER: ""
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Checkout ledger-namada
+        run: |
+          echo "Using Namada Ledger App version: v${LEDGER_APP_VERSION}"
+          git clone 'https://github.com/anoma/ledger-namada' ../ledger-namada
+          cd ../ledger-namada
+          git checkout "v$LEDGER_APP_VERSION-zemu"
+          git submodule update --init --recursive
+          sudo update-alternatives --install /usr/bin/python python /usr/bin/python3 10
+          sudo apt-get update
+          make deps
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Install node
+        uses: actions/setup-node@v4
+      - name: Install yarn
+        run: |
+          npm install -g yarn
+      - name: Generate test vectors
+        run: |
+          # The path where the Ledger app test suite will locate test vectors
+          TESTVEC_COUNT=60
+          TESTVEC_PATH="../ledger-namada/tests/testvectors.json"
+          ZEMUTESTVEC_PATH="../ledger-namada/tests_zemu/tests/test_data.json"
+          TESTDBG_PATH="../ledger-namada/tests/testdebugs.txt"
+          sudo apt-get install -y protobuf-compiler libudev-dev
+          cargo run --example generate-txs -- $TESTVEC_COUNT $TESTVEC_PATH $ZEMUTESTVEC_PATH $TESTDBG_PATH
+      - name: Check test vectors
+        run: |
+          cd ../ledger-namada
+          make
+          make test_all || true
+          cp -r tests_zemu/snapshots-tmp/. tests_zemu/snapshots
+          make zemu_test
+
   test-e2e-with-device-automation:
     runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
     container:
