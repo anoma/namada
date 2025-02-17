@@ -943,10 +943,34 @@ async fn augment_masp_hardware_keys(
         let transport = WalletTransport::from_arg(args.device_transport);
         let app = NamadaApp::new(transport);
         let wallet = namada.wallet().await;
+        let mut checked_app_version = false;
         // Augment the pseudo spending key with a proof authorization key
         for source in sources {
             // Only attempt an augmentation if proof authorization is not there
             if source.to_spending_key().is_none() {
+                if !checked_app_version {
+                    checked_app_version = true;
+                    let version = app.version().await.map_err(|err| {
+                        error::Error::Other(format!(
+                            "Failed to retrieve Ledger app version: {err}"
+                        ))
+                    })?;
+                    if version.major < 3 {
+                        edisplay_line!(
+                            namada.io(),
+                            "Please upgrade the Ledger app to version greater \
+                             than or equal to 3.0.0 (got v{}.{}.{}.), due to \
+                             a change in modified ZIP32 derivation path. If \
+                             you have keys derived using an older versions, \
+                             we recommend that you move any funds associated \
+                             with them to new keys.",
+                            version.major,
+                            version.minor,
+                            version.patch
+                        );
+                    }
+                }
+
                 // First find the derivation path corresponding to this viewing
                 // key
                 let viewing_key =
