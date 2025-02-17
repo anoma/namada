@@ -2335,7 +2335,8 @@ fn run_cosmos(test: &Test, kill: bool) -> Result<NamadaCmd> {
     }
     let port_arg = format!("0.0.0.0:{}", chain_type.get_grpc_port_number());
     let args = ["start", "--pruning", "nothing", "--grpc.address", &port_arg];
-    let cosmos = run_cosmos_cmd(test, args, Some(40))?;
+    let mut cosmos = run_cosmos_cmd(test, args, Some(40))?;
+    cosmos.exp_string("finalized block")?;
     Ok(cosmos)
 }
 
