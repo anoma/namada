@@ -2182,6 +2182,7 @@ pub async fn to_ledger_vector(
                     .map_err(|e| Error::Other(format!("{}", e)))?,
             );
             tv.output_expert.extend(vec![
+                format!("Chain ID : {}", tx.header.chain_id),
                 format!(
                     "Timestamp : {}",
                     format_timestamp(tx.header.timestamp)
