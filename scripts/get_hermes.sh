@@ -2,11 +2,11 @@
 
 set -Eo pipefail
 
-HERMES_MAJORMINOR="1.10"
-HERMES_PATCH="5"
-HERMES_SUFFIX="-namada-beta18"
+HERMES_MAJORMINOR="1.11"
+HERMES_PATCH="0"
+HERMES_SUFFIX=""
 
-HERMES_REPO="https://github.com/heliaxdev/hermes"
+HERMES_REPO="https://github.com/informalsystems/hermes"
 
 HERMES_VERSION="${HERMES_MAJORMINOR}.${HERMES_PATCH}${HERMES_SUFFIX}"
 
