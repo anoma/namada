@@ -32,6 +32,11 @@ name = "wasm_opcodes"
 harness = false
 path = "wasm_opcodes.rs"
 
+[[bench]]
+name = "mempool_validate"
+harness = false
+path = "mempool_validate.rs"
+
 [features]
 namada-eth-bridge = ["namada_apps_lib/namada-eth-bridge"]
 
