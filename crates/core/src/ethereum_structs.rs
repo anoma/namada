@@ -105,7 +105,7 @@ impl BorshSerialize for BlockHeight {
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
-        let be = self.0.to_bytes_be();
+        let be = self.0.to_be_bytes();
         BorshSerialize::serialize(&be, writer)
     }
 }
@@ -113,6 +113,6 @@ impl BorshSerialize for BlockHeight {
 impl BorshDeserialize for BlockHeight {
     fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
         let be: Vec<u8> = BorshDeserialize::deserialize_reader(reader)?;
-        Ok(Self(Uint256::from_bytes_be(&be)))
+        Ok(Self(Uint256::from_be_bytes(&be)))
     }
 }

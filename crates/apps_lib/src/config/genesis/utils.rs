@@ -38,9 +38,9 @@ pub fn write_toml<T: Serialize>(
     path: &Path,
     which_file: &str,
 ) -> eyre::Result<()> {
-    let file_contents = toml::to_vec(data)
+    let file_contents = toml::to_string(data)
         .wrap_err_with(|| format!("Couldn't format {which_file} to TOML."))?;
-    std::fs::write(path, file_contents).wrap_err_with(|| {
+    std::fs::write(path, &file_contents).wrap_err_with(|| {
         format!(
             "Couldn't write {which_file} TOML to {}",
             path.to_string_lossy()

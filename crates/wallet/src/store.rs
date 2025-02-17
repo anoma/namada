@@ -733,20 +733,20 @@ impl Store {
             .insert(address);
     }
 
-    /// Decode a Store from the given bytes
-    pub fn decode(data: Vec<u8>) -> Result<Self, toml::de::Error> {
+    /// Decode a Store from the given string
+    pub fn decode(data: &str) -> Result<Self, toml::de::Error> {
         // First try to decode Store from current version (with separate
         // birthdays)
-        toml::from_slice(&data).or_else(
+        toml::from_str(data).or_else(
             // Otherwise try to decode Store from older version (with
             // integrated birthdays)
-            |_| toml::from_slice::<StoreV0>(&data).map(Into::into),
+            |_| toml::from_str::<StoreV0>(data).map(Into::into),
         )
     }
 
-    /// Encode a store into a string of bytes
-    pub fn encode(&self) -> Vec<u8> {
-        toml::to_vec(self).expect("Serializing of store shouldn't fail")
+    /// Encode a store into a string
+    pub fn encode(&self) -> String {
+        toml::to_string(self).expect("Serializing of store shouldn't fail")
     }
 }
 

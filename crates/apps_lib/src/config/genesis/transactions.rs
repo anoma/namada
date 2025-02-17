@@ -238,11 +238,11 @@ pub async fn sign_txs(
     }
 }
 
-/// Parse [`UnsignedTransactions`] from bytes.
+/// Parse [`UnsignedTransactions`] from a string.
 pub fn parse_unsigned(
-    bytes: &[u8],
+    raw: &str,
 ) -> Result<UnsignedTransactions, toml::de::Error> {
-    toml::from_slice(bytes)
+    toml::from_str(raw)
 }
 
 /// Create signed [`Transactions`] for an established account.

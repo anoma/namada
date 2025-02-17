@@ -836,8 +836,7 @@ impl KeySeg for Amount {
     }
 
     fn raw(&self) -> String {
-        let mut buf = [0u8; 32];
-        self.raw.to_big_endian(&mut buf);
+        let buf = self.raw.to_big_endian();
         BASE32HEX_NOPAD.encode(&buf)
     }
 

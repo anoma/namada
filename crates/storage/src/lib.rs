@@ -180,9 +180,9 @@ pub fn iter_prefix_bytes<'a>(
     storage: &'a impl StorageRead,
     prefix: &Key,
 ) -> Result<impl Iterator<Item = Result<(Key, Vec<u8>)>> + 'a> {
-    let iter = storage.iter_prefix(prefix)?;
-    let iter = itertools::unfold(iter, |iter| {
-        match storage.iter_next(iter) {
+    let mut iter = storage.iter_prefix(prefix)?;
+    let iter = std::iter::from_fn(move || {
+        match storage.iter_next(&mut iter) {
             Ok(Some((key, val))) => {
                 let key = match Key::parse(key).into_storage_result() {
                     Ok(key) => key,
@@ -212,9 +212,9 @@ pub fn iter_prefix<'a, T>(
 where
     T: BorshDeserialize,
 {
-    let iter = storage.iter_prefix(prefix)?;
-    let iter = itertools::unfold(iter, |iter| {
-        match storage.iter_next(iter) {
+    let mut iter = storage.iter_prefix(prefix)?;
+    let iter = std::iter::from_fn(move || {
+        match storage.iter_next(&mut iter) {
             Ok(Some((key, val))) => {
                 let key = match Key::parse(key).into_storage_result() {
                     Ok(key) => key,
@@ -260,12 +260,12 @@ where
     T: BorshDeserialize,
     F: Fn(&Key) -> bool + 'a,
 {
-    let iter = storage.iter_prefix(prefix)?;
-    let iter = itertools::unfold(iter, move |iter| {
+    let mut iter = storage.iter_prefix(prefix)?;
+    let iter = std::iter::from_fn(move || {
         // The loop is for applying filter - we `continue` when the current key
         // doesn't pass the predicate.
         loop {
-            match storage.iter_next(iter) {
+            match storage.iter_next(&mut iter) {
                 Ok(Some((key, val))) => {
                     let key = match Key::parse(key).into_storage_result() {
                         Ok(key) => key,

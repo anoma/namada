@@ -77,7 +77,7 @@ impl WalletIo for CliWalletUtils {
                             Cow::Borrowed("Enter your decryption password: ")
                         }
                     };
-                    rpassword::read_password_from_tty(Some(&prompt))
+                    rpassword::prompt_password(&prompt)
                         .map(Zeroizing::new)
                         .expect("Failed reading password from tty.")
                 }
@@ -114,7 +114,7 @@ impl WalletIo for CliWalletUtils {
         let result = if confirm {
             read_and_confirm_passphrase_tty(prompt)
         } else {
-            rpassword::read_password_from_tty(Some(prompt)).map(Zeroizing::new)
+            rpassword::prompt_password(prompt).map(Zeroizing::new)
         };
         result.unwrap_or_else(|e| {
             eprintln!("{}", e);
@@ -184,13 +184,11 @@ where
 pub fn read_and_confirm_passphrase_tty(
     prompt: &str,
 ) -> Result<Zeroizing<String>, std::io::Error> {
-    let passphrase =
-        rpassword::read_password_from_tty(Some(prompt)).map(Zeroizing::new)?;
+    let passphrase = rpassword::prompt_password(prompt).map(Zeroizing::new)?;
     if !passphrase.is_empty() {
-        let confirmed = rpassword::read_password_from_tty(Some(
-            "Enter same passphrase again: ",
-        ))
-        .map(Zeroizing::new)?;
+        let confirmed =
+            rpassword::prompt_password("Enter same passphrase again: ")
+                .map(Zeroizing::new)?;
         if confirmed != passphrase {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
