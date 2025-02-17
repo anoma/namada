@@ -411,13 +411,45 @@ pub type Memo = Vec<u8>;
     BorshSchema,
     Serialize,
     Deserialize,
-    PartialEq,
 )]
 pub enum Signer {
     /// The address of a multisignature account
     Address(Address),
     /// The public keys that constitute a signer
     PubKeys(Vec<common::PublicKey>),
+}
+
+impl PartialEq for Signer {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Address(address), Self::Address(other_address)) => {
+                address == other_address
+            }
+            (Self::PubKeys(pubkeys), Self::PubKeys(other_pubkeys)) => {
+                // Check equivalence of the pubkeys ignoring the specific
+                // ordering and duplicates (the PartialEq
+                // implementation of IndexSet ignores the order)
+                let unique_pubkeys =
+                    HashSet::<&common::PublicKey>::from_iter(pubkeys.iter());
+                let unique_other_pubkeys =
+                    HashSet::<&common::PublicKey>::from_iter(
+                        other_pubkeys.iter(),
+                    );
+
+                unique_pubkeys == unique_other_pubkeys
+            }
+            (Self::Address(addr), Self::PubKeys(pubkeys))
+            | (Self::PubKeys(pubkeys), Self::Address(addr)) => {
+                // If the set of public keys contains a single key we can try to
+                // see if the key matches the address
+                if pubkeys.len() == 1 {
+                    addr == &pubkeys.first().unwrap().into()
+                } else {
+                    false
+                }
+            }
+        }
+    }
 }
 
 /// A section representing a multisig over another section
@@ -431,7 +463,6 @@ pub enum Signer {
     BorshSchema,
     Serialize,
     Deserialize,
-    PartialEq,
 )]
 pub struct Authorization {
     /// The hash of the section being signed
@@ -440,6 +471,36 @@ pub struct Authorization {
     pub signer: Signer,
     /// The signature over the above hash
     pub signatures: BTreeMap<u8, common::Signature>,
+}
+
+impl PartialEq for Authorization {
+    fn eq(&self, other: &Self) -> bool {
+        // Deconstruct the two instances to ensure we don't forget any new field
+        let Authorization {
+            targets,
+            signer,
+            signatures,
+        } = self;
+        let Authorization {
+            targets: other_targets,
+            signer: other_signer,
+            signatures: other_signatures,
+        } = other;
+
+        if signer != other_signer || signatures != other_signatures {
+            return false;
+        }
+
+        // Check equivalence of the targets ignoring the specific ordering and
+        // duplicates (the PartialEq implementation of IndexSet ignores the
+        // order)
+        let unique_targets =
+            HashSet::<&namada_account::Hash>::from_iter(targets.iter());
+        let unique_other_targets =
+            HashSet::<&namada_account::Hash>::from_iter(other_targets.iter());
+
+        unique_targets == unique_other_targets
+    }
 }
 
 impl Authorization {
