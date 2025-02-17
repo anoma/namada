@@ -258,7 +258,7 @@ test-debug:
 
 # Test that the benchmarks run successfully without performing measurement
 test-benches:
-	$(cargo) +$(nightly) test --release --package namada_benchmarks --benches
+	$(cargo) +$(nightly) test --package namada_benchmarks --benches
 
 # Run PoS state machine tests with shrinking disabled by default (can be 
 # overridden with `PROPTEST_MAX_SHRINK_ITERS`)
