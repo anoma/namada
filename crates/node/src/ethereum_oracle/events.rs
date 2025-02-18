@@ -84,7 +84,7 @@ pub mod eth_events {
                     confirmations = confirmations.max({
                         let mut num_buf = [0; 32];
                         requested_confirmations.to_little_endian(&mut num_buf);
-                        Uint256::from_bytes_le(&num_buf)
+                        Uint256::from_le_bytes(&num_buf)
                     });
                     EthereumEvent::TransfersToNamada {
                         nonce: nonce.parse_uint256()?,
@@ -330,7 +330,7 @@ pub mod eth_events {
                 codec,
                 arbitrary_block_height,
                 &event.get_log(),
-                min_confirmations.clone(),
+                min_confirmations,
             )?;
 
             assert_matches!(

@@ -40,7 +40,7 @@ namada_vm = { workspace = true, default-features = true, features = [
 concat-idents.workspace = true
 derivative.workspace = true
 dur.workspace = true
-hyper = { version = "0.14.20", features = ["full"] }
+hyper.workspace = true
 ibc-middleware-packet-forward.workspace = true
 ibc-testkit.workspace = true
 ics23.workspace = true

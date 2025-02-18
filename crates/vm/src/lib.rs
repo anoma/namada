@@ -46,6 +46,8 @@ const UNTRUSTED_WASM_FEATURES: WasmFeatures = WasmFeatures {
     memory64: false,
     extended_const: false,
     component_model: false,
+    component_model_nested_names: false,
+    component_model_values: false,
     function_references: false,
     memory_control: false,
     gc: false,
