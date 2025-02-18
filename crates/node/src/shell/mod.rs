@@ -438,10 +438,11 @@ impl Shell<crate::storage::PersistentDB, Sha256Hasher> {
             );
 
             config.ledger.shell.block_cache_bytes.unwrap_or_else(|| {
-                use sysinfo::{RefreshKind, System, SystemExt};
+                use sysinfo::{MemoryRefreshKind, RefreshKind, System};
 
                 let sys = System::new_with_specifics(
-                    RefreshKind::new().with_memory(),
+                    RefreshKind::nothing()
+                        .with_memory(MemoryRefreshKind::everything()),
                 );
                 let available_memory_bytes = sys.available_memory();
 
@@ -550,9 +551,11 @@ where
                     let validator_local_config: Option<ValidatorLocalConfig> =
                         if Path::is_file(&validator_local_config_path) {
                             Some(
-                                toml::from_slice(
-                                    &std::fs::read(validator_local_config_path)
-                                        .unwrap(),
+                                toml::from_str(
+                                    &std::fs::read_to_string(
+                                        validator_local_config_path,
+                                    )
+                                    .unwrap(),
                                 )
                                 .unwrap(),
                             )
@@ -563,8 +566,9 @@ where
                     let local_config: Option<NodeLocalConfig> =
                         if Path::is_file(&local_config_path) {
                             Some(
-                                toml::from_slice(
-                                    &std::fs::read(local_config_path).unwrap(),
+                                toml::from_str(
+                                    &std::fs::read_to_string(local_config_path)
+                                        .unwrap(),
                                 )
                                 .unwrap(),
                             )
@@ -615,8 +619,9 @@ where
                     let local_config: Option<NodeLocalConfig> =
                         if Path::is_file(local_config_path) {
                             Some(
-                                toml::from_slice(
-                                    &std::fs::read(local_config_path).unwrap(),
+                                toml::from_str(
+                                    &std::fs::read_to_string(local_config_path)
+                                        .unwrap(),
                                 )
                                 .unwrap(),
                             )
