@@ -11,6 +11,7 @@ license.workspace = true
 readme.workspace = true
 repository.workspace = true
 version.workspace = true
+rust-version.workspace = true
 
 [features]
 async-send = []

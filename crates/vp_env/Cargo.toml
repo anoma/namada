@@ -11,6 +11,7 @@ license.workspace = true
 readme.workspace = true
 repository.workspace = true
 version.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 namada_core.workspace = true
