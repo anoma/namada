@@ -51,8 +51,8 @@ base64.workspace = true
 blake2b-rs.workspace = true
 borsh.workspace = true
 byte-unit.workspace = true
-bytes = "1.1.0"
-clap = { workspace = true, optional = true }
+bytes.workspace = true
+clap = { workspace = true, default-features = true, optional = true }
 color-eyre.workspace = true
 data-encoding.workspace = true
 drain_filter_polyfill.workspace = true
@@ -100,7 +100,7 @@ tracing-subscriber = { workspace = true, optional = true, features = [
   "tracing-log",
 ] }
 tracing.workspace = true
-warp = "0.3.2"
+warp.workspace = true
 zstd.workspace = true
 
 [dev-dependencies]

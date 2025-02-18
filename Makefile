@@ -119,7 +119,7 @@ check-crates:
 	cargo +$(nightly) check -Z unstable-options --tests $(all-crates) && \
 		make -C $(wasms) check && \
 		make -C $(wasms_for_tests) check && \
-		cargo check --package namada_sdk --target wasm32-unknown-unknown --no-default-features && \
+		RUSTFLAGS='--cfg getrandom_backend="wasm_js"' cargo check --package namada_sdk --target wasm32-unknown-unknown --no-default-features && \
 		cargo check --package namada_sdk --all-features
 
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings

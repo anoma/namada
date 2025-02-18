@@ -29,7 +29,7 @@ pub const ESTABLISHED_ADDRESS_BYTES_LEN: usize = 21;
 // Uppercase prefixes might result in a different length,
 // so tread carefully when changing this value.
 pub const ADDRESS_LEN: usize =
-    string_encoding::hrp_len::<Address>() + 1 + HASH_HEX_LEN;
+    string_encoding::ADDRESS_HRP.len() + 1 + HASH_HEX_LEN;
 
 /// Length of a hash of an address as a hexadecimal string
 pub const HASH_HEX_LEN: usize = 40;
@@ -337,7 +337,8 @@ impl Address {
 impl string_encoding::Format for Address {
     type EncodedBytes<'a> = [u8; raw::ADDR_ENCODING_LEN];
 
-    const HRP: &'static str = string_encoding::ADDRESS_HRP;
+    const HRP: string_encoding::Hrp =
+        string_encoding::Hrp::parse_unchecked(string_encoding::ADDRESS_HRP);
 
     fn to_bytes(&self) -> [u8; raw::ADDR_ENCODING_LEN] {
         let raw_addr: raw::Address<'_, _> = self.into();
@@ -469,7 +470,8 @@ impl From<[u8; SHA_HASH_LEN]> for EstablishedAddress {
 impl string_encoding::Format for EstablishedAddress {
     type EncodedBytes<'a> = [u8; raw::ADDR_ENCODING_LEN];
 
-    const HRP: &'static str = string_encoding::ADDRESS_HRP;
+    const HRP: string_encoding::Hrp =
+        string_encoding::Hrp::parse_unchecked(string_encoding::ADDRESS_HRP);
 
     #[inline]
     fn to_bytes(&self) -> [u8; raw::ADDR_ENCODING_LEN] {

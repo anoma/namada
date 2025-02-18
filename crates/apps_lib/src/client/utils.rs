@@ -3,6 +3,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use base64::prelude::{Engine, BASE64_STANDARD};
 use color_eyre::owo_colors::OwoColorize;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
@@ -483,7 +484,7 @@ pub fn derive_genesis_addresses(
             safe_exit(1)
         });
     let (estbd_txs, validator_addrs) =
-        toml::from_str::<'_, UnsignedTransactions>(&contents)
+        toml::from_str::<UnsignedTransactions>(&contents)
             .ok()
             .map(|txs| {
                 (
@@ -858,7 +859,7 @@ pub fn write_tendermint_node_key(
     let tm_node_keypair_json = json!({
         "priv_key": {
             "type": format!("tendermint/PrivKey{}",key_str),
-            "value": base64::encode(node_keypair),
+            "value": BASE64_STANDARD.encode(node_keypair),
         }
     });
     let tm_config_dir = tm_home_dir.join("config");
@@ -970,7 +971,7 @@ pub async fn sign_genesis_tx(
             validator_pre_genesis_dir(&global_args.base_dir, &alias);
         pre_genesis::load(&pre_genesis_dir).ok()
     });
-    let contents = fs::read(&path).unwrap_or_else(|err| {
+    let contents = fs::read_to_string(&path).unwrap_or_else(|err| {
         eprintln!(
             "Unable to read from file {}. Failed with {err}.",
             path.to_string_lossy()
@@ -1015,7 +1016,7 @@ pub async fn sign_genesis_tx(
     };
     match output {
         Some(output_path) => {
-            let transactions = toml::to_vec(&signed).unwrap();
+            let transactions = toml::to_string(&signed).unwrap();
             fs::write(&output_path, transactions).unwrap_or_else(|err| {
                 eprintln!(
                     "Failed to write output to {} with {err}.",
