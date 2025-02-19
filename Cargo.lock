@@ -6548,6 +6548,7 @@ dependencies = [
  "derivation-path",
  "fd-lock",
  "itertools 0.14.0",
+ "linkme",
  "masp_primitives",
  "nam-tiny-hderive",
  "namada_core",
