@@ -7834,8 +7834,10 @@ name = "tx_become_validator"
 version = "0.47.0"
 dependencies = [
  "getrandom 0.2.15",
+ "namada_tests",
  "namada_tx_prelude",
  "rlsf",
+ "test-log",
 ]
 
 [[package]]
