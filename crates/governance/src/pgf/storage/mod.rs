@@ -8,6 +8,7 @@ pub mod steward;
 use namada_core::address::Address;
 use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
+use namada_state::collections::lazy_map::{NestedSubKey, SubKey};
 use namada_state::{Result, StorageRead, StorageWrite};
 
 use crate::pgf::parameters::PgfParameters;
@@ -70,10 +71,21 @@ where
     let fundings = pgf_keys::fundings_handle()
         .iter(storage)?
         .filter_map(|data| match data {
-            Ok((_, funding)) => Some(funding),
+            Ok((
+                NestedSubKey::Data {
+                    key: _,
+                    nested_sub_key: SubKey::Data(proposal_id),
+                },
+                funding,
+            )) => Some(StoragePgfFunding {
+                detail: funding,
+                id: proposal_id,
+            }),
             Err(_) => None,
         })
         .collect::<Vec<StoragePgfFunding>>();
+
+    // let fundings = pgf_keys::fundings_handle().collect_map(storage)?;
 
     Ok(fundings)
 }

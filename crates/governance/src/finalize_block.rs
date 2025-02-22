@@ -19,9 +19,7 @@ use crate::event::GovernanceEvent;
 use crate::pgf::storage::keys as pgf_keys;
 use crate::pgf::storage::steward::StewardDetail;
 use crate::pgf::{storage as pgf_storage, ADDRESS as PGF_ADDRESS};
-use crate::storage::proposal::{
-    AddRemove, PGFAction, PGFTarget, ProposalType, StoragePgfFunding,
-};
+use crate::storage::proposal::{AddRemove, PGFAction, PGFTarget, ProposalType};
 use crate::storage::{keys, load_proposals};
 use crate::utils::{
     compute_proposal_result, ProposalVotes, TallyResult, TallyType, VotePower,
@@ -449,11 +447,9 @@ where
         match funding {
             PGFAction::Continuous(action) => match action {
                 AddRemove::Add(target) => {
-                    pgf_keys::fundings_handle().insert(
-                        storage,
-                        target.target.target().clone(),
-                        StoragePgfFunding::new(target.clone(), proposal_id),
-                    )?;
+                    pgf_keys::fundings_handle()
+                        .at(&target.target.target())
+                        .insert(storage, proposal_id, target.clone())?;
                     tracing::info!(
                         "Added/Updated Continuous PGF from proposal id {}: \
                          set {} to {}.",
@@ -464,7 +460,8 @@ where
                 }
                 AddRemove::Remove(target) => {
                     pgf_keys::fundings_handle()
-                        .remove(storage, &target.target.target())?;
+                        .at(&target.target.target())
+                        .remove(storage, &proposal_id)?;
                     tracing::info!(
                         "Removed Continuous PGF from proposal id {}: set {} \
                          to {}.",
