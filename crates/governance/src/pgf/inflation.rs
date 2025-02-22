@@ -4,16 +4,18 @@ use namada_core::address::Address;
 use namada_state::{Result, StorageRead, StorageWrite};
 use namada_systems::{parameters, trans_token};
 
+use crate::pgf::storage::keys::fundings_handle;
 use crate::pgf::storage::{
     get_continuous_pgf_payments, get_parameters, get_stewards,
 };
 use crate::storage::proposal::{PGFIbcTarget, PGFTarget};
 
-fn remove_cpgf_target<S>(storage: &mut S, id: &u64) -> Result<()>
+fn remove_cpgf_target<S>(storage: &mut S, target_address: &String) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    todo!()
+    fundings_handle().remove(storage, target_address)?;
+    Ok(())
 }
 
 /// Apply the PGF inflation. Also
@@ -64,7 +66,7 @@ where
     for funding in pgf_fundings {
         // Remove expired fundings from storage
         if funding.detail.is_expired(current_epoch) {
-            remove_cpgf_target(storage, &funding.id)?;
+            remove_cpgf_target(storage, &funding.detail.target.target())?;
             continue;
         }
 
