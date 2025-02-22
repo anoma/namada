@@ -17,7 +17,7 @@ use super::validation::{
     is_valid_proposal_period, is_valid_start_epoch, ProposalValidation,
 };
 use crate::parameters::GovernanceParameters;
-use crate::storage::proposal::PGFTarget;
+use crate::storage::proposal::{ContPGFTarget, PGFTarget};
 
 #[derive(
     Debug,
@@ -301,7 +301,7 @@ impl PgfAction {
 )]
 pub struct PgfFunding {
     /// PGF continuous funding
-    pub continuous: Vec<PGFTarget>,
+    pub continuous: Vec<ContPGFTarget>,
     /// PGF retro fundings
     pub retro: Vec<PGFTarget>,
 }
@@ -336,7 +336,7 @@ impl Display for PgfFunding {
 )]
 pub struct PgfContinuous {
     /// PGF target
-    pub target: PGFTarget,
+    pub target: ContPGFTarget,
     /// PGF action
     pub action: PgfAction,
 }

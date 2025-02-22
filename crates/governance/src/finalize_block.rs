@@ -451,26 +451,26 @@ where
                 AddRemove::Add(target) => {
                     pgf_keys::fundings_handle().insert(
                         storage,
-                        target.target().clone(),
+                        target.target.target().clone(),
                         StoragePgfFunding::new(target.clone(), proposal_id),
                     )?;
                     tracing::info!(
                         "Added/Updated Continuous PGF from proposal id {}: \
                          set {} to {}.",
                         proposal_id,
-                        target.amount().to_string_native(),
-                        target.target()
+                        target.target.amount().to_string_native(),
+                        target.target.target()
                     );
                 }
                 AddRemove::Remove(target) => {
                     pgf_keys::fundings_handle()
-                        .remove(storage, &target.target())?;
+                        .remove(storage, &target.target.target())?;
                     tracing::info!(
                         "Removed Continuous PGF from proposal id {}: set {} \
                          to {}.",
                         proposal_id,
-                        target.amount().to_string_native(),
-                        target.target()
+                        target.target.amount().to_string_native(),
+                        target.target.target()
                     );
                 }
             },
