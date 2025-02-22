@@ -196,6 +196,9 @@ impl StoragePgfFunding {
     }
 }
 
+/// Sorted map of continuous pgf distributions
+pub type ContPgfFundings = BTreeMap<String, BTreeMap<u64, ContPGFTarget>>;
+
 /// The type of a Proposal
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(

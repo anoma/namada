@@ -59,56 +59,54 @@ where
         total_supply.to_string_native()
     );
 
-    let mut pgf_fundings = get_continuous_pgf_payments(storage)?;
-    // prioritize the payments by oldest gov proposal ID
-    pgf_fundings.sort_by(|a, b| a.id.cmp(&b.id));
+    // TODO: make sure this is still sorted prioritizing older proposals
+    let pgf_fundings = get_continuous_pgf_payments(storage)?;
 
     let current_epoch = storage.get_block_epoch()?;
 
     // Act on the continuous PGF fundings in storage: either distribute or
     // remove expired ones
-    for funding in pgf_fundings {
-        // Remove expired fundings from storage
-        if funding.detail.is_expired(current_epoch) {
-            remove_cpgf_target(
-                storage,
-                &funding.id,
-                &funding.detail.target.target(),
-            )?;
-            continue;
-        }
-
-        // Transfer PGF payment to target
-        let result = match &funding.detail.target {
-            PGFTarget::Internal(target) => TransToken::transfer(
-                storage,
-                &staking_token,
-                &super::ADDRESS,
-                &target.target,
-                target.amount,
-            ),
-            PGFTarget::Ibc(target) => transfer_over_ibc(
-                storage,
-                &staking_token,
-                &super::ADDRESS,
-                target,
-            ),
-        };
-        match result {
-            // TODO: not hardcode "NAM" below??
-            Ok(()) => {
-                tracing::info!(
-                    "Successfully transferred CPGF payment of {} NAM to {}.",
-                    funding.detail.amount().to_string_native(),
-                    &funding.detail.target(),
-                );
+    for (str_target_address, targets) in pgf_fundings {
+        for (proposal_id, c_target) in targets {
+            // Remove expired fundings from storage
+            if c_target.is_expired(current_epoch) {
+                remove_cpgf_target(storage, &proposal_id, &str_target_address)?;
+                continue;
             }
-            Err(_) => {
-                tracing::warn!(
-                    "Failed to transfer CPGF payment of {} NAM to {}.",
-                    funding.detail.amount().to_string_native(),
-                    &funding.detail.target(),
-                );
+
+            // Transfer PGF payment to target
+            let result = match &c_target.target {
+                PGFTarget::Internal(target) => TransToken::transfer(
+                    storage,
+                    &staking_token,
+                    &super::ADDRESS,
+                    &target.target,
+                    target.amount,
+                ),
+                PGFTarget::Ibc(target) => transfer_over_ibc(
+                    storage,
+                    &staking_token,
+                    &super::ADDRESS,
+                    target,
+                ),
+            };
+            match result {
+                // TODO: not hardcode "NAM" below??
+                Ok(()) => {
+                    tracing::info!(
+                        "Successfully transferred CPGF payment of {} NAM to \
+                         {}.",
+                        c_target.amount().to_string_native(),
+                        &c_target.target(),
+                    );
+                }
+                Err(_) => {
+                    tracing::warn!(
+                        "Failed to transfer CPGF payment of {} NAM to {}.",
+                        c_target.amount().to_string_native(),
+                        &c_target.target(),
+                    );
+                }
             }
         }
     }
