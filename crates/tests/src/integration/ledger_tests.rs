@@ -1269,7 +1269,9 @@ fn pgf_governance_proposal() -> Result<()> {
     assert!(
         captured.contains(&format!("- 1 to {}", defaults::albert_address()))
     );
-    assert!(captured.contains("Pgf fundings: no fundings are currently set."));
+    assert!(
+        captured.contains("No continous PGF distributions exist currently.")
+    );
 
     // 7.1 Query total NAM supply and PGF balance
     let query_balance_args = vec![
@@ -1312,6 +1314,7 @@ fn pgf_governance_proposal() -> Result<()> {
     let albert = defaults::albert_address();
     let bertha = defaults::bertha_address();
     let christel = defaults::christel_address();
+    let cont_end_epoch = Epoch::from(9);
 
     let pgf_funding = PgfFunding {
         continuous: vec![ContPGFTarget {
@@ -1319,7 +1322,7 @@ fn pgf_governance_proposal() -> Result<()> {
                 amount: token::Amount::from_u64(10),
                 target: bertha.clone(),
             }),
-            end_epoch: Some(Epoch::from(1)),
+            end_epoch: Some(cont_end_epoch),
         }],
         retro: vec![PGFTarget::Internal(PGFInternalTarget {
             amount: token::Amount::from_u64(5),
@@ -1364,11 +1367,12 @@ fn pgf_governance_proposal() -> Result<()> {
     let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, query_pgf));
     assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("Pgf fundings"));
+    assert!(captured.contains("Continuous PGF distributions (per epoch):"));
+    assert!(captured.contains(bertha.to_string().as_str()));
     assert!(captured.contains(&format!(
-        "{} for {}",
-        bertha,
-        token::Amount::from_u64(10).to_string_native()
+        "Prop #1: {} native tokens, end epoch = {}",
+        token::Amount::from_u64(10).to_string_native(),
+        cont_end_epoch
     )));
 
     Ok(())
@@ -1398,7 +1402,9 @@ fn pgf_steward_change_commission() -> Result<()> {
     assert!(
         captured.contains(&format!("- 1 to {}", defaults::albert_address()))
     );
-    assert!(captured.contains("Pgf fundings: no fundings are currently set."));
+    assert!(
+        captured.contains("No continous PGF distributions exist currently.")
+    );
 
     let commission = Commission {
         reward_distribution: HashMap::from_iter([
@@ -1442,7 +1448,9 @@ fn pgf_steward_change_commission() -> Result<()> {
         captured
             .contains(&format!("- 0.05 to {}", defaults::christel_address()))
     );
-    assert!(captured.contains("Pgf fundings: no fundings are currently set."));
+    assert!(
+        captured.contains("No continous PGF distributions exist currently.")
+    );
 
     Ok(())
 }
