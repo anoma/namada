@@ -1087,9 +1087,6 @@ fn proposal_type_to_ledger_vector(
                                 &target.amount.to_string_native()
                             )
                         ));
-                        output.push(format!("Port ID: {}", target.port_id));
-                        output
-                            .push(format!("Channel ID: {}", target.channel_id));
                         output.push(format!(
                             "End Epoch: {}",
                             if let Some(end_epoch) = end_epoch {
@@ -1098,6 +1095,9 @@ fn proposal_type_to_ledger_vector(
                                 "None".to_string()
                             }
                         ));
+                        output.push(format!("Port ID: {}", target.port_id));
+                        output
+                            .push(format!("Channel ID: {}", target.channel_id));
                     }
                     PGFAction::Retro(PGFTarget::Internal(target)) => {
                         output.push("PGF Action : Retro Payment".to_string());
@@ -3099,6 +3099,7 @@ mod test_signing {
                 "PGF Action : Add Continuous Payment".to_string(),
                 format!("Target: {addr}"),
                 "Amount: NAM 0".to_string(),
+                "End Epoch: 1".to_string(),
             ],
         );
         output.clear();
@@ -3123,6 +3124,7 @@ mod test_signing {
                 "PGF Action : Remove Continuous Payment".to_string(),
                 format!("Target: {addr}"),
                 "Amount: NAM 0".to_string(),
+                "End Epoch: 1".to_string(),
             ],
         );
         output.clear();
@@ -3158,7 +3160,7 @@ mod test_signing {
                         port_id: PortId::transfer(),
                         channel_id: ChannelId::new(16),
                     }),
-                    end_epoch: Some(Epoch::from(1)),
+                    end_epoch: None,
                 }), // TODO: ask Murisi if this is ok
             )])),
             &tx,
@@ -3172,6 +3174,7 @@ mod test_signing {
                 "PGF Action : Add Continuous Payment".to_string(),
                 "Target: bloop".to_string(),
                 "Amount: NAM 0".to_string(),
+                "End Epoch: None".to_string(),
                 "Port ID: transfer".to_string(),
                 "Channel ID: channel-16".to_string(),
             ],
@@ -3187,7 +3190,7 @@ mod test_signing {
                         port_id: PortId::transfer(),
                         channel_id: ChannelId::new(16),
                     }),
-                    end_epoch: Some(Epoch::from(1)),
+                    end_epoch: None,
                 }), // TODO: ask Murisi if this is ok
             )])),
             &tx,
@@ -3201,6 +3204,7 @@ mod test_signing {
                 "PGF Action : Remove Continuous Payment".to_string(),
                 "Target: bloop".to_string(),
                 "Amount: NAM 0".to_string(),
+                "End Epoch: None".to_string(),
                 "Port ID: transfer".to_string(),
                 "Channel ID: channel-16".to_string(),
             ],

@@ -447,28 +447,38 @@ where
         match funding {
             PGFAction::Continuous(action) => match action {
                 AddRemove::Add(target) => {
+                    tracing::info!(
+                        "Adding Continuous PGF for {} from Proposal {} in the \
+                         amount of {} per epoch, {}.",
+                        target.target.target(),
+                        proposal_id,
+                        target.target.amount().to_string_native(),
+                        if let Some(ep) = target.end_epoch {
+                            format!("until epoch {}", ep)
+                        } else {
+                            "indefinitely".to_string()
+                        }
+                    );
                     pgf_keys::fundings_handle()
                         .at(&target.target.target())
                         .insert(storage, proposal_id, target.clone())?;
-                    tracing::info!(
-                        "Added/Updated Continuous PGF from proposal id {}: \
-                         set {} to {}.",
-                        proposal_id,
-                        target.target.amount().to_string_native(),
-                        target.target.target()
-                    );
                 }
                 AddRemove::Remove(target) => {
+                    tracing::info!(
+                        "Removing Continuous PGF for {} from Proposal {} (set \
+                         to {} native tokens, end epoch: {}).",
+                        target.target.target(),
+                        proposal_id,
+                        target.target.amount().to_string_native(),
+                        if let Some(ep) = target.end_epoch {
+                            format!("{}", ep)
+                        } else {
+                            "None".to_string()
+                        }
+                    );
                     pgf_keys::fundings_handle()
                         .at(&target.target.target())
                         .remove(storage, &proposal_id)?;
-                    tracing::info!(
-                        "Removed Continuous PGF from proposal id {}: set {} \
-                         to {}.",
-                        proposal_id,
-                        target.target.amount().to_string_native(),
-                        target.target.target()
-                    );
                 }
             },
             PGFAction::Retro(target) => {
@@ -522,16 +532,16 @@ where
                 match result {
                     Ok(()) => {
                         tracing::info!(
-                            "Execute Retroactive PGF from proposal id {}: \
-                             sent {} to {}.",
+                            "Execute Retroactive PGF from Proposal {}: {}  \
+                             native tokens transferred to {}.",
                             proposal_id,
                             target.amount().to_string_native(),
                             target.target()
                         );
                     }
                     Err(e) => tracing::warn!(
-                        "Error in Retroactive PGF transfer from proposal id \
-                         {}, amount {} to {}: {}",
+                        "Error in Retroactive PGF transfer from Proposal {}, \
+                         attempt to transfer {} native tokens to {}: {}",
                         proposal_id,
                         target.amount().to_string_native(),
                         target.target(),
