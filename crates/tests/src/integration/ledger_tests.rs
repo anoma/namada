@@ -1263,7 +1263,7 @@ fn pgf_governance_proposal() -> Result<()> {
     let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, query_pgf));
     assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("Pgf stewards:"));
+    assert!(captured.contains("PGF stewards:"));
     assert!(captured.contains(&format!("- {}", defaults::albert_address())));
     assert!(captured.contains("Reward distribution:"));
     assert!(
@@ -1314,23 +1314,36 @@ fn pgf_governance_proposal() -> Result<()> {
     let albert = defaults::albert_address();
     let bertha = defaults::bertha_address();
     let christel = defaults::christel_address();
-    let cont_end_epoch = Epoch::from(9);
+    let cont_end_epoch = Epoch::from(70);
 
     let pgf_funding = PgfFunding {
-        continuous: vec![ContPGFTarget {
-            target: PGFTarget::Internal(PGFInternalTarget {
-                amount: token::Amount::from_u64(10),
-                target: bertha.clone(),
-            }),
-            end_epoch: Some(cont_end_epoch),
-        }],
+        continuous: vec![
+            ContPGFTarget {
+                target: PGFTarget::Internal(PGFInternalTarget {
+                    amount: token::Amount::from_u64(10),
+                    target: bertha.clone(),
+                }),
+                end_epoch: Some(cont_end_epoch),
+            },
+            ContPGFTarget {
+                target: PGFTarget::Internal(PGFInternalTarget {
+                    amount: token::Amount::from_u64(35),
+                    target: christel.clone(),
+                }),
+                end_epoch: None,
+            },
+        ],
         retro: vec![PGFTarget::Internal(PGFInternalTarget {
             amount: token::Amount::from_u64(5),
-            target: christel,
+            target: christel.clone(),
         })],
     };
-    let valid_proposal_json_path =
-        prepare_proposal_data(node.test_dir.path(), albert, pgf_funding, 36);
+    let valid_proposal_json_path = prepare_proposal_data(
+        node.test_dir.path(),
+        albert.clone(),
+        pgf_funding,
+        36,
+    );
 
     let submit_proposal_args = apply_use_device(vec![
         "init-proposal",
@@ -1367,13 +1380,16 @@ fn pgf_governance_proposal() -> Result<()> {
     let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, query_pgf));
     assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("Continuous PGF distributions (per epoch):"));
-    assert!(captured.contains(bertha.to_string().as_str()));
-    assert!(captured.contains(&format!(
-        "Prop #1: {} native tokens, end epoch = {}",
-        token::Amount::from_u64(10).to_string_native(),
-        cont_end_epoch
-    )));
+
+    assert!(captured.contains("Continuous PGF distributions"));
+    assert!(captured.contains(&format!("- {}", &bertha)));
+    assert!(
+        captured.contains("- Prop 1: 0.000010 native tokens, end epoch = 70")
+    );
+    assert!(captured.contains(&format!("- {}", &christel)));
+    assert!(
+        captured.contains("- Prop 1: 0.000035 native tokens, end epoch = None")
+    );
 
     Ok(())
 }
@@ -1396,7 +1412,7 @@ fn pgf_steward_change_commission() -> Result<()> {
     let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, query_pgf));
     assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("Pgf stewards:"));
+    assert!(captured.contains("PGF stewards:"));
     assert!(captured.contains(&format!("- {}", defaults::albert_address())));
     assert!(captured.contains("Reward distribution:"));
     assert!(
@@ -1435,7 +1451,7 @@ fn pgf_steward_change_commission() -> Result<()> {
     let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, query_pgf));
     assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("Pgf stewards:"));
+    assert!(captured.contains("PGF stewards:"));
     assert!(captured.contains(&format!("- {}", defaults::albert_address())));
     assert!(captured.contains("Reward distribution:"));
     assert!(

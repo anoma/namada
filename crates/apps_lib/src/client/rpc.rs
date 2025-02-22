@@ -675,11 +675,11 @@ pub async fn query_pgf(context: &impl Namada, _args: args::QueryPgf) {
         true => {
             display_line!(
                 context.io(),
-                "Pgf stewards: no stewards are currently set."
+                "PGF stewards: no stewards are currently set."
             )
         }
         false => {
-            display_line!(context.io(), "Pgf stewards:");
+            display_line!(context.io(), "PGF stewards:");
             for steward in stewards {
                 display_line!(context.io(), "{:4}- {}", "", steward.address);
                 display_line!(context.io(), "{:4}  Reward distribution:", "");
@@ -700,20 +700,20 @@ pub async fn query_pgf(context: &impl Namada, _args: args::QueryPgf) {
         true => {
             display_line!(
                 context.io(),
-                "No continous PGF distributions exist currently."
+                "\nNo continous PGF distributions exist currently."
             )
         }
         false => {
             display_line!(
                 context.io(),
-                "Continuous PGF distributions (per epoch):"
+                "\nContinuous PGF distributions (per epoch):"
             );
             for (str_addr, targets) in fundings {
-                display_line!(context.io(), "\n{:4}- {}", "", str_addr);
+                display_line!(context.io(), "{:4}- {}", "", str_addr);
                 for (proposal_id, c_target) in targets {
                     display_line!(
                         context.io(),
-                        "{:6}- Prop #{}: {} native tokens, end epoch = {}",
+                        "{:6}- Prop {}: {} native tokens, end epoch = {}",
                         "",
                         proposal_id,
                         c_target.amount().to_string_native(),
