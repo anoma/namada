@@ -277,7 +277,9 @@ where
     Hash,
 )]
 pub struct ContPGFTarget {
+    /// PGF target
     pub target: PGFTarget,
+    /// The epoch at which the funding ends, if any
     pub end_epoch: Option<Epoch>,
 }
 
