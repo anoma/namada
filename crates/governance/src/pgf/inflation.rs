@@ -9,7 +9,14 @@ use crate::pgf::storage::{
 };
 use crate::storage::proposal::{PGFIbcTarget, PGFTarget};
 
-/// Apply the PGF inflation.
+fn remove_cpgf_target<S>(storage: &mut S, id: &u64) -> Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    todo!()
+}
+
+/// Apply the PGF inflation. Also
 pub fn apply_inflation<S, Params, TransToken, F>(
     storage: &mut S,
     transfer_over_ibc: F,
@@ -26,6 +33,7 @@ where
     let epochs_per_year = Params::epochs_per_year(storage)?;
     let total_supply = TransToken::get_effective_total_native_supply(storage)?;
 
+    // Mint tokens into the PGF address
     let pgf_inflation_amount = total_supply
         .mul_floor(pgf_parameters.pgf_inflation_rate)?
         .checked_div_u64(epochs_per_year)
@@ -39,8 +47,8 @@ where
     )?;
 
     tracing::info!(
-        "Minting {} tokens for PGF rewards distribution into the PGF account \
-         (total supply {}).",
+        "Minting {} native tokens for PGF rewards distribution into the PGF \
+         account (total supply: {}).",
         pgf_inflation_amount.to_string_native(),
         total_supply.to_string_native()
     );
@@ -49,8 +57,19 @@ where
     // prioritize the payments by oldest gov proposal ID
     pgf_fundings.sort_by(|a, b| a.id.cmp(&b.id));
 
+    let current_epoch = storage.get_block_epoch()?;
+
+    // Act on the continuous PGF fundings in storage: either distribute or
+    // remove expired ones
     for funding in pgf_fundings {
-        let result = match &funding.detail {
+        // Remove expired fundings from storage
+        if funding.detail.is_expired(current_epoch) {
+            remove_cpgf_target(storage, &funding.id)?;
+            continue;
+        }
+
+        // Transfer PGF payment to target
+        let result = match &funding.detail.target {
             PGFTarget::Internal(target) => TransToken::transfer(
                 storage,
                 &staking_token,
@@ -66,16 +85,17 @@ where
             ),
         };
         match result {
+            // TODO: not hardcode "NAM" below??
             Ok(()) => {
                 tracing::info!(
-                    "Paying {} tokens for {} project.",
+                    "Successfully transferred CPGF payment of {} NAM to {}.",
                     funding.detail.amount().to_string_native(),
                     &funding.detail.target(),
                 );
             }
             Err(_) => {
                 tracing::warn!(
-                    "Failed to pay {} tokens for {} project.",
+                    "Failed to transfer CPGF payment of {} NAM to {}.",
                     funding.detail.amount().to_string_native(),
                     &funding.detail.target(),
                 );
@@ -104,15 +124,16 @@ where
             .is_ok()
             {
                 tracing::info!(
-                    "Minting {} tokens for steward {} (total supply {})..",
+                    "Minting {} native tokens for steward {} (total supply: \
+                     {})..",
                     pgf_steward_reward.to_string_native(),
                     address,
                     total_supply.to_string_native()
                 );
             } else {
                 tracing::warn!(
-                    "Failed minting {} tokens for steward {} (total supply \
-                     {})..",
+                    "Failed minting {} native tokens for steward {} (total \
+                     supply: {})..",
                     pgf_steward_reward.to_string_native(),
                     address,
                     total_supply.to_string_native()

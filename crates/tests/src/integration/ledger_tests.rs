@@ -29,6 +29,7 @@ use namada_sdk::queries::RPC;
 use namada_sdk::token::{self, DenominatedAmount};
 use namada_sdk::tx::{self, Tx, TX_TRANSFER_WASM, VP_USER_WASM};
 use namada_test_utils::TestWasms;
+use namada_tx_prelude::gov_storage::proposal::ContPGFTarget;
 use test_log::test;
 
 use crate::e2e::ledger_tests::prepare_proposal_data;
@@ -1313,10 +1314,13 @@ fn pgf_governance_proposal() -> Result<()> {
     let christel = defaults::christel_address();
 
     let pgf_funding = PgfFunding {
-        continuous: vec![PGFTarget::Internal(PGFInternalTarget {
-            amount: token::Amount::from_u64(10),
-            target: bertha.clone(),
-        })],
+        continuous: vec![ContPGFTarget {
+            target: PGFTarget::Internal(PGFInternalTarget {
+                amount: token::Amount::from_u64(10),
+                target: bertha.clone(),
+            }),
+            end_epoch: Some(Epoch::from(1)),
+        }],
         retro: vec![PGFTarget::Internal(PGFInternalTarget {
             amount: token::Amount::from_u64(5),
             target: christel,
