@@ -10,11 +10,15 @@ use crate::pgf::storage::{
 };
 use crate::storage::proposal::{PGFIbcTarget, PGFTarget};
 
-fn remove_cpgf_target<S>(storage: &mut S, target_address: &String) -> Result<()>
+fn remove_cpgf_target<S>(
+    storage: &mut S,
+    id: &u64,
+    target_address: &String,
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    fundings_handle().remove(storage, target_address)?;
+    fundings_handle().at(target_address).remove(storage, id)?;
     Ok(())
 }
 
@@ -66,7 +70,11 @@ where
     for funding in pgf_fundings {
         // Remove expired fundings from storage
         if funding.detail.is_expired(current_epoch) {
-            remove_cpgf_target(storage, &funding.detail.target.target())?;
+            remove_cpgf_target(
+                storage,
+                &funding.id,
+                &funding.detail.target.target(),
+            )?;
             continue;
         }
 

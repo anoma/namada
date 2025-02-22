@@ -5,7 +5,7 @@ use namada_state::collections::{lazy_map, LazyCollection, LazyMap};
 
 use crate::pgf::storage::steward::StewardDetail;
 use crate::pgf::ADDRESS;
-use crate::storage::proposal::StoragePgfFunding;
+use crate::storage::proposal::ContPGFTarget;
 
 /// Storage keys for pgf internal address.
 #[derive(StorageKeys)]
@@ -62,7 +62,8 @@ pub fn fundings_key_prefix() -> Key {
 }
 
 /// LazyMap handler for the pgf fundings substorage
-pub fn fundings_handle() -> LazyMap<String, StoragePgfFunding> {
+pub fn fundings_handle()
+-> lazy_map::NestedMap<String, LazyMap<u64, ContPGFTarget>> {
     LazyMap::open(fundings_key_prefix())
 }
 
