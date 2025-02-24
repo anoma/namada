@@ -264,11 +264,11 @@ pub fn gen_automation_e2e_masp_tx_and_queries() -> Automation {
                 action: Some(PressAndRelease(Button::Right)),
             }],
             vec![Step::Expect {
-                text: Text("Ext Full View Key (2/6)"),
+                text: Text("Ext Full V...w Key (2/6)"),
                 action: Some(PressAndRelease(Button::Right)),
             }],
             vec![Step::Expect {
-                text: Text("Ext Full View Key (3/6)"),
+                text: Text("Ext Full V...w Key (3/6)"),
                 action: Some(PressAndRelease(Button::Right)),
             }],
             vec![Step::Expect {
@@ -295,7 +295,28 @@ pub fn gen_automation_e2e_masp_tx_and_queries() -> Automation {
         .concat()
     };
 
-    let shielded_transfer_steps = || -> Steps {
+    let destination_steps = |abbrev_dest: bool| -> Steps {
+        // Destination might be abbreviated during MASP signing
+        if abbrev_dest {
+            vec![Step::Expect {
+                text: Text("Destination"),
+                action: Some(PressAndRelease(Button::Right)),
+            }]
+        } else {
+            vec![
+                Step::Expect {
+                    text: Text("Destination (1/2)"),
+                    action: Some(PressAndRelease(Button::Right)),
+                },
+                Step::Expect {
+                    text: Text("Destination (2/2)"),
+                    action: Some(PressAndRelease(Button::Right)),
+                },
+            ]
+        }
+    };
+
+    let shielded_transfer_steps = |abbrev_dest: bool| -> Steps {
         [
             please_review_steps(),
             vec![
@@ -348,14 +369,7 @@ pub fn gen_automation_e2e_masp_tx_and_queries() -> Automation {
                 },
             ],
             // Receiver of the transferred amount
-            vec![Step::Expect {
-                text: Text("Destination (1/2)"),
-                action: Some(PressAndRelease(Button::Right)),
-            }],
-            vec![Step::Expect {
-                text: Text("Destination (2/2)"),
-                action: Some(PressAndRelease(Button::Right)),
-            }],
+            destination_steps(abbrev_dest),
             vec![Step::Expect {
                 text: Text("Receiving Token"),
                 action: None,
@@ -367,7 +381,7 @@ pub fn gen_automation_e2e_masp_tx_and_queries() -> Automation {
                     action: None,
                 },
                 Step::Expect {
-                    text: Text("7.0"),
+                    text: Text("13.0"),
                     action: Some(PressAndRelease(Button::Right)),
                 },
             ],
@@ -391,10 +405,11 @@ pub fn gen_automation_e2e_masp_tx_and_queries() -> Automation {
                     action: None,
                 },
                 Step::Expect {
-                    text: Text("13.0"),
+                    text: Text("7.0"),
                     action: Some(PressAndRelease(Button::Right)),
                 },
             ],
+            fee_steps(),
             vec![Step::Expect {
                 text: Text("APPROVE"),
                 action: Some(PressAndRelease(Button::Both)),
@@ -403,7 +418,7 @@ pub fn gen_automation_e2e_masp_tx_and_queries() -> Automation {
         .concat()
     };
 
-    let unshielding_transfer_steps = || -> Steps {
+    let unshielding_transfer_steps = |abbrev_dest: bool| -> Steps {
         [
             please_review_steps(),
             vec![
@@ -477,14 +492,7 @@ pub fn gen_automation_e2e_masp_tx_and_queries() -> Automation {
                 },
             ],
             // The change of balance that is kept by the sender
-            vec![Step::Expect {
-                text: Text("Destination (1/2)"),
-                action: Some(PressAndRelease(Button::Right)),
-            }],
-            vec![Step::Expect {
-                text: Text("Destination (2/2)"),
-                action: Some(PressAndRelease(Button::Right)),
-            }],
+            destination_steps(abbrev_dest),
             vec![Step::Expect {
                 text: Text("Receiving Token"),
                 action: None,
@@ -500,6 +508,7 @@ pub fn gen_automation_e2e_masp_tx_and_queries() -> Automation {
                     action: Some(PressAndRelease(Button::Right)),
                 },
             ],
+            fee_steps(),
             vec![Step::Expect {
                 text: Text("APPROVE"),
                 action: Some(PressAndRelease(Button::Both)),
@@ -565,6 +574,7 @@ pub fn gen_automation_e2e_masp_tx_and_queries() -> Automation {
                 action: Some(PressAndRelease(Button::Right)),
             },
         ],
+        fee_steps(),
         vec![Step::Expect {
             text: Text("APPROVE"),
             action: Some(PressAndRelease(Button::Both)),
@@ -574,17 +584,17 @@ pub fn gen_automation_e2e_masp_tx_and_queries() -> Automation {
         view_key_steps(),
         // The same steps are repeated twice, first to generate the signature
         // on the device ...
-        shielded_transfer_steps(),
+        shielded_transfer_steps(true),
         // ... then to obtain the signature out of the device
-        shielded_transfer_steps(),
+        shielded_transfer_steps(false),
         // _____________________________________________________________________
         // 3. tx - unshielding transfer
         view_key_steps(),
         // The same steps are repeated twice, first to generate the signature
         // on the device ...
-        unshielding_transfer_steps(),
+        unshielding_transfer_steps(true),
         // ... then to obtain the signature out of the device
-        unshielding_transfer_steps(),
+        unshielding_transfer_steps(false),
     ]
     .concat();
 
