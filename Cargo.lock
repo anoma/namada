@@ -5758,6 +5758,7 @@ dependencies = [
  "namada_shielded_token",
  "namada_trans_token",
  "proptest",
+ "serde",
  "serde_json",
  "tokio",
 ]
