@@ -877,7 +877,7 @@ pub mod cmds {
 
     /// Generate a payment address from a viewing key or payment address
     #[derive(Clone, Debug)]
-    pub struct WalletGenPaymentAddress(pub args::PayAddressGen<args::CliTypes>);
+    pub struct WalletGenPaymentAddress(pub args::PayAddressGen);
 
     impl SubCmd for WalletGenPaymentAddress {
         const CMD: &'static str = "gen-payment-addr";
@@ -893,7 +893,7 @@ pub mod cmds {
                 .about(wrap!(
                     "Generates a payment address from the given spending key."
                 ))
-                .add_args::<args::PayAddressGen<args::CliTypes>>()
+                .add_args::<args::PayAddressGen>()
         }
     }
 
@@ -3400,7 +3400,6 @@ pub mod args {
     use super::context::*;
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
-    use crate::client::utils::PRE_GENESIS_DIR;
     use crate::config::genesis::AddrOrPk;
     use crate::config::{self, Action, ActionAtHeight};
     use crate::tendermint::Timeout;
@@ -3690,6 +3689,7 @@ pub mod args {
     pub const VALUE: Arg<String> = arg("value");
     pub const VOTER_OPT: ArgOpt<WalletAddress> = arg_opt("voter");
     pub const VIEWING_KEY: Arg<WalletViewingKey> = arg("key");
+    pub const VIEWING_KEY_ALIAS: Arg<String> = arg("key");
     pub const VIEWING_KEYS: ArgMulti<WalletViewingKey, GlobStar> =
         arg_multi("viewing-keys");
     pub const VP: ArgOpt<String> = arg_opt("vp");
@@ -7910,50 +7910,26 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<PayAddressGen<SdkTypes>> for PayAddressGen<CliTypes> {
+    impl CliToSdk<PayAddressGen> for PayAddressGen {
         type Error = std::convert::Infallible;
 
         fn to_sdk(
             self,
-            ctx: &mut Context,
-        ) -> Result<PayAddressGen<SdkTypes>, Self::Error> {
-            use namada_sdk::wallet::Wallet;
-
-            use crate::wallet::CliWalletUtils;
-
-            let find_viewing_key = |w: &mut Wallet<CliWalletUtils>| {
-                w.find_viewing_key(&self.viewing_key.raw)
-                    .copied()
-                    .unwrap_or_else(|_| {
-                        eprintln!(
-                            "Unknown viewing key {}",
-                            self.viewing_key.raw
-                        );
-                        safe_exit(1)
-                    })
-            };
-            let viewing_key = if ctx.global_args.is_pre_genesis {
-                let wallet_path =
-                    ctx.global_args.base_dir.join(PRE_GENESIS_DIR);
-                let mut wallet = crate::wallet::load_or_new(&wallet_path);
-                find_viewing_key(&mut wallet)
-            } else {
-                find_viewing_key(&mut ctx.borrow_mut_chain_or_exit().wallet)
-            };
-
-            Ok(PayAddressGen::<SdkTypes> {
+            _ctx: &mut Context,
+        ) -> Result<PayAddressGen, Self::Error> {
+            Ok(PayAddressGen {
                 alias: self.alias,
                 alias_force: self.alias_force,
-                viewing_key,
+                viewing_key: self.viewing_key,
             })
         }
     }
 
-    impl Args for PayAddressGen<CliTypes> {
+    impl Args for PayAddressGen {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
-            let viewing_key = VIEWING_KEY.parse(matches);
+            let viewing_key = VIEWING_KEY_ALIAS.parse(matches);
             Self {
                 alias,
                 alias_force,

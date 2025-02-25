@@ -11,12 +11,13 @@ use ledger_transport_hid::hidapi::HidApi;
 use ledger_transport_hid::TransportNativeHID;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_core::chain::BlockHeight;
-use namada_core::masp::{ExtendedSpendingKey, MaspValue, PaymentAddress};
+use namada_core::masp::{
+    DiversifierIndex, ExtendedSpendingKey, MaspValue, PaymentAddress,
+};
 use namada_sdk::address::{Address, DecodeError};
 use namada_sdk::borsh::{BorshDeserialize, BorshSerializeExt};
 use namada_sdk::io::{display_line, edisplay_line, Io};
 use namada_sdk::key::*;
-use namada_sdk::masp::find_valid_diversifier;
 use namada_sdk::wallet::{
     DecryptionError, DerivationPath, DerivationPathError, FindKeyError, Wallet,
 };
@@ -400,17 +401,32 @@ fn payment_address_gen(
     args::PayAddressGen {
         alias,
         alias_force,
-        viewing_key,
+        viewing_key: viewing_key_alias,
         ..
     }: args::PayAddressGen,
 ) {
     let mut wallet = load_wallet(ctx);
     let alias = alias.to_lowercase();
-    let viewing_key = viewing_key.as_viewing_key();
-    let (div, _g_d) = find_valid_diversifier(&mut OsRng);
-    let masp_payment_addr = viewing_key
-        .to_payment_address(div)
-        .expect("a PaymentAddress");
+
+    let viewing_key = wallet
+        .find_viewing_key(&viewing_key_alias)
+        .copied()
+        .unwrap_or_else(|_| {
+            eprintln!("Unknown viewing key {}", viewing_key_alias,);
+            cli::safe_exit(1)
+        });
+    let diversifier_index = wallet
+        .find_diversifier_index(viewing_key_alias.clone())
+        .copied()
+        .unwrap_or_default();
+    let (diversifier_index, masp_payment_addr) =
+        ExtendedFullViewingKey::from(viewing_key)
+            .find_address(diversifier_index.into())
+            .expect("exhausted payment addresses");
+    let mut next_div_idx = diversifier_index;
+    next_div_idx
+        .increment()
+        .expect("exhausted payment addresses");
     let payment_addr = PaymentAddress::from(masp_payment_addr);
     let alias = wallet
         .insert_payment_addr(alias, payment_addr, alias_force)
@@ -418,11 +434,18 @@ fn payment_address_gen(
             edisplay_line!(io, "Payment address not added");
             cli::safe_exit(1);
         });
+    wallet
+        .insert_diversifier_index(viewing_key_alias, next_div_idx.into())
+        .expect(
+            "must be able to save next diversifier index under the alias of \
+             the viewing key",
+        );
     wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
     display_line!(
         io,
-        "Successfully generated payment address {} with alias {}",
+        "Successfully generated payment address {} at index {} with alias {}",
         payment_addr,
+        DiversifierIndex::from(diversifier_index),
         alias,
     );
 }

@@ -3006,13 +3006,13 @@ pub struct KeyAddressRemove {
 
 /// Generate payment address arguments
 #[derive(Clone, Debug)]
-pub struct PayAddressGen<C: NamadaTypes = SdkTypes> {
-    /// Key alias
+pub struct PayAddressGen {
+    /// Payment address alias
     pub alias: String,
     /// Whether to force overwrite the alias
     pub alias_force: bool,
     /// Viewing key
-    pub viewing_key: C::ViewingKey,
+    pub viewing_key: String,
 }
 
 /// Bridge pool batch recommendation.

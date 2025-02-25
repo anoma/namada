@@ -288,6 +288,86 @@ pub type TokenMap = BTreeMap<String, Address>;
 // enough capacity to store the payment address
 const PAYMENT_ADDRESS_SIZE: usize = 43;
 
+/// Wrapper for masp_primitive's DiversifierIndex
+#[derive(Clone, Debug, Copy, Eq, PartialEq, Default)]
+pub struct DiversifierIndex(masp_primitives::zip32::DiversifierIndex);
+
+impl From<masp_primitives::zip32::DiversifierIndex> for DiversifierIndex {
+    fn from(idx: masp_primitives::zip32::DiversifierIndex) -> Self {
+        Self(idx)
+    }
+}
+
+impl From<DiversifierIndex> for masp_primitives::zip32::DiversifierIndex {
+    fn from(value: DiversifierIndex) -> Self {
+        value.0
+    }
+}
+
+impl TryFrom<u128> for DiversifierIndex {
+    type Error = std::num::TryFromIntError;
+
+    fn try_from(idx: u128) -> Result<DiversifierIndex, Self::Error> {
+        // Diversifier is supposed to be 11 bytes. So right-shifting it by 3
+        // bytes should yield a 64-bit integer.
+        u64::try_from(idx >> 24)?;
+        let mut result = [0; 11];
+        result[..11].copy_from_slice(&idx.to_le_bytes()[0..11]);
+        Ok(masp_primitives::zip32::DiversifierIndex(result).into())
+    }
+}
+
+impl From<DiversifierIndex> for u128 {
+    fn from(div: DiversifierIndex) -> Self {
+        let mut u128_bytes = [0u8; 16];
+        u128_bytes[0..11].copy_from_slice(&div.0.0[..]);
+        u128::from_le_bytes(u128_bytes)
+    }
+}
+
+/// The describing a failure to parse a diversifier index
+pub struct ParseDiversifierError;
+
+impl FromStr for DiversifierIndex {
+    type Err = ParseDiversifierError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        u128::from_str(s)
+            .map_err(|_| ParseDiversifierError)?
+            .try_into()
+            .map_err(|_| ParseDiversifierError)
+    }
+}
+
+impl Display for DiversifierIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        u128::from(*self).fmt(f)
+    }
+}
+
+impl serde::Serialize for DiversifierIndex {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serde::Serialize::serialize(&u128::from(*self), serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for DiversifierIndex {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+        let encoded: u128 = serde::Deserialize::deserialize(deserializer)?;
+        encoded.try_into().map_err(D::Error::custom)
+    }
+}
+
 /// Wrapper for masp_primitive's FullViewingKey
 #[derive(
     Clone,

@@ -14,7 +14,7 @@ use namada_core::chain::BlockHeight;
 use namada_core::collections::HashSet;
 use namada_core::key::*;
 use namada_core::masp::{
-    ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
+    DiversifierIndex, ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
@@ -70,6 +70,9 @@ pub struct Store {
     spend_keys: BTreeMap<Alias, StoredKeypair<StoreSpendingKey>>,
     /// Payment address book
     payment_addrs: BiBTreeMap<Alias, PaymentAddress>,
+    /// Diverisifier index of the next payment address to be generated for a
+    /// given key.
+    diversifier_indices: BTreeMap<Alias, DiversifierIndex>,
     /// Cryptographic keypairs
     secret_keys: BTreeMap<Alias, StoredKeypair<common::SecretKey>>,
     /// Known public keys
@@ -154,6 +157,14 @@ impl Store {
         alias: impl AsRef<str>,
     ) -> Option<&BlockHeight> {
         self.birthdays.get(&alias.into())
+    }
+
+    /// Find the diversifier of the given alias
+    pub fn find_diversifier_index(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Option<&DiversifierIndex> {
+        self.diversifier_indices.get(&alias.into())
     }
 
     /// Find the payment address with the given alias and return it
@@ -559,6 +570,27 @@ impl Store {
         Some(alias)
     }
 
+    /// Insert the given diversifier index under the given alias. Useful for
+    /// sequential payment address generation.
+    pub fn insert_diversifier_index(
+        &mut self,
+        alias: Alias,
+        div_index: DiversifierIndex,
+    ) -> Option<Alias> {
+        // abort if the alias is reserved
+        if Alias::is_reserved(&alias).is_some() {
+            println!("The alias {} is reserved.", alias);
+            return None;
+        }
+
+        if alias.is_empty() {
+            eprintln!("Empty alias given.");
+            return None;
+        }
+        self.diversifier_indices.insert(alias.clone(), div_index);
+        Some(alias)
+    }
+
     /// Insert a new address with the given alias. If the alias is already used,
     /// will prompt for overwrite/reselection confirmation, which when declined,
     /// the address won't be added. Return the selected alias if the address has
@@ -623,6 +655,7 @@ impl Store {
         self.public_keys.remove(alias);
         self.derivation_paths.remove(alias);
         self.birthdays.remove(alias);
+        self.diversifier_indices.remove(alias);
     }
 
     /// Extend this store from another store (typically pre-genesis).
@@ -633,6 +666,7 @@ impl Store {
             view_keys,
             spend_keys,
             payment_addrs,
+            diversifier_indices,
             secret_keys,
             public_keys,
             derivation_paths,
@@ -645,6 +679,7 @@ impl Store {
         view_keys.extend(store.view_keys);
         spend_keys.extend(store.spend_keys);
         payment_addrs.extend(store.payment_addrs);
+        diversifier_indices.extend(store.diversifier_indices);
         secret_keys.extend(store.secret_keys);
         public_keys.extend(store.public_keys);
         derivation_paths.extend(store.derivation_paths);
