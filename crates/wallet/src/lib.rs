@@ -20,7 +20,7 @@ use namada_core::chain::BlockHeight;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
 use namada_core::masp::{
-    ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
+    DiversifierIndex, ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
 use namada_core::time::DateTimeUtc;
 use namada_ibc::trace::is_ibc_denom;
@@ -448,6 +448,14 @@ impl<U> Wallet<U> {
         alias: impl AsRef<str>,
     ) -> Option<&BlockHeight> {
         self.store.find_birthday(alias.as_ref())
+    }
+
+    /// Find the diversifier index of the given alias
+    pub fn find_diversifier_index(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Option<&DiversifierIndex> {
+        self.store.find_diversifier_index(alias.as_ref())
     }
 
     /// Find the payment address with the given alias in the wallet and return
@@ -1228,6 +1236,18 @@ impl<U: WalletIo> Wallet<U> {
     ) -> Option<String> {
         self.store
             .insert_payment_addr::<U>(alias.into(), payment_addr, force_alias)
+            .map(Into::into)
+    }
+
+    /// Insert a diversifier index into the wallet under the given alias. Useful
+    /// for sequential payment address generation.
+    pub fn insert_diversifier_index(
+        &mut self,
+        alias: String,
+        div_index: DiversifierIndex,
+    ) -> Option<String> {
+        self.store
+            .insert_diversifier_index(alias.into(), div_index)
             .map(Into::into)
     }
 
