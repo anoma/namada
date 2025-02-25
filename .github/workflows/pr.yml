@@ -1,0 +1,82 @@
+name: PR checks # targeting only the main branch
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  MINOR_VERSION_RELEASE: "0.47.999" # bump on a major release
+  BACKPORT_LIBS_LABEL: "backport-libs-0.47" # also bump on major release
+  MAINT_LIBS_BRANCH: "maint-libs-0.47" # also bump on major release
+
+jobs:
+  # Check if a PR has no major breaking changes to be backported to library
+  # maintenance branch.
+  can-backport:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # Needed to add label based on the outcome
+    steps:
+      - name: Stop if draft
+        if: github.event.pull_request.draft == true
+        run: exit 1
+      - uses: cargo-bins/cargo-binstall@main
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+      - name: Find branch point of the PR
+        id: branch_point
+        run: |
+          git fetch origin main
+          # Find common ancestor between main and topic branch
+          BRANCH_POINT=$(git merge-base $(git rev-parse --abbrev-ref HEAD) origin/main)
+          [[ -z BRANCH_POINT ]] && echo "No branch point" && exit 1
+          echo "REF=$BRANCH_POINT" >> $GITHUB_OUTPUT
+      - name: Checkout libs maintenance branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.MAINT_LIBS_BRANCH }}
+      - name: Backport PR to libs maintenance branch
+        run: |
+          git config user.email "bing@bong.com"
+          git config user.name "Bing Bong"
+          git cherry-pick --strategy=recursive --strategy-option=theirs ${{ steps.branch_point.outputs.REF }}..${{ github.event.pull_request.head.sha }}
+      - name: Instal cargo release  
+        run: cargo binstall -y cargo-release
+      - name: Install build deps
+        run: sudo apt-get install -y protobuf-compiler libudev-dev
+      - name: Totally safe 
+        # Workaround for https://github.com/actions/checkout/issues/766
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Change version as if we're doing a minor update
+        # This is needed so that semver-checks can find the last released
+        # baseline version to compare with.
+        run: |
+          cargo release version --no-confirm --isolated --exclude namada_apps \
+            --execute ${{ env.MINOR_VERSION_RELEASE }}
+      - name: Check semver
+        id: semver
+        continue-on-error: true
+        uses: obi1kenobi/cargo-semver-checks-action@v2
+        with:
+          exclude: namada_apps, namada_benchmarks, namada_light_sdk, namada_examples, namada_fuzz
+      - name: Label PR on success
+        uses: actions-ecosystem/action-add-labels@v1
+        if: >-
+          ${{ steps.semver.outcome == 'success' &&
+              !contains( github.event.pull_request.labels.*.name, 'breaking:consensus') }}
+        with: 
+          labels: "${{ env.BACKPORT_LIBS_LABEL }}"
+      - name: Label PR on failure
+        uses: actions-ecosystem/action-add-labels@v1
+        if: steps.semver.outcome == 'failure'
+        with:
+          labels: "breaking:api"
