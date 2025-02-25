@@ -1128,8 +1128,15 @@ impl DB for RocksDB {
     fn flush(&self, wait: bool) -> Result<()> {
         let mut flush_opts = FlushOptions::default();
         flush_opts.set_wait(wait);
+        let cfs = self
+            .column_families()
+            .into_iter()
+            .map(|(_, cf)| cf)
+            .collect::<Vec<_>>();
+        // "For manual flush, application has to specify the list of column
+        // families to flush atomically" from <https://github.com/facebook/rocksdb/wiki/Atomic-flush>
         self.inner
-            .flush_opt(&flush_opts)
+            .flush_cfs_opt(&cfs, &flush_opts)
             .map_err(|e| Error::DBError(e.into_string()))
     }
 
