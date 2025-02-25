@@ -329,6 +329,12 @@ impl From<DiversifierIndex> for u128 {
 #[derive(Clone, Debug, Copy, Default)]
 pub struct ParseDiversifierError;
 
+impl std::fmt::Display for ParseDiversifierError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        "unable to parse diversifier index".fmt(f)
+    }
+}
+
 impl FromStr for DiversifierIndex {
     type Err = ParseDiversifierError;
 
@@ -354,7 +360,7 @@ impl serde::Serialize for DiversifierIndex {
     where
         S: serde::Serializer,
     {
-        serde::Serialize::serialize(&u128::from(*self), serializer)
+        serde::Serialize::serialize(&self.to_string(), serializer)
     }
 }
 
@@ -364,8 +370,8 @@ impl<'de> serde::Deserialize<'de> for DiversifierIndex {
         D: serde::Deserializer<'de>,
     {
         use serde::de::Error;
-        let encoded: u128 = serde::Deserialize::deserialize(deserializer)?;
-        encoded.try_into().map_err(D::Error::custom)
+        let encoded: String = serde::Deserialize::deserialize(deserializer)?;
+        Self::from_str(&encoded).map_err(D::Error::custom)
     }
 }
 
