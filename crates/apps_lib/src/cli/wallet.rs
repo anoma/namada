@@ -402,7 +402,7 @@ fn payment_address_gen(
         alias,
         alias_force,
         viewing_key: viewing_key_alias,
-        ..
+        diversifier_index,
     }: args::PayAddressGen,
 ) {
     let mut wallet = load_wallet(ctx);
@@ -415,10 +415,12 @@ fn payment_address_gen(
             eprintln!("Unknown viewing key {}", viewing_key_alias,);
             cli::safe_exit(1)
         });
-    let diversifier_index = wallet
-        .find_diversifier_index(viewing_key_alias.clone())
-        .copied()
-        .unwrap_or_default();
+    let diversifier_index = diversifier_index.unwrap_or_else(|| {
+        wallet
+            .find_diversifier_index(viewing_key_alias.clone())
+            .copied()
+            .unwrap_or_default()
+    });
     let (diversifier_index, masp_payment_addr) =
         ExtendedFullViewingKey::from(viewing_key)
             .find_address(diversifier_index.into())

@@ -326,6 +326,7 @@ impl From<DiversifierIndex> for u128 {
 }
 
 /// The describing a failure to parse a diversifier index
+#[derive(Clone, Debug, Copy, Default)]
 pub struct ParseDiversifierError;
 
 impl FromStr for DiversifierIndex {

@@ -15,7 +15,7 @@ use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;
 use namada_core::key::{common, SchemeType};
-use namada_core::masp::{MaspEpoch, PaymentAddress};
+use namada_core::masp::{DiversifierIndex, MaspEpoch, PaymentAddress};
 use namada_core::string_encoding::StringEncoded;
 use namada_core::time::DateTimeUtc;
 use namada_core::token::Amount;
@@ -3013,6 +3013,8 @@ pub struct PayAddressGen {
     pub alias_force: bool,
     /// Viewing key
     pub viewing_key: String,
+    /// Diversifier index to start search at
+    pub diversifier_index: Option<DiversifierIndex>,
 }
 
 /// Bridge pool batch recommendation.

@@ -891,7 +891,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(wrap!(
-                    "Generates a payment address from the given spending key."
+                    "Generate the next payment address for a viewing key."
                 ))
                 .add_args::<args::PayAddressGen>()
         }
@@ -3368,7 +3368,7 @@ pub mod args {
 
     use data_encoding::HEXUPPER;
     use either::Either;
-    use namada_core::masp::{MaspEpoch, PaymentAddress};
+    use namada_core::masp::{DiversifierIndex, MaspEpoch, PaymentAddress};
     use namada_sdk::address::{Address, EstablishedAddress};
     pub use namada_sdk::args::*;
     use namada_sdk::chain::{ChainId, ChainIdPrefix};
@@ -3482,6 +3482,8 @@ pub mod args {
     pub const DECRYPT: ArgFlag = flag("decrypt");
     pub const DESCRIPTION_OPT: ArgOpt<String> = arg_opt("description");
     pub const DISPOSABLE_SIGNING_KEY: ArgFlag = flag("disposable-gas-payer");
+    pub const DIVERSIFIER_INDEX: ArgOpt<DiversifierIndex> =
+        arg_opt("diversifier-index");
     pub const DESTINATION_VALIDATOR: Arg<WalletAddress> =
         arg("destination-validator");
     pub const DISCORD_OPT: ArgOpt<String> = arg_opt("discord-handle");
@@ -7921,6 +7923,7 @@ pub mod args {
                 alias: self.alias,
                 alias_force: self.alias_force,
                 viewing_key: self.viewing_key,
+                diversifier_index: self.diversifier_index,
             })
         }
     }
@@ -7929,10 +7932,12 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
+            let diversifier_index = DIVERSIFIER_INDEX.parse(matches);
             let viewing_key = VIEWING_KEY_ALIAS.parse(matches);
             Self {
                 alias,
                 alias_force,
+                diversifier_index,
                 viewing_key,
             }
         }
@@ -7943,6 +7948,9 @@ pub mod args {
             )))
             .arg(ALIAS_FORCE.def().help(wrap!(
                 "Override the alias without confirmation if it already exists."
+            )))
+            .arg(DIVERSIFIER_INDEX.def().help(wrap!(
+                "Set the viewing key's current diversifier index beforehand."
             )))
             .arg(VIEWING_KEY.def().help(wrap!("The viewing key.")))
         }
