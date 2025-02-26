@@ -14,7 +14,7 @@ use namada_core::chain::BlockHeight;
 use namada_core::collections::HashSet;
 use namada_core::key::*;
 use namada_core::masp::{
-    ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
+    DiversifierIndex, ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
@@ -70,6 +70,9 @@ pub struct Store {
     spend_keys: BTreeMap<Alias, StoredKeypair<StoreSpendingKey>>,
     /// Payment address book
     payment_addrs: BiBTreeMap<Alias, PaymentAddress>,
+    /// Diverisifier index of the next payment address to be generated for a
+    /// given key.
+    diversifier_indices: BTreeMap<Alias, DiversifierIndex>,
     /// Cryptographic keypairs
     secret_keys: BTreeMap<Alias, StoredKeypair<common::SecretKey>>,
     /// Known public keys
@@ -154,6 +157,14 @@ impl Store {
         alias: impl AsRef<str>,
     ) -> Option<&BlockHeight> {
         self.birthdays.get(&alias.into())
+    }
+
+    /// Find the diversifier of the given alias
+    pub fn find_diversifier_index(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Option<&DiversifierIndex> {
+        self.diversifier_indices.get(&alias.into())
     }
 
     /// Find the payment address with the given alias and return it
@@ -559,6 +570,27 @@ impl Store {
         Some(alias)
     }
 
+    /// Insert the given diversifier index under the given alias. Useful for
+    /// sequential payment address generation.
+    pub fn insert_diversifier_index(
+        &mut self,
+        alias: Alias,
+        div_index: DiversifierIndex,
+    ) -> Option<Alias> {
+        // abort if the alias is reserved
+        if Alias::is_reserved(&alias).is_some() {
+            println!("The alias {} is reserved.", alias);
+            return None;
+        }
+
+        if alias.is_empty() {
+            eprintln!("Empty alias given.");
+            return None;
+        }
+        self.diversifier_indices.insert(alias.clone(), div_index);
+        Some(alias)
+    }
+
     /// Insert a new address with the given alias. If the alias is already used,
     /// will prompt for overwrite/reselection confirmation, which when declined,
     /// the address won't be added. Return the selected alias if the address has
@@ -623,6 +655,7 @@ impl Store {
         self.public_keys.remove(alias);
         self.derivation_paths.remove(alias);
         self.birthdays.remove(alias);
+        self.diversifier_indices.remove(alias);
     }
 
     /// Extend this store from another store (typically pre-genesis).
@@ -633,6 +666,7 @@ impl Store {
             view_keys,
             spend_keys,
             payment_addrs,
+            diversifier_indices,
             secret_keys,
             public_keys,
             derivation_paths,
@@ -645,6 +679,7 @@ impl Store {
         view_keys.extend(store.view_keys);
         spend_keys.extend(store.spend_keys);
         payment_addrs.extend(store.payment_addrs);
+        diversifier_indices.extend(store.diversifier_indices);
         secret_keys.extend(store.secret_keys);
         public_keys.extend(store.public_keys);
         derivation_paths.extend(store.derivation_paths);
@@ -737,11 +772,17 @@ impl Store {
     pub fn decode(data: &str) -> Result<Self, toml::de::Error> {
         // First try to decode Store from current version (with separate
         // birthdays)
-        toml::from_str(data).or_else(
-            // Otherwise try to decode Store from older version (with
-            // integrated birthdays)
-            |_| toml::from_str::<StoreV0>(data).map(Into::into),
-        )
+        toml::from_str(data)
+            .or_else(
+                // Otherwise try to decode Store from older version (without
+                // diversifier indices)
+                |_| toml::from_str::<StoreV1>(data).map(Into::into),
+            )
+            .or_else(
+                // Otherwise try to decode Store from older version (with
+                // integrated birthdays)
+                |_| toml::from_str::<StoreV0>(data).map(Into::into),
+            )
     }
 
     /// Encode a store into a string
@@ -909,6 +950,54 @@ impl From<StoreV0> for Store {
             }
         }
         to
+    }
+}
+
+// A Storage area for keys and addresses. This is a deprecated format but it
+// is required for compatability purposes.
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct StoreV1 {
+    /// Known birthdays
+    birthdays: BTreeMap<Alias, BlockHeight>,
+    /// Known viewing keys
+    view_keys: BTreeMap<Alias, ExtendedViewingKey>,
+    /// Known spending keys
+    spend_keys: BTreeMap<Alias, StoredKeypair<StoreSpendingKey>>,
+    /// Payment address book
+    payment_addrs: BiBTreeMap<Alias, PaymentAddress>,
+    /// Cryptographic keypairs
+    secret_keys: BTreeMap<Alias, StoredKeypair<common::SecretKey>>,
+    /// Known public keys
+    public_keys: BTreeMap<Alias, common::PublicKey>,
+    /// Known derivation paths
+    derivation_paths: BTreeMap<Alias, DerivationPath>,
+    /// Namada address book
+    addresses: BiBTreeMap<Alias, Address>,
+    /// Known mappings of public key hashes to their aliases in the `keys`
+    /// field. Used for look-up by a public key.
+    pkhs: BTreeMap<PublicKeyHash, Alias>,
+    /// Special keys if the wallet belongs to a validator
+    pub(crate) validator_data: Option<ValidatorData>,
+    /// Namada address vp type
+    address_vp_types: BTreeMap<AddressVpType, HashSet<Address>>,
+}
+
+impl From<StoreV1> for Store {
+    fn from(store: StoreV1) -> Self {
+        Store {
+            payment_addrs: store.payment_addrs,
+            secret_keys: store.secret_keys,
+            public_keys: store.public_keys,
+            derivation_paths: store.derivation_paths,
+            addresses: store.addresses,
+            pkhs: store.pkhs,
+            validator_data: store.validator_data,
+            address_vp_types: store.address_vp_types,
+            view_keys: store.view_keys,
+            spend_keys: store.spend_keys,
+            birthdays: store.birthdays,
+            ..Store::default()
+        }
     }
 }
 
