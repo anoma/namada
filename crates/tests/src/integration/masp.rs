@@ -5995,7 +5995,7 @@ fn speculative_context() -> Result<()> {
             run(
                 &node,
                 Bin::Client,
-                vec![
+                apply_use_device(vec![
                     "shield",
                     "--source",
                     ALBERT,
@@ -6007,7 +6007,7 @@ fn speculative_context() -> Result<()> {
                     "100",
                     "--node",
                     validator_one_rpc,
-                ],
+                ]),
             )
         });
         assert!(captured.result.is_ok());
@@ -6050,7 +6050,7 @@ fn speculative_context() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "transfer",
                 "--source",
                 A_SPENDING_KEY,
@@ -6064,7 +6064,7 @@ fn speculative_context() -> Result<()> {
                 ALBERT_KEY,
                 "--node",
                 validator_one_rpc,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok());
@@ -6098,7 +6098,7 @@ fn speculative_context() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "transfer",
                 "--source",
                 A_SPENDING_KEY,
@@ -6115,7 +6115,7 @@ fn speculative_context() -> Result<()> {
                 "10000",
                 "--node",
                 validator_one_rpc,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok());
@@ -6147,7 +6147,7 @@ fn speculative_context() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "transfer",
                 "--source",
                 A_SPENDING_KEY,
@@ -6161,7 +6161,7 @@ fn speculative_context() -> Result<()> {
                 ALBERT_KEY,
                 "--node",
                 validator_one_rpc,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok());
