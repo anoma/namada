@@ -29,6 +29,7 @@ use namada_sdk::queries::RPC;
 use namada_sdk::token::{self, DenominatedAmount};
 use namada_sdk::tx::{self, Tx, TX_TRANSFER_WASM, VP_USER_WASM};
 use namada_test_utils::TestWasms;
+use namada_tx_prelude::gov_storage::proposal::ContPGFTarget;
 use test_log::test;
 
 use crate::e2e::ledger_tests::prepare_proposal_data;
@@ -1262,13 +1263,15 @@ fn pgf_governance_proposal() -> Result<()> {
     let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, query_pgf));
     assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("Pgf stewards:"));
+    assert!(captured.contains("PGF stewards:"));
     assert!(captured.contains(&format!("- {}", defaults::albert_address())));
     assert!(captured.contains("Reward distribution:"));
     assert!(
         captured.contains(&format!("- 1 to {}", defaults::albert_address()))
     );
-    assert!(captured.contains("Pgf fundings: no fundings are currently set."));
+    assert!(
+        captured.contains("No continous PGF distributions exist currently.")
+    );
 
     // 7.1 Query total NAM supply and PGF balance
     let query_balance_args = vec![
@@ -1311,19 +1314,36 @@ fn pgf_governance_proposal() -> Result<()> {
     let albert = defaults::albert_address();
     let bertha = defaults::bertha_address();
     let christel = defaults::christel_address();
+    let cont_end_epoch = Epoch::from(70);
 
     let pgf_funding = PgfFunding {
-        continuous: vec![PGFTarget::Internal(PGFInternalTarget {
-            amount: token::Amount::from_u64(10),
-            target: bertha.clone(),
-        })],
+        continuous: vec![
+            ContPGFTarget {
+                target: PGFTarget::Internal(PGFInternalTarget {
+                    amount: token::Amount::from_u64(10),
+                    target: bertha.clone(),
+                }),
+                end_epoch: Some(cont_end_epoch),
+            },
+            ContPGFTarget {
+                target: PGFTarget::Internal(PGFInternalTarget {
+                    amount: token::Amount::from_u64(35),
+                    target: christel.clone(),
+                }),
+                end_epoch: None,
+            },
+        ],
         retro: vec![PGFTarget::Internal(PGFInternalTarget {
             amount: token::Amount::from_u64(5),
-            target: christel,
+            target: christel.clone(),
         })],
     };
-    let valid_proposal_json_path =
-        prepare_proposal_data(node.test_dir.path(), albert, pgf_funding, 36);
+    let valid_proposal_json_path = prepare_proposal_data(
+        node.test_dir.path(),
+        albert.clone(),
+        pgf_funding,
+        36,
+    );
 
     let submit_proposal_args = apply_use_device(vec![
         "init-proposal",
@@ -1360,12 +1380,16 @@ fn pgf_governance_proposal() -> Result<()> {
     let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, query_pgf));
     assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("Pgf fundings"));
-    assert!(captured.contains(&format!(
-        "{} for {}",
-        bertha,
-        token::Amount::from_u64(10).to_string_native()
-    )));
+
+    assert!(captured.contains("Continuous PGF distributions"));
+    assert!(captured.contains(&format!("- {}", &bertha)));
+    assert!(
+        captured.contains("- Prop 1: 0.000010 native tokens, end epoch = 70")
+    );
+    assert!(captured.contains(&format!("- {}", &christel)));
+    assert!(
+        captured.contains("- Prop 1: 0.000035 native tokens, end epoch = None")
+    );
 
     Ok(())
 }
@@ -1388,13 +1412,15 @@ fn pgf_steward_change_commission() -> Result<()> {
     let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, query_pgf));
     assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("Pgf stewards:"));
+    assert!(captured.contains("PGF stewards:"));
     assert!(captured.contains(&format!("- {}", defaults::albert_address())));
     assert!(captured.contains("Reward distribution:"));
     assert!(
         captured.contains(&format!("- 1 to {}", defaults::albert_address()))
     );
-    assert!(captured.contains("Pgf fundings: no fundings are currently set."));
+    assert!(
+        captured.contains("No continous PGF distributions exist currently.")
+    );
 
     let commission = Commission {
         reward_distribution: HashMap::from_iter([
@@ -1425,7 +1451,7 @@ fn pgf_steward_change_commission() -> Result<()> {
     let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, query_pgf));
     assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("Pgf stewards:"));
+    assert!(captured.contains("PGF stewards:"));
     assert!(captured.contains(&format!("- {}", defaults::albert_address())));
     assert!(captured.contains("Reward distribution:"));
     assert!(
@@ -1438,7 +1464,9 @@ fn pgf_steward_change_commission() -> Result<()> {
         captured
             .contains(&format!("- 0.05 to {}", defaults::christel_address()))
     );
-    assert!(captured.contains("Pgf fundings: no fundings are currently set."));
+    assert!(
+        captured.contains("No continous PGF distributions exist currently.")
+    );
 
     Ok(())
 }
