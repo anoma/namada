@@ -219,7 +219,7 @@ regex = "1.10"
 reqwest = { version = "0.12", features = ["json"] }
 ripemd = "0.1"
 rlimit = "0.10"
-rocksdb = {version = "0.22.0", features = ['zstd'], default-features = false}
+rocksdb = {version = "0.23", features = ['zstd'], default-features = false}
 rpassword = "7.3"
 rustversion = "1.0"
 serde = {version = "1.0", features = ["derive"]}
