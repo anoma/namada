@@ -36,6 +36,8 @@ pub const MASP_LOCKED_AMOUNT_TARGET_KEY: &str = "locked_amount_target";
 pub const MASP_MAX_REWARD_RATE_KEY: &str = "max_reward_rate";
 /// The key for the total inflation rewards minted by MASP
 pub const MASP_TOTAL_REWARDS: &str = "max_total_rewards";
+/// The key for the reward precision for a given asset
+pub const MASP_REWARD_PRECISION_KEY: &str = "reward_precision";
 
 /// Obtain the nominal proportional key for the given token
 pub fn masp_kp_gain_key<TransToken: trans_token::Keys>(
@@ -59,6 +61,14 @@ pub fn masp_max_reward_rate_key<TransToken: trans_token::Keys>(
 ) -> storage::Key {
     TransToken::parameter_prefix(token_addr)
         .with_segment(MASP_MAX_REWARD_RATE_KEY.to_owned())
+}
+
+/// The precision of rewards for the given token
+pub fn masp_reward_precision_key<TransToken: trans_token::Keys>(
+    token_addr: &Address,
+) -> storage::Key {
+    TransToken::parameter_prefix(token_addr)
+        .with_segment(MASP_REWARD_PRECISION_KEY.to_owned())
 }
 
 /// Obtain the locked target amount key for the given token
