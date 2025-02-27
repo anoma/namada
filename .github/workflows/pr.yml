@@ -14,6 +14,7 @@ env:
   MINOR_VERSION_RELEASE: "0.47.999" # bump on a major release
   BACKPORT_LIBS_LABEL: "backport-libs-0.47" # also bump on major release
   MAINT_LIBS_BRANCH: "maint-libs-0.47" # also bump on major release
+  LIBCLANG_PATH: "/usr/lib/llvm-18/lib" # Needed for RocksDB, installed in build deps
 
 jobs:
   # Check if a PR has no major breaking changes to be backported to library
@@ -52,7 +53,9 @@ jobs:
       - name: Instal cargo release  
         run: cargo binstall -y cargo-release
       - name: Install build deps
-        run: sudo apt-get install -y protobuf-compiler libudev-dev
+        run: sudo apt-get install -y protobuf-compiler libudev-dev llvm-18
+      - name: Symlink libclang for RocksDB
+        run: sudo ln -s /usr/lib/llvm-18/lib/libclang-18.so.1 /usr/lib/llvm-18/lib/libclang-18.so
       - name: Totally safe 
         # Workaround for https://github.com/actions/checkout/issues/766
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
