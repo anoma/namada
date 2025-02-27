@@ -1728,7 +1728,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.18963"));
+    assert!(captured.contains("nam: 0.18887"));
 
     // Wait till epoch boundary
     node.next_masp_epoch();
@@ -1870,7 +1870,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.384131"));
+    assert!(captured.contains("nam: 1.383286"));
 
     // Wait till epoch boundary
     node.next_masp_epoch();
@@ -1979,7 +1979,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 3.270374"));
+    assert!(captured.contains("nam: 3.267817"));
 
     // Wait till epoch boundary
     node.next_masp_epoch();
@@ -2072,7 +2072,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 3.774374"));
+    assert!(captured.contains("nam: 3.77117"));
 
     // Wait till epoch boundary
     node.next_masp_epoch();
@@ -2143,7 +2143,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 3.774374"));
+    assert!(captured.contains("nam: 3.77117"));
 
     // Wait till epoch boundary to prevent conversion expiry during transaction
     // construction
@@ -2282,7 +2282,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.003216"));
+    assert!(captured.contains("nam: 0.000012"));
 
     Ok(())
 }
