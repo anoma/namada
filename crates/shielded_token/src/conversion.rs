@@ -252,15 +252,14 @@ where
 fn update_native_conversions<S, TransToken>(
     storage: &mut S,
     token: &Address,
-    normed_inflation: u128,
+    normed_inflation: &mut u128,
     masp_epochs_per_year: u64,
     masp_epoch: MaspEpoch,
-    total_reward: &mut Amount,
     current_convs: &mut BTreeMap<
         (Address, Denomination, MaspDigitPos),
         AllowedConversion,
     >,
-) -> Result<Denomination>
+) -> Result<(Denomination, (u128, u128))>
 where
     S: StorageWrite + StorageRead + WithConversionState,
     TransToken:
@@ -274,13 +273,13 @@ where
         storage,
         token,
         denom,
-        normed_inflation,
+        *normed_inflation,
         masp_epochs_per_year,
     )?;
     // The amount that will be given of the new native token for
     // every amount of the native token given in the
     // previous epoch
-    let inflation_uint = Uint::from(normed_inflation);
+    let inflation_uint = Uint::from(*normed_inflation);
     let reward = Uint::from(reward);
     let new_normed_inflation = checked!(inflation_uint + reward)?;
     let new_normed_inflation = u128::try_from(new_normed_inflation)
@@ -291,7 +290,7 @@ where
                  Please check the inflation parameters.",
                 token
             );
-            normed_inflation
+            *normed_inflation
         });
     for digit in MaspDigitPos::iter() {
         // Provide an allowed conversion from previous timestamp. The
@@ -312,7 +311,7 @@ where
         // tokens cancel/telescope out
         let cur_conv = MaspAmount::from_pair(
             old_asset,
-            i128::try_from(normed_inflation)
+            i128::try_from(*normed_inflation)
                 .ok()
                 .and_then(i128::checked_neg)
                 .ok_or_err_msg("Current inflation overflow")?,
@@ -338,29 +337,20 @@ where
             },
         );
     }
-    // Dispense a transparent reward in parallel to the shielded rewards
-    let addr_bal = TransToken::read_balance(storage, token, &MASP)?;
-    // The reward for each reward.1 units of the current asset
-    // is reward.0 units of the reward token
-    let native_reward = addr_bal
-        .u128_eucl_div_rem((new_normed_inflation, normed_inflation))
-        .ok_or_else(|| Error::new_const("Three digit reward overflow"))?;
-    *total_reward = total_reward
-        .checked_add(
-            native_reward
-                .0
-                .checked_add(native_reward.1)
-                .unwrap_or(Amount::max())
-                .checked_sub(addr_bal)
-                .unwrap_or_default(),
-        )
-        .ok_or_else(|| Error::new_const("Three digit total reward overflow"))?;
+    // Note the fraction used to compute rewards from balance
+    let reward_frac = (
+        new_normed_inflation
+            .checked_sub(*normed_inflation)
+            .unwrap_or_default(),
+        *normed_inflation,
+    );
     // Save the new normed inflation
     let _ = storage
         .conversion_state_mut()
         .normed_inflation
         .insert(new_normed_inflation);
-    Ok(denom)
+    *normed_inflation = new_normed_inflation;
+    Ok((denom, reward_frac))
 }
 
 /// Update the conversions for non-native tokens. Namely calculate the reward,
@@ -467,7 +457,7 @@ where
     *total_reward = total_reward
         .checked_add(
             addr_bal
-                .u128_eucl_div_rem((reward, precision))
+                .u128_eucl_div_rem((real_reward, precision))
                 .ok_or_else(|| {
                     Error::new_const("Total reward calculation overflow")
                 })?
@@ -521,7 +511,7 @@ where
         }
     });
     // The total transparent value of the rewards being distributed
-    let mut total_reward = Amount::zero();
+    let mut total_deflated_reward = Amount::zero();
 
     // Construct MASP asset type for rewards. Always deflate and timestamp
     // reward tokens with the zeroth epoch to minimize the number of convert
@@ -540,6 +530,11 @@ where
         &native_token,
     )?
     .0;
+    // Get the last rewarded amount of the native token
+    let mut normed_inflation = *storage
+        .conversion_state_mut()
+        .normed_inflation
+        .get_or_insert(ref_inflation);
 
     // Reward all tokens according to above reward rates
     let masp_epoch_multiplier = Params::masp_epoch_multiplier(storage)?;
@@ -554,27 +549,23 @@ where
     let epochs_per_year = Params::epochs_per_year(storage)?;
     let masp_epochs_per_year =
         checked!(epochs_per_year / masp_epoch_multiplier)?;
+    let mut native_reward_frac = None;
     for token in &masp_reward_keys {
-        // Get the last rewarded amount of the native token
-        let normed_inflation = *storage
-            .conversion_state_mut()
-            .normed_inflation
-            .get_or_insert(ref_inflation);
-
         // Generate conversions from the last epoch to the current and update
         // the reward backing accumulator
-        let denom = if *token == native_token {
-            update_native_conversions::<_, TransToken>(
+        if *token == native_token {
+            let (denom, frac) = update_native_conversions::<_, TransToken>(
                 storage,
                 token,
-                normed_inflation,
+                &mut normed_inflation,
                 masp_epochs_per_year,
                 masp_epoch,
-                &mut total_reward,
                 &mut current_convs,
-            )
+            )?;
+            masp_reward_denoms.insert(token.clone(), denom);
+            native_reward_frac = Some(frac);
         } else {
-            update_non_native_conversions::<_, TransToken>(
+            let denom = update_non_native_conversions::<_, TransToken>(
                 storage,
                 token,
                 ref_inflation,
@@ -582,11 +573,54 @@ where
                 masp_epochs_per_year,
                 masp_epoch,
                 reward_assets,
-                &mut total_reward,
+                &mut total_deflated_reward,
                 &mut current_convs,
+            )?;
+            masp_reward_denoms.insert(token.clone(), denom);
+        }
+    }
+    // Inflate the non-native rewards for all tokens in one operation
+    let non_native_reward = total_deflated_reward
+        .raw_amount()
+        .checked_mul_div(normed_inflation.into(), ref_inflation.into())
+        .ok_or_else(|| Error::new_const("Total reward calculation overflow"))?;
+    // The total transparent value of the rewards being distributed. First
+    // accumulate the integer part of the non-native reward.
+    let mut total_reward = Amount::from(non_native_reward.0);
+    // And finally accumulate the fractional parts of the native and non-native
+    // rewards if their sum is more than one
+    if let Some(native_reward_frac) = native_reward_frac {
+        // Dispense a transparent reward in parallel to the shielded rewards
+        let addr_bal = TransToken::read_balance(storage, &native_token, &MASP)?;
+        // The reward for each reward.1 units of the current asset is reward.0
+        // units of the reward token
+        let native_reward = addr_bal
+            .raw_amount()
+            .checked_mul_div(
+                native_reward_frac.0.into(),
+                native_reward_frac.1.into(),
             )
-        }?;
-        masp_reward_denoms.insert(token.clone(), denom);
+            .ok_or_else(|| Error::new_const("Three digit reward overflow"))?;
+        // Accumulate the integer part of the native reward
+        checked!(total_reward += native_reward.0.into())?;
+
+        let ref_inflation = Uint::from(ref_inflation);
+        // Compute the fraction obtained by adding the fractional parts of the
+        // native reward and the non-native reward:
+        // native_reward.1/native_reward_frac.1 +
+        // non_native_reward.1/ref_inflation
+        let numerator = checked!(
+            native_reward.1 * ref_inflation
+                + Uint::from(native_reward_frac.1) * non_native_reward.1
+        )?;
+        let denominator =
+            checked!(ref_inflation * Uint::from(native_reward_frac.1))?;
+        // A fraction greater than or equal to one corresponds to the situation
+        // where combining non-native rewards with pre-existing NAM balance
+        // gives a greater reward than treating each separately.
+        if numerator >= denominator {
+            checked!(total_reward += 1.into())?;
+        }
     }
 
     // Try to distribute Merkle leaf updating as evenly as possible across
