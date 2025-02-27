@@ -258,7 +258,7 @@ pub async fn default_sign(
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
-pub async fn sign_tx<'a, D, F, U>(
+pub async fn sign_tx<D, F, U>(
     wallet: &RwLock<Wallet<U>>,
     args: &args::Tx,
     tx: &mut Tx,
@@ -929,7 +929,7 @@ fn to_ledger_decimal_variable_token(amount: DenominatedAmount) -> String {
 /// formatting.
 struct LedgerProposalVote<'a>(&'a ProposalVote);
 
-impl<'a> Display for LedgerProposalVote<'a> {
+impl Display for LedgerProposalVote<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0 {
             ProposalVote::Yay => write!(f, "yay"),

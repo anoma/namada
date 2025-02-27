@@ -200,10 +200,7 @@ impl AssetData {
         let token_bytes = self.serialize_to_vec();
         // Generate the unique asset identifier from the unique token address
         AssetType::new(token_bytes.as_ref()).map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "unable to create asset type".to_string(),
-            )
+            std::io::Error::other("unable to create asset type".to_string())
         })
     }
 

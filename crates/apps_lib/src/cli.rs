@@ -319,7 +319,9 @@ pub mod cmds {
             let tx_unshielding_transfer =
                 Self::parse_with_ctx(matches, TxUnshieldingTransfer);
             let tx_ibc_transfer = Self::parse_with_ctx(matches, TxIbcTransfer);
-            let tx_osmosis_swap = Self::parse_with_ctx(matches, TxOsmosisSwap);
+            let tx_osmosis_swap = Self::parse_with_ctx(matches, |cmd| {
+                TxOsmosisSwap(Box::new(cmd))
+            });
             let tx_update_account =
                 Self::parse_with_ctx(matches, TxUpdateAccount);
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
@@ -506,7 +508,7 @@ pub mod cmds {
         TxShieldingTransfer(TxShieldingTransfer),
         TxUnshieldingTransfer(TxUnshieldingTransfer),
         TxIbcTransfer(TxIbcTransfer),
-        TxOsmosisSwap(TxOsmosisSwap),
+        TxOsmosisSwap(Box<TxOsmosisSwap>),
         QueryResult(QueryResult),
         TxUpdateAccount(TxUpdateAccount),
         TxInitAccount(TxInitAccount),

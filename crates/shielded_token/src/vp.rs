@@ -76,7 +76,7 @@ impl Default for ChangedBalances {
     }
 }
 
-impl<'view, 'ctx: 'view, CTX, Params, Gov, Ibc, TransToken, Transfer>
+impl<'ctx, CTX, Params, Gov, Ibc, TransToken, Transfer>
     MaspVp<'ctx, CTX, Params, Gov, Ibc, TransToken, Transfer>
 where
     CTX: VpEnv<'ctx>

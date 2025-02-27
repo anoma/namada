@@ -834,7 +834,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 if let Some((_, amt)) = current_exchanged_balance
                     .project(native_asset_type)
                     .into_components()
-                    .last()
+                    .next_back()
                 {
                     current_native_balance +=
                         ValueSum::from_pair(native_asset_epoch0_type, amt);
@@ -842,7 +842,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 if let Some((_, amt)) = next_exchanged_balance
                     .project(native_asset_type)
                     .into_components()
-                    .last()
+                    .next_back()
                 {
                     next_native_balance +=
                         ValueSum::from_pair(native_asset_epoch0_type, amt);

@@ -106,6 +106,7 @@ pub struct NamadaMemo<Data = NamadaMemoData> {
 /// Data included in a Namada memo.
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)] // TODO Box OsmosisSwap shielding_data
 pub enum NamadaMemoData {
     /// Generic message sent over IBC.
     Memo(String),
@@ -125,6 +126,7 @@ pub enum NamadaMemoData {
 
 /// The different variants of an Ibc message
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)] // TODO Box MsgNftTransfer
 pub enum IbcMessage<Transfer> {
     /// Ibc Envelop
     Envelope(Box<MsgEnvelope>),

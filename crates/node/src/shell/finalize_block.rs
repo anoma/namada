@@ -340,7 +340,7 @@ where
         response: &mut shim::response::FinalizeBlock,
         extended_dispatch_result: std::result::Result<
             namada_sdk::tx::data::TxResult<protocol::Error>,
-            DispatchError,
+            Box<DispatchError>,
         >,
         tx_data: TxData<'_>,
         mut tx_logs: TxLogs<'_>,
@@ -397,70 +397,73 @@ where
                     &mut tx_logs,
                 ),
             },
-            Err(DispatchError {
-                error: protocol::Error::WrapperRunnerError(msg),
-                tx_result: _,
-            }) => {
-                tracing::info!(
-                    "Wrapper transaction {} failed with: {}",
+            Err(dispatch_error) => match *dispatch_error {
+                DispatchError {
+                    error: protocol::Error::WrapperRunnerError(msg),
+                    tx_result: _,
+                } => {
+                    tracing::info!(
+                        "Wrapper transaction {} failed with: {}",
+                        tx_logs
+                            .tx_event
+                            .raw_read_attribute::<TxHash>()
+                            .unwrap_or("<unknown>"),
+                        msg,
+                    );
+                    let gas_scale = tx_data.tx_gas_meter.get_gas_scale();
+                    let scaled_gas = tx_data
+                        .tx_gas_meter
+                        .get_tx_consumed_gas()
+                        .get_whole_gas_units(gas_scale);
                     tx_logs
                         .tx_event
-                        .raw_read_attribute::<TxHash>()
-                        .unwrap_or("<unknown>"),
-                    msg,
-                );
-                let gas_scale = tx_data.tx_gas_meter.get_gas_scale();
-                let scaled_gas = tx_data
-                    .tx_gas_meter
-                    .get_tx_consumed_gas()
-                    .get_whole_gas_units(gas_scale);
-                tx_logs
-                    .tx_event
-                    .extend(GasUsed(scaled_gas))
-                    .extend(Info(msg.to_string()))
-                    .extend(Code(ResultCode::InvalidTx));
-                // Drop the batch write log which could contain invalid data.
-                // Important data that could be valid (e.g. a valid fee payment)
-                // must have already been moved to the block write log by now
-                self.state.write_log_mut().drop_batch();
-            }
-            Err(dispatch_error) => {
-                // This branch represents an error that affects the entire
-                // batch
-                let (msg, tx_result) = (
-                    Error::TxApply(dispatch_error.error),
-                    // The tx result should always be present at this point
-                    dispatch_error.tx_result.unwrap_or_default(),
-                );
-                tracing::info!(
-                    "Transaction {} failed with: {}",
+                        .extend(GasUsed(scaled_gas))
+                        .extend(Info(msg.to_string()))
+                        .extend(Code(ResultCode::InvalidTx));
+                    // Drop the batch write log which could contain invalid
+                    // data. Important data that could be
+                    // valid (e.g. a valid fee payment) must
+                    // have already been moved to the block write log by now
+                    self.state.write_log_mut().drop_batch();
+                }
+                _ => {
+                    // This branch represents an error that affects the entire
+                    // batch
+                    let (msg, tx_result) = (
+                        Error::TxApply(dispatch_error.error),
+                        // The tx result should always be present at this point
+                        dispatch_error.tx_result.unwrap_or_default(),
+                    );
+                    tracing::info!(
+                        "Transaction {} failed with: {}",
+                        tx_logs
+                            .tx_event
+                            .raw_read_attribute::<TxHash>()
+                            .unwrap_or("<unknown>"),
+                        msg
+                    );
+
+                    let gas_scale = tx_data.tx_gas_meter.get_gas_scale();
+                    let scaled_gas = tx_data
+                        .tx_gas_meter
+                        .get_tx_consumed_gas()
+                        .get_whole_gas_units(gas_scale);
+
                     tx_logs
                         .tx_event
-                        .raw_read_attribute::<TxHash>()
-                        .unwrap_or("<unknown>"),
-                    msg
-                );
+                        .extend(GasUsed(scaled_gas))
+                        .extend(Info(msg.to_string()))
+                        .extend(Code(ResultCode::WasmRuntimeError));
 
-                let gas_scale = tx_data.tx_gas_meter.get_gas_scale();
-                let scaled_gas = tx_data
-                    .tx_gas_meter
-                    .get_tx_consumed_gas()
-                    .get_whole_gas_units(gas_scale);
-
-                tx_logs
-                    .tx_event
-                    .extend(GasUsed(scaled_gas))
-                    .extend(Info(msg.to_string()))
-                    .extend(Code(ResultCode::WasmRuntimeError));
-
-                self.handle_batch_error(
-                    response,
-                    &msg,
-                    tx_result,
-                    tx_data,
-                    &mut tx_logs,
-                );
-            }
+                    self.handle_batch_error(
+                        response,
+                        &msg,
+                        tx_result,
+                        tx_data,
+                        &mut tx_logs,
+                    );
+                }
+            },
         }
 
         response.events.emit(tx_logs.tx_event);

@@ -47,13 +47,13 @@ impl ledger_transport::Exchange for WalletTransport {
         I: Deref<Target = [u8]> + Send + Sync,
     {
         match self {
-            WalletTransport::HID(transport) => transport
-                .exchange(command)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
+            WalletTransport::HID(transport) => {
+                transport.exchange(command).map_err(std::io::Error::other)
+            }
             WalletTransport::TCP(transport) => transport
                 .exchange(command)
                 .await
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
+                .map_err(std::io::Error::other),
         }
     }
 }

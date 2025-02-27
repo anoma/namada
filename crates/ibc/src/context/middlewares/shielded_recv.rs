@@ -152,10 +152,10 @@ impl ibc_middleware_overflow_receive::PacketMetadata
     type Amount = token::Amount;
 
     fn is_overflow_receive_msg(msg: &Map<String, Value>) -> bool {
-        msg.get("namada").map_or(false, |maybe_namada_obj| {
+        msg.get("namada").is_some_and(|maybe_namada_obj| {
             maybe_namada_obj
                 .as_object()
-                .map_or(false, |namada| namada.contains_key("osmosis_swap"))
+                .is_some_and(|namada| namada.contains_key("osmosis_swap"))
         })
     }
 

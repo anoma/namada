@@ -198,7 +198,7 @@ mod dev {
     /// Check whether the ENV_VAR_USE_DEVICE environment variable is set
     pub fn is_use_device() -> bool {
         match std::env::var(ENV_VAR_USE_DEVICE) {
-            Ok(val) => val.to_ascii_lowercase() != "false",
+            Ok(val) => !val.eq_ignore_ascii_case("false"),
             _ => false,
         }
     }

@@ -2126,7 +2126,7 @@ pub struct PersistentPrefixIterator<'a>(
     PrefixIterator<rocksdb::DBIterator<'a>>,
 );
 
-impl<'a> Iterator for PersistentPrefixIterator<'a> {
+impl Iterator for PersistentPrefixIterator<'_> {
     type Item = (String, Vec<u8>, Gas);
 
     /// Returns the next pair and the gas cost
@@ -2164,7 +2164,7 @@ pub struct PersistentPatternIterator<'a> {
     inner: PatternIterator<PersistentPrefixIterator<'a>>,
 }
 
-impl<'a> Iterator for PersistentPatternIterator<'a> {
+impl Iterator for PersistentPatternIterator<'_> {
     type Item = (String, Vec<u8>, Gas);
 
     /// Returns the next pair and the gas cost

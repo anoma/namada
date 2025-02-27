@@ -236,6 +236,7 @@ impl ShouldRelay for CheckNonce {
 }
 
 /// Relay result for [`CheckNonce`].
+#[allow(clippy::large_enum_variant)] // TODO Box Receipt's TransactionReceipt
 enum RelayResult {
     /// The call to Bridge failed.
     BridgeCallError(String),
@@ -389,7 +390,7 @@ fn display_validator_set<IO: Io>(io: &IO, args: ValidatorSetArgs) {
 }
 
 /// Relay a validator set update, signed off for a given epoch.
-pub async fn relay_validator_set_update<'a, E>(
+pub async fn relay_validator_set_update<E>(
     eth_client: Arc<E>,
     client: &(impl Client + Sync),
     io: &impl Io,
@@ -468,7 +469,7 @@ where
     .or_else(|err| err.handle())
 }
 
-async fn relay_validator_set_update_daemon<'a, E>(
+async fn relay_validator_set_update_daemon<E>(
     mut args: args::ValidatorSetUpdateRelay,
     eth_client: Arc<E>,
     client: &(impl Client + Sync),

@@ -150,13 +150,13 @@ pub struct EthBridgeQueriesHook<'db, S> {
     state: &'db S,
 }
 
-impl<'db, S> Clone for EthBridgeQueriesHook<'db, S> {
+impl<S> Clone for EthBridgeQueriesHook<'_, S> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'s, S> Copy for EthBridgeQueriesHook<'s, S> {}
+impl<S> Copy for EthBridgeQueriesHook<'_, S> {}
 
 impl<'db, D, H> EthBridgeQueriesHook<'db, WlState<D, H>>
 where

@@ -362,7 +362,7 @@ impl<'de> Deserialize<'de> for CommonSignature {
     {
         struct SignatureVisitor;
 
-        impl<'de> Visitor<'de> for SignatureVisitor {
+        impl Visitor<'_> for SignatureVisitor {
             type Value = CommonSignature;
 
             fn expecting(

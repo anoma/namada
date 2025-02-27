@@ -180,9 +180,9 @@ pub(crate) mod testing {
                 tx_wasm_cache: (),
                 storage_read_past_height_limit: None,
             };
-            self.rpc.handle(ctx, &request).map_err(|err| {
-                std::io::Error::new(std::io::ErrorKind::Other, err.to_string())
-            })
+            self.rpc
+                .handle(ctx, &request)
+                .map_err(|err| std::io::Error::other(err.to_string()))
         }
 
         async fn perform<R>(&self, _request: R) -> Result<R::Output, RpcError>

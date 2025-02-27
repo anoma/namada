@@ -503,10 +503,10 @@ pub async fn query_storage_value_bytes<C: namada_io::Client + Sync>(
 /// Query a range of storage values with a matching prefix and decode them with
 /// [`BorshDeserialize`]. Returns an iterator of the storage keys paired with
 /// their associated values.
-pub async fn query_storage_prefix<'a, 'b, N: Namada, T>(
-    context: &'b N,
+pub async fn query_storage_prefix<'a, N: Namada, T>(
+    context: &'a N,
     key: &storage::Key,
-) -> Result<Option<impl 'b + Iterator<Item = (storage::Key, T)>>, error::Error>
+) -> Result<Option<impl 'a + Iterator<Item = (storage::Key, T)>>, error::Error>
 where
     T: BorshDeserialize,
 {

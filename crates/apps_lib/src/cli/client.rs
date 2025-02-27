@@ -113,7 +113,8 @@ impl CliApi {
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_ibc_transfer(&namada, args).await?;
                     }
-                    Sub::TxOsmosisSwap(TxOsmosisSwap(args)) => {
+                    Sub::TxOsmosisSwap(args) => {
+                        let TxOsmosisSwap(args) = *args;
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
                         let ledger_address =
                             chain_ctx.get(&args.transfer.tx.ledger_address);

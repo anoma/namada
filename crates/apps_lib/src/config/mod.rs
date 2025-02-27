@@ -62,7 +62,7 @@ impl TendermintMode {
     pub fn to_str(&self) -> &str {
         match *self {
             TendermintMode::Full => "full",
-            TendermintMode::Validator { .. } => "validator",
+            TendermintMode::Validator => "validator",
             TendermintMode::Seed => "seed",
         }
     }

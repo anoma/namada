@@ -1050,7 +1050,7 @@ mod recommendations {
                 let conversion_rate = conversion_table
                     .get(&pending.gas_fee.token)
                     .and_then(|entry| match entry.conversion_rate {
-                        r if r == 0.0f64 => {
+                        0.0f64 => {
                             edisplay_line!(
                                 io,
                                 "{}: Ignoring null conversion rate",

@@ -632,10 +632,7 @@ fn start_abci_broadcaster_shell(
     let genesis_time = DateTimeUtc::try_from(config.genesis_time.clone())
         .expect("Should be able to parse genesis time");
     // Start broadcaster
-    if matches!(
-        config.shell.tendermint_mode,
-        TendermintMode::Validator { .. }
-    ) {
+    if matches!(config.shell.tendermint_mode, TendermintMode::Validator) {
         let (bc_abort_send, bc_abort_recv) =
             tokio::sync::oneshot::channel::<()>();
 
@@ -707,7 +704,7 @@ fn start_abci_broadcaster_shell(
         .abortable("Shell", move |_aborter| {
             tracing::info!("Namada ledger node started.");
             match tendermint_mode {
-                TendermintMode::Validator { .. } => {
+                TendermintMode::Validator => {
                     tracing::info!("This node is a validator");
                 }
                 TendermintMode::Full | TendermintMode::Seed => {
@@ -844,10 +841,7 @@ async fn maybe_start_ethereum_oracle(
     spawner: &mut AbortableSpawner,
     config: &config::Ledger,
 ) -> EthereumOracleTask {
-    if !matches!(
-        config.shell.tendermint_mode,
-        TendermintMode::Validator { .. }
-    ) {
+    if !matches!(config.shell.tendermint_mode, TendermintMode::Validator) {
         return EthereumOracleTask::NotEnabled;
     }
 

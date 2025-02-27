@@ -1891,7 +1891,7 @@ pub async fn build_unbond(
         let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
         *to_withdraw = checked!(to_withdraw + amount)?;
     }
-    let latest_withdrawal_pre = withdrawable.into_iter().last();
+    let latest_withdrawal_pre = withdrawable.into_iter().next_back();
 
     let data = pos::Unbond {
         validator: validator.clone(),
@@ -1935,7 +1935,7 @@ pub async fn query_unbonds(
         *to_withdraw = checked!(to_withdraw + amount)?;
     }
     let (latest_withdraw_epoch_post, latest_withdraw_amount_post) =
-        withdrawable.into_iter().last().ok_or_else(|| {
+        withdrawable.into_iter().next_back().ok_or_else(|| {
             Error::Other("No withdrawable amount".to_string())
         })?;
 
