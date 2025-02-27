@@ -34,7 +34,7 @@ use crate::storage_key::{masp_assets_hash_key, masp_token_map_key};
 use crate::storage_key::{
     masp_kd_gain_key, masp_kp_gain_key, masp_last_inflation_key,
     masp_last_locked_amount_key, masp_locked_amount_target_key,
-    masp_max_reward_rate_key,
+    masp_max_reward_rate_key, masp_reward_precision_key,
 };
 #[cfg(any(feature = "multicore", test))]
 use crate::{ConversionLeaf, Error, OptionExt, ResultExt};
@@ -87,21 +87,44 @@ pub fn calculate_masp_rewards_precision<S, TransToken>(
 ) -> Result<(u128, Denomination)>
 where
     S: StorageWrite + StorageRead,
-    TransToken: trans_token::Read<S>,
+    TransToken: trans_token::Keys + trans_token::Read<S>,
 {
     let denomination = TransToken::read_denom(storage, addr)?
         .expect("failed to read token denomination");
+
     // Inflation is implicitly denominated by this value. The lower this
     // figure, the less precise inflation computations are. This is especially
     // problematic when inflation is coming from a token with much higher
     // denomination than the native token. The higher this figure, the higher
     // the threshold of holdings required in order to receive non-zero rewards.
-    // This value should be fixed constant for each asset type. Here we choose
-    // a thousandth of the given asset.
-    let precision_denom = std::cmp::max(u32::from(denomination.0), 3)
-        .checked_sub(3)
-        .expect("Cannot underflow");
-    Ok((checked!(10u128 ^ precision_denom)?, denomination))
+    // This value should be fixed constant for each asset type. Here we read a
+    // value from storage and failing that we choose a thousandth of the given
+    // asset.
+    // Key to read/write reward precision from
+    let reward_precision_key = masp_reward_precision_key::<TransToken>(addr);
+    // Now read the desired reward precision for this token address
+    let reward_precision: u128 =
+        storage.read(&reward_precision_key)?.map_or_else(
+            || -> Result<u128> {
+                // Since reading reward precision has failed, choose a
+                // thousandth of the given token
+                let precision_denom =
+                    std::cmp::max(u32::from(denomination.0), 3)
+                        .checked_sub(3)
+                        .expect("Cannot underflow");
+                let reward_precision = checked!(10u128 ^ precision_denom)?;
+                // Record the precision that is now being used so that it does
+                // not have to be recomputed each time, and to
+                // ensure that this value is not accidentally
+                // changed even by a change to this initialization
+                // algorithm.
+                storage.write(&reward_precision_key, reward_precision)?;
+                Ok(reward_precision)
+            },
+            Ok,
+        )?;
+
+    Ok((reward_precision, denomination))
 }
 
 /// Compute the MASP rewards by applying the PD-controller to the genesis
