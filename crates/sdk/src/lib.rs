@@ -677,7 +677,7 @@ where
     /// Captures the input/output streams used by this object
     pub io: I,
     /// The address of the native token
-    native_token: Address,
+    pub native_token: Address,
     /// The default builder for a Tx
     prototype: args::Tx,
 }
