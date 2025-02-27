@@ -7,24 +7,33 @@ queue_rules:
     queue_conditions:
       - "#approved-reviews-by >= 1"
       - base = main
-    merge_method: merge
-    autosquash: true   
+    merge_method: rebase
+    update_method: rebase
+    autosquash: true # requires `update_method: rebase`
 
   - name: backport-apps-1.1-queue
     batch_size: 3
     queue_conditions:
       - "#approved-reviews-by >= 1"
       - base = maint-1.1
-    merge_method: merge
-    autosquash: true   
+    merge_method: rebase
+    update_method: rebase
+    autosquash: true # requires `update_method: rebase`
 
   - name: backport-libs-0.47-queue
     batch_size: 3
     queue_conditions:
       - "#approved-reviews-by >= 1"
+<<<<<<< HEAD
       - base = maint-libs-0.47
     merge_method: merge
     autosquash: true   
+=======
+      - base = maint-libs-0.48
+    merge_method: rebase
+    update_method: rebase
+    autosquash: true # requires `update_method: rebase`
+>>>>>>> 6154e11d6 (mergify: merge and update with rebase to allow auto-squash)
 
 pull_request_rules:
   - name: automatic merge to main or backport branch
