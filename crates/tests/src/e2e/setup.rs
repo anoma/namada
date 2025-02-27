@@ -1,6 +1,6 @@
 use std::ffi::OsStr;
 use std::fmt::Display;
-use std::fs::{create_dir_all, File, OpenOptions};
+use std::fs::{File, OpenOptions, create_dir_all};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -17,14 +17,14 @@ use expectrl::session::Session;
 use expectrl::stream::log::LogStream;
 use expectrl::{ControlCode, Eof, WaitStatus};
 use eyre::eyre;
-use itertools::{peek_nth, Either, Itertools};
+use itertools::{Either, Itertools, peek_nth};
 use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps_lib::client::utils::{
     self, validator_pre_genesis_dir, validator_pre_genesis_txs_file,
 };
 use namada_apps_lib::config::genesis::utils::read_toml;
 use namada_apps_lib::config::genesis::{templates, transactions};
-use namada_apps_lib::config::{ethereum_bridge, genesis, Config};
+use namada_apps_lib::config::{Config, ethereum_bridge, genesis};
 use namada_apps_lib::wallet::defaults::{derive_template_dir, is_use_device};
 use namada_apps_lib::{config, wallet};
 use namada_core::address::Address;
@@ -37,9 +37,9 @@ use namada_sdk::chain::ChainId;
 use namada_sdk::wallet::alias::Alias;
 use namada_tx_prelude::token;
 use once_cell::sync::Lazy;
-use rand::rngs::OsRng;
 use rand::Rng;
-use tempfile::{tempdir, tempdir_in, TempDir};
+use rand::rngs::OsRng;
+use tempfile::{TempDir, tempdir, tempdir_in};
 
 use crate::e2e::helpers::{
     find_cosmos_address, generate_bin_command, get_cosmos_rpc_address,

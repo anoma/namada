@@ -11,9 +11,9 @@ pub mod wrapped_erc20s;
 
 use namada_core::address::Address;
 use namada_core::storage::{DbKeySeg, Key, KeySeg};
+use namada_parameters::ADDRESS as PARAM_ADDRESS;
 pub use namada_parameters::native_erc20_key;
 use namada_parameters::storage::*;
-use namada_parameters::ADDRESS as PARAM_ADDRESS;
 use namada_trans_token::storage_key::balance_key;
 
 use crate::ADDRESS;

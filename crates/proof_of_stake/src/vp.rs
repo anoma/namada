@@ -9,10 +9,10 @@ use namada_core::arith::checked;
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::storage::Key;
 use namada_systems::governance;
+use namada_tx::BatchedTxRef;
 use namada_tx::action::{
     Action, Bond, ClaimRewards, PosAction, Redelegation, Unbond, Withdraw,
 };
-use namada_tx::BatchedTxRef;
 use namada_vp_env::{Error, Result, VpEnv};
 use thiserror::Error;
 

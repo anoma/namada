@@ -21,7 +21,7 @@ pub use rev_order::ReverseOrdTokenAmount;
 use serde::{Deserialize, Serialize};
 
 use crate::lazy_map::NestedMap;
-use crate::parameters::{PosParams, MAX_VALIDATOR_METADATA_LEN};
+use crate::parameters::{MAX_VALIDATOR_METADATA_LEN, PosParams};
 use crate::{Epoch, KeySeg, LazyMap, LazySet, LazyVec, ValidatorMetaDataError};
 
 /// Stored positions of validators in validator sets

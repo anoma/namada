@@ -22,7 +22,7 @@ use thiserror::Error;
 use crate::address;
 use crate::borsh::BorshSerializeExt;
 use crate::hash::{KeccakHasher, Sha256Hasher, StorageHasher};
-use crate::keccak::{keccak_hash, KeccakHash};
+use crate::keccak::{KeccakHash, keccak_hash};
 
 /// Represents an error in signature verification
 #[allow(missing_docs)]
@@ -492,7 +492,7 @@ impl SignableBytes for &crate::keccak::KeccakHash {
 pub mod testing {
     use proptest::prelude::*;
     use rand::prelude::{StdRng, ThreadRng};
-    use rand::{thread_rng, SeedableRng};
+    use rand::{SeedableRng, thread_rng};
 
     use super::*;
 

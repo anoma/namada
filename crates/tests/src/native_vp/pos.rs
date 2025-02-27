@@ -159,18 +159,18 @@ mod tests {
     use namada_sdk::key::common::PublicKey;
     use namada_sdk::validation::PosVp;
     use namada_sdk::{address, token};
-    use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use namada_tx_prelude::Address;
+    use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     use proptest_state_machine::{
-        prop_state_machine, ReferenceStateMachine, StateMachineTest,
+        ReferenceStateMachine, StateMachineTest, prop_state_machine,
     };
     use test_log::test;
 
     use super::testing::{
-        arb_invalid_pos_action, arb_valid_pos_action, InvalidPosAction,
-        ValidPosAction,
+        InvalidPosAction, ValidPosAction, arb_invalid_pos_action,
+        arb_valid_pos_action,
     };
     use super::*;
     use crate::native_vp::TestNativeVpEnv;
@@ -598,16 +598,16 @@ pub mod testing {
     use namada_sdk::chain::Epoch;
     use namada_sdk::dec::Dec;
     use namada_sdk::gas::TxGasMeter;
-    use namada_sdk::key::common::PublicKey;
     use namada_sdk::key::RefTo;
+    use namada_sdk::key::common::PublicKey;
+    use namada_sdk::proof_of_stake::ADDRESS as POS_ADDRESS;
     use namada_sdk::proof_of_stake::epoched::DynEpochOffset;
-    use namada_sdk::proof_of_stake::parameters::testing::arb_rate;
     use namada_sdk::proof_of_stake::parameters::PosParams;
+    use namada_sdk::proof_of_stake::parameters::testing::arb_rate;
     use namada_sdk::proof_of_stake::storage::{
         get_num_consensus_validators, read_pos_params, unbond_handle,
     };
     use namada_sdk::proof_of_stake::types::{BondId, ValidatorState};
-    use namada_sdk::proof_of_stake::ADDRESS as POS_ADDRESS;
     use namada_sdk::token::{Amount, Change};
     use namada_sdk::{address, governance, key, token};
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};

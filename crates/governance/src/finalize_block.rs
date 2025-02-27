@@ -18,15 +18,15 @@ use namada_tx::{Code, Data, Tx};
 use crate::event::GovernanceEvent;
 use crate::pgf::storage::keys as pgf_keys;
 use crate::pgf::storage::steward::StewardDetail;
-use crate::pgf::{storage as pgf_storage, ADDRESS as PGF_ADDRESS};
+use crate::pgf::{ADDRESS as PGF_ADDRESS, storage as pgf_storage};
 use crate::storage::proposal::{
     AddRemove, PGFAction, PGFTarget, ProposalType, StoragePgfFunding,
 };
 use crate::storage::{keys, load_proposals};
 use crate::utils::{
-    compute_proposal_result, ProposalVotes, TallyResult, TallyType, VotePower,
+    ProposalVotes, TallyResult, TallyType, VotePower, compute_proposal_result,
 };
-use crate::{storage, ProposalVote, ADDRESS as GOV_ADDRESS};
+use crate::{ADDRESS as GOV_ADDRESS, ProposalVote, storage};
 
 /// Apply governance updates for a block. On a new epoch, this will look for
 /// proposals to tally completed proposals and execute accepted proposals.

@@ -21,15 +21,15 @@ use namada_sdk::ethereum_events::EthAddress;
 use namada_sdk::ibc::trace::{ibc_token, is_ibc_denom, is_nft_trace};
 use namada_sdk::io::Io;
 use namada_sdk::key::*;
-use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_sdk::masp::ShieldedWallet;
+use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_sdk::wallet::{DatedSpendingKey, DatedViewingKey, Wallet};
 use namada_sdk::{Namada, NamadaImpl};
 
 use super::args;
 use crate::cli::utils;
 use crate::config::global::GlobalConfig;
-use crate::config::{genesis, Config};
+use crate::config::{Config, genesis};
 use crate::wallet::CliWalletUtils;
 use crate::{wallet, wasm_loader};
 

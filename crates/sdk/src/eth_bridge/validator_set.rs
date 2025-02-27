@@ -14,12 +14,12 @@ use namada_core::eth_abi::EncodeCell;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::hints;
 use namada_ethereum_bridge::storage::proof::EthereumProof;
-use namada_io::{display_line, edisplay_line, Client, Io};
+use namada_io::{Client, Io, display_line, edisplay_line};
 use namada_vote_ext::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
 };
 
-use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit, BlockOnEthSync};
+use super::{BlockOnEthSync, block_on_eth_sync, eth_sync_or, eth_sync_or_exit};
 use crate::args;
 use crate::control_flow::time::{self, Duration, Instant};
 use crate::error::{Error as SdkError, EthereumBridgeError, QueryError};

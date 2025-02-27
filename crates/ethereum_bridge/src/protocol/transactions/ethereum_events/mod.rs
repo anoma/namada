@@ -17,7 +17,7 @@ use namada_core::storage::Key;
 use namada_core::token::Amount;
 use namada_proof_of_stake::storage::read_owned_pos_params;
 use namada_state::tx_queue::ExpiredTx;
-use namada_state::{DBIter, StorageHasher, WlState, DB};
+use namada_state::{DB, DBIter, StorageHasher, WlState};
 use namada_systems::governance;
 use namada_tx::data::BatchedTxResult;
 use namada_vote_ext::ethereum_events::{MultiSignedEthEvent, SignedVext, Vext};
@@ -359,11 +359,11 @@ where
 #[cfg(test)]
 mod tests {
     use namada_core::address;
-    use namada_core::ethereum_events::testing::{
-        arbitrary_amount, arbitrary_eth_address, arbitrary_nonce,
-        arbitrary_single_transfer, DAI_ERC20_ETH_ADDRESS,
-    };
     use namada_core::ethereum_events::TransferToNamada;
+    use namada_core::ethereum_events::testing::{
+        DAI_ERC20_ETH_ADDRESS, arbitrary_amount, arbitrary_eth_address,
+        arbitrary_nonce, arbitrary_single_transfer,
+    };
     use namada_core::voting_power::FractionalVotingPower;
     use namada_state::testing::TestState;
     use namada_storage::StorageRead;

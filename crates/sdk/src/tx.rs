@@ -8,7 +8,9 @@ use std::time::Duration;
 
 use borsh::BorshSerialize;
 use masp_primitives::asset_type::AssetType;
+use masp_primitives::transaction::Transaction as MaspTransaction;
 use masp_primitives::transaction::builder::Builder;
+use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::components::sapling::builder::{
     BuildParams, RngBuildParams,
 };
@@ -18,8 +20,6 @@ use masp_primitives::transaction::components::sapling::fees::{
 use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
-use masp_primitives::transaction::components::I128Sum;
-use masp_primitives::transaction::Transaction as MaspTransaction;
 use masp_primitives::zip32::PseudoExtendedKey;
 use namada_account::{InitAccount, UpdateAccount};
 use namada_core::address::{Address, IBC, MASP};
@@ -28,12 +28,12 @@ use namada_core::chain::Epoch;
 use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
+use namada_core::ibc::apps::nft_transfer::types::PrefixedClassId;
 use namada_core::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
 use namada_core::ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
-use namada_core::ibc::apps::nft_transfer::types::PrefixedClassId;
+use namada_core::ibc::apps::transfer::types::PrefixedCoin;
 use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
-use namada_core::ibc::apps::transfer::types::PrefixedCoin;
 use namada_core::ibc::core::channel::types::timeout::{
     TimeoutHeight, TimeoutTimestamp,
 };
@@ -55,20 +55,20 @@ use namada_governance::storage::vote::ProposalVote;
 use namada_ibc::storage::channel_key;
 use namada_ibc::trace::is_nft_trace;
 use namada_ibc::{MsgNftTransfer, MsgTransfer};
-use namada_io::{display_line, edisplay_line, Client, Io};
+use namada_io::{Client, Io, display_line, edisplay_line};
 use namada_proof_of_stake::parameters::{
-    PosParams, MAX_VALIDATOR_METADATA_LEN,
+    MAX_VALIDATOR_METADATA_LEN, PosParams,
 };
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use namada_token as token;
+use namada_token::DenominatedAmount;
 use namada_token::masp::shielded_wallet::ShieldedApi;
 use namada_token::masp::{MaspFeeData, MaspTransferData, ShieldedTransfer};
 use namada_token::storage_key::balance_key;
-use namada_token::DenominatedAmount;
 use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::pos::{BecomeValidator, ConsensusKeyChange};
 use namada_tx::data::{
-    compute_inner_tx_hash, pos, BatchedTxResult, DryRunResult, ResultCode,
+    BatchedTxResult, DryRunResult, ResultCode, compute_inner_tx_hash, pos,
 };
 pub use namada_tx::{Authorization, *};
 use num_traits::Zero;
@@ -82,16 +82,16 @@ use crate::borsh::BorshSerializeExt;
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, Result, TxSubmitError};
 use crate::rpc::{
-    self, get_validator_stake, query_wasm_code_hash, validate_amount,
-    InnerTxResult, TxBroadcastData, TxResponse,
+    self, InnerTxResult, TxBroadcastData, TxResponse, get_validator_stake,
+    query_wasm_code_hash, validate_amount,
 };
 use crate::signing::{
-    self, validate_fee, validate_transparent_fee, SigningTxData,
+    self, SigningTxData, validate_fee, validate_transparent_fee,
 };
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::wallet::WalletIo;
-use crate::{args, Namada};
+use crate::{Namada, args};
 
 /// Initialize account transaction WASM
 pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";

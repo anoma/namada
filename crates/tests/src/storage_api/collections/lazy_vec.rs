@@ -4,13 +4,13 @@ mod tests {
     use borsh::{BorshDeserialize, BorshSerialize};
     use namada_sdk::address::{self, Address};
     use namada_sdk::storage;
-    use namada_tx_prelude::collections::{lazy_vec, LazyCollection, LazyVec};
+    use namada_tx_prelude::collections::{LazyCollection, LazyVec, lazy_vec};
     use namada_tx_prelude::storage::KeySeg;
     use namada_vp_prelude::collection_validation::{self, LazyCollectionExt};
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     use proptest_state_machine::{
-        prop_state_machine, ReferenceStateMachine, StateMachineTest,
+        ReferenceStateMachine, StateMachineTest, prop_state_machine,
     };
     use test_log::test;
 

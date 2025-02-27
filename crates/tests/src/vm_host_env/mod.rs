@@ -32,7 +32,7 @@ mod tests {
     use namada_sdk::ibc::context::transfer_mod::testing::DummyTransferModule;
     use namada_sdk::ibc::primitives::ToProto;
     use namada_sdk::ibc::{
-        storage as ibc_storage, trace as ibc_trace, Error as IbcActionError,
+        Error as IbcActionError, storage as ibc_storage, trace as ibc_trace,
     };
     use namada_sdk::key::*;
     use namada_sdk::storage::{self, BlockHeight, Key, KeySeg};
@@ -46,13 +46,13 @@ mod tests {
     use namada_tx_prelude::chain::ChainId;
     use namada_tx_prelude::{Address, BatchedTx, StorageRead, StorageWrite};
     use namada_vp_prelude::account::AccountPublicKeysMap;
-    use namada_vp_prelude::{sha256, VpEnv};
+    use namada_vp_prelude::{VpEnv, sha256};
     use prost::Message;
     use test_log::test;
 
     use super::{ibc, tx, vp};
-    use crate::tx::{tx_host_env, TestTxEnv};
-    use crate::vp::{vp_host_env, TestVpEnv};
+    use crate::tx::{TestTxEnv, tx_host_env};
+    use crate::vp::{TestVpEnv, vp_host_env};
 
     #[test]
     fn test_tx_read_write() {

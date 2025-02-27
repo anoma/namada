@@ -14,7 +14,7 @@ use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;
-use namada_core::key::{common, SchemeType};
+use namada_core::key::{SchemeType, common};
 use namada_core::masp::{DiversifierIndex, MaspEpoch, PaymentAddress};
 use namada_core::string_encoding::StringEncoded;
 use namada_core::time::DateTimeUtc;
@@ -24,10 +24,10 @@ use namada_governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
 use namada_ibc::IbcShieldingData;
-use namada_io::{display_line, Io};
+use namada_io::{Io, display_line};
 use namada_token::masp::utils::RetryStrategy;
-use namada_tx::data::GasLimit;
 use namada_tx::Memo;
+use namada_tx::data::GasLimit;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
@@ -39,9 +39,9 @@ use crate::rpc::{
     get_registry_from_xcs_osmosis_contract, osmosis_denom_from_namada_denom,
     query_osmosis_pool_routes,
 };
-use crate::signing::{gen_disposable_signing_key, SigningTxData};
+use crate::signing::{SigningTxData, gen_disposable_signing_key};
 use crate::wallet::{DatedSpendingKey, DatedViewingKey};
-use crate::{rpc, tx, Namada};
+use crate::{Namada, rpc, tx};
 
 /// [`Duration`](StdDuration) wrapper that provides a
 /// method to parse a value from a string.

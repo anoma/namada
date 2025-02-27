@@ -10,12 +10,12 @@ use namada_core::collections::{HashMap, HashSet};
 use namada_core::storage::{Key, TxIndex};
 use namada_events::Event;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
-use namada_state::write_log::StorageModification;
 pub use namada_state::Result;
+use namada_state::write_log::StorageModification;
 use namada_state::{Error, PrefixIter, StateRead, StorageRead, StorageWrite};
 use namada_systems::trans_token::{self as token, Amount};
-use namada_vp::native_vp::{CtxPreStorageRead, VpEvaluator};
 use namada_vp::VpEnv;
+use namada_vp::native_vp::{CtxPreStorageRead, VpEvaluator};
 
 use crate::event::IbcEvent;
 use crate::storage::{self, is_ibc_key};
@@ -90,8 +90,10 @@ where
     CA: 'static + Clone,
     EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
 {
-    type PrefixIter<'iter> = PrefixIter<'iter, <S as StateRead>::D> where
-Self: 'iter;
+    type PrefixIter<'iter>
+        = PrefixIter<'iter, <S as StateRead>::D>
+    where
+        Self: 'iter;
 
     fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         match self.store.get(key) {
@@ -308,7 +310,10 @@ where
     CA: 'static + Clone,
     EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
 {
-    type PrefixIter<'iter> = PrefixIter<'iter, <S as StateRead>::D> where Self: 'iter;
+    type PrefixIter<'iter>
+        = PrefixIter<'iter, <S as StateRead>::D>
+    where
+        Self: 'iter;
 
     fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         self.ctx.read_bytes(key)

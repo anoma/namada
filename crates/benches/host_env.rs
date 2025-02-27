@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use namada_apps_lib::account::AccountPublicKeysMap;
 use namada_apps_lib::collections::{HashMap, HashSet};
 use namada_apps_lib::storage::DB;

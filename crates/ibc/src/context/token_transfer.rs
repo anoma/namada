@@ -16,7 +16,7 @@ use namada_core::token::Amount;
 use namada_core::uint::Uint;
 
 use super::common::IbcCommonContext;
-use crate::{trace, IBC_ESCROW_ADDRESS};
+use crate::{IBC_ESCROW_ADDRESS, trace};
 
 /// Token transfer context to handle tokens
 #[derive(Debug)]

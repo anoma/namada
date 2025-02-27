@@ -9,8 +9,8 @@ use namada_core::address::Address;
 use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
-use namada_core::key::testing::{common_sk_from_simple_seed, gen_keypair};
 use namada_core::key::RefTo;
+use namada_core::key::testing::{common_sk_from_simple_seed, gen_keypair};
 use namada_core::{address, key};
 use namada_state::testing::TestState;
 use namada_trans_token::{
@@ -25,12 +25,12 @@ use test_log::test;
 
 use crate::epoched::EpochOffset;
 use crate::lazy_map::Collectable;
-use crate::parameters::testing::arb_pos_params;
 use crate::parameters::OwnedPosParams;
+use crate::parameters::testing::arb_pos_params;
 use crate::queries::find_delegation_validators;
 use crate::rewards::{
-    log_block_rewards_aux, update_rewards_products_and_mint_inflation,
-    PosRewardsCalculator,
+    PosRewardsCalculator, log_block_rewards_aux,
+    update_rewards_products_and_mint_inflation,
 };
 use crate::storage::{
     delegation_targets_handle, get_consensus_key_set,
@@ -44,23 +44,22 @@ use crate::tests::helpers::{
     get_genesis_validators,
 };
 use crate::tests::{
-    bond_amount, bond_tokens, bonds_and_unbonds, change_consensus_key,
-    find_delegations, process_slashes,
+    GovStore, bond_amount, bond_tokens, bonds_and_unbonds,
+    change_consensus_key, find_delegations, process_slashes,
     read_below_threshold_validator_set_addresses, redelegate_tokens, slash,
     test_init_genesis, unbond_tokens, unjail_validator, withdraw_tokens,
-    GovStore,
 };
 use crate::types::{
-    into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
-    GenesisValidator, SlashType, UnbondDetails, ValidatorState, VoteInfo,
-    WeightedValidator,
+    BondDetails, BondId, BondsAndUnbondsDetails, GenesisValidator, SlashType,
+    UnbondDetails, ValidatorState, VoteInfo, WeightedValidator,
+    into_tm_voting_power,
 };
 use crate::{
-    below_capacity_validator_set_handle, bond_handle,
+    StorageRead, below_capacity_validator_set_handle, bond_handle,
     consensus_validator_set_handle, is_delegator, is_validator,
     jail_for_liveness, read_validator_stake, staking_token_address,
     unbond_handle, validator_consensus_key_handle,
-    validator_set_positions_handle, validator_state_handle, StorageRead,
+    validator_set_positions_handle, validator_state_handle,
 };
 
 proptest! {

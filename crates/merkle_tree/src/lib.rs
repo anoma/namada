@@ -23,29 +23,29 @@ pub mod ics23_specs;
 use std::fmt;
 use std::str::FromStr;
 
+pub use arse_merkle_tree::H256;
 use arse_merkle_tree::default_store::DefaultStore;
 use arse_merkle_tree::error::Error as MtError;
-pub use arse_merkle_tree::H256;
 use arse_merkle_tree::{
     Hash as SmtHash, Key as TreeKey, SparseMerkleTree as ArseMerkleTree,
 };
 use eth_bridge_pool::{BridgePoolProof, BridgePoolTree};
-use ics23::commitment_proof::Proof as Ics23Proof;
 pub use ics23::CommitmentProof;
+use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{ExistenceProof, NonExistenceProof};
 use ics23_specs::ibc_leaf_spec;
 use namada_core::address::{Address, InternalAddress};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_core::bytes::HEXLOWER;
 pub use namada_core::chain::{BlockHeight, Epoch};
-use namada_core::eth_bridge_pool::{is_pending_transfer_key, PendingTransfer};
+use namada_core::eth_bridge_pool::{PendingTransfer, is_pending_transfer_key};
 pub use namada_core::hash::{Hash, StorageHasher};
 pub use namada_core::keccak::KeccakHash;
 pub use namada_core::storage::Key;
 use namada_core::storage::{
-    self, DbKeySeg, KeySeg, StringKey, TreeBytes, TreeKeyError, IBC_KEY_LIMIT,
+    self, DbKeySeg, IBC_KEY_LIMIT, KeySeg, StringKey, TreeBytes, TreeKeyError,
 };
-use namada_core::{decode, DecodeError};
+use namada_core::{DecodeError, decode};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;

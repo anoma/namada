@@ -9,12 +9,12 @@ use namada_core::key::PublicKeyTmRawHash;
 use namada_core::time::DateTimeUtc;
 use namada_node::shell;
 use namada_node::shell::test_utils::TestShell;
+use namada_node::shims::abcipp_shim_types::shim::TxBytes;
 use namada_node::shims::abcipp_shim_types::shim::request::{
     FinalizeBlock, ProcessedTx,
 };
-use namada_node::shims::abcipp_shim_types::shim::TxBytes;
-use namada_tx::data::TxType;
 use namada_tx::Tx;
+use namada_tx::data::TxType;
 
 static mut SHELL: Option<TestShell> = None;
 

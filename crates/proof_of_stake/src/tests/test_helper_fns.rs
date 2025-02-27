@@ -29,10 +29,10 @@ use crate::types::{
     EagerRedelegatedBondsMap, RedelegatedTokens, Slash, SlashType,
 };
 use crate::{
-    compute_modified_redelegation, compute_new_redelegated_unbonds,
-    find_bonds_to_remove, fold_and_slash_redelegated_bonds,
     EagerRedelegatedUnbonds, FoldRedelegatedBondsResult, LazyCollection,
-    ModifiedRedelegation, OwnedPosParams,
+    ModifiedRedelegation, OwnedPosParams, compute_modified_redelegation,
+    compute_new_redelegated_unbonds, find_bonds_to_remove,
+    fold_and_slash_redelegated_bonds,
 };
 
 /// `iterateBondsUpToAmountTest`

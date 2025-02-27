@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use namada_sdk::key::*;
 use namada_sdk::wallet::{
-    gen_secret_key, LoadStoreError, Store, ValidatorKeys,
+    LoadStoreError, Store, ValidatorKeys, gen_secret_key,
 };
 use rand::rngs::OsRng;
 

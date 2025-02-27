@@ -11,12 +11,12 @@ use ethabi::Token;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 pub use tiny_keccak::{Hasher, Keccak};
 
 use crate::eth_abi::Encode;
-use crate::hash::{Hash, HASH_LENGTH};
+use crate::hash::{HASH_LENGTH, Hash};
 
 /// Errors for converting / parsing Keccak hashes
 #[allow(missing_docs)]

@@ -6,7 +6,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::arith::{checked, CheckedAdd};
+use namada_core::arith::{CheckedAdd, checked};
 use namada_core::collections::HashMap;
 use namada_core::storage;
 use namada_macros::BorshDeserializer;
@@ -17,8 +17,8 @@ use namada_systems::governance;
 
 use crate::parameters::PosParams;
 use crate::{
-    read_pos_params, Epoch, LazyMap, NestedMap, Result, StorageRead,
-    StorageWrite,
+    Epoch, LazyMap, NestedMap, Result, StorageRead, StorageWrite,
+    read_pos_params,
 };
 
 /// Sub-key holding a lazy map in storage
