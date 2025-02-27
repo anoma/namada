@@ -223,6 +223,8 @@ impl AbcippShim {
         let TakeSnapshot::Yes(db_path, height) = take_snapshot else {
             return;
         };
+        // Ensure that the DB is flushed before making a checkpoint
+        namada_sdk::state::DB::flush(self.service.state.db(), true).unwrap();
         let base_dir = self.service.base_dir.clone();
 
         let (snap_send, snap_recv) = tokio::sync::oneshot::channel();
