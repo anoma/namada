@@ -4,30 +4,30 @@ use std::collections::BTreeSet;
 use std::fmt::{Debug, Display};
 
 use either::Either;
-use eyre::{eyre, WrapErr};
+use eyre::{WrapErr, eyre};
 use namada_sdk::address::{Address, InternalAddress};
 use namada_sdk::booleans::BoolResultUnitExt;
 use namada_sdk::chain::BlockHeight;
 use namada_sdk::collections::HashSet;
+use namada_sdk::events::EventLevel;
 use namada_sdk::events::extend::{
     ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr, UserAccount,
 };
-use namada_sdk::events::EventLevel;
 use namada_sdk::gas::{self, Gas, GasMetering, TxGasMeter, VpGasMeter};
 use namada_sdk::hash::Hash;
 use namada_sdk::parameters::get_gas_scale;
 use namada_sdk::state::{
-    DBIter, State, StorageHasher, StorageRead, TxWrites, WlState, DB,
+    DB, DBIter, State, StorageHasher, StorageRead, TxWrites, WlState,
 };
 use namada_sdk::storage::TxIndex;
+use namada_sdk::token::Amount;
 use namada_sdk::token::event::{TokenEvent, TokenOperation};
 use namada_sdk::token::utils::is_masp_transfer;
-use namada_sdk::token::Amount;
 use namada_sdk::tx::action::{self, Read};
 use namada_sdk::tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_sdk::tx::data::{
-    compute_inner_tx_hash, BatchedTxResult, TxResult, VpStatusFlags, VpsResult,
-    WrapperTx,
+    BatchedTxResult, TxResult, VpStatusFlags, VpsResult, WrapperTx,
+    compute_inner_tx_hash,
 };
 use namada_sdk::tx::event::{MaspEvent, MaspEventKind, MaspTxRef};
 use namada_sdk::tx::{BatchedTxRef, IndexedTx, Tx, TxCommitments};
@@ -37,7 +37,7 @@ use namada_sdk::validation::{
 };
 use namada_sdk::{governance, parameters, state, storage, token};
 use namada_vm::wasm::{TxCache, VpCache};
-use namada_vm::{self, wasm, WasmCacheAccess};
+use namada_vm::{self, WasmCacheAccess, wasm};
 use namada_vote_ext::EthereumTxData;
 use namada_vp::native_vp::NativeVp;
 use namada_vp::state::ReadConversionState;

@@ -3,7 +3,7 @@ use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::hints;
 use namada_core::storage::Key;
 use namada_core::voting_power::FractionalVotingPower;
-use namada_state::{DBIter, PrefixIter, StorageHasher, WlState, DB};
+use namada_state::{DB, DBIter, PrefixIter, StorageHasher, WlState};
 use namada_storage::{StorageRead, StorageWrite};
 use namada_systems::governance;
 

@@ -42,8 +42,8 @@ mod tests {
     use std::cell::RefCell;
 
     use namada_tests::log::test;
-    use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
+    use namada_tests::native_vp::pos::init_pos;
     use namada_tests::tx::*;
     use namada_tests::validation::PosVp;
     use namada_tx_prelude::account::AccountPublicKeysMap;
@@ -53,7 +53,7 @@ mod tests {
     use namada_tx_prelude::chain::ChainId;
     use namada_tx_prelude::dec::{Dec, POS_DECIMAL_PRECISION};
     use namada_tx_prelude::gas::VpGasMeter;
-    use namada_tx_prelude::key::{common, RefTo};
+    use namada_tx_prelude::key::{RefTo, common};
     use namada_tx_prelude::proof_of_stake::parameters::OwnedPosParams;
     use namada_tx_prelude::proof_of_stake::types::GenesisValidator;
 

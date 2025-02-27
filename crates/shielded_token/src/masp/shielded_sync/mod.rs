@@ -5,10 +5,10 @@ use std::ops::ControlFlow;
 
 #[cfg(not(target_family = "wasm"))]
 use eyre::eyre;
-use masp_primitives::sapling::note_encryption::{
-    try_sapling_note_decryption, PreparedIncomingViewingKey,
-};
 use masp_primitives::sapling::ViewingKey;
+use masp_primitives::sapling::note_encryption::{
+    PreparedIncomingViewingKey, try_sapling_note_decryption,
+};
 use masp_primitives::transaction::components::OutputDescription;
 use masp_primitives::transaction::{Authorization, Authorized, Transaction};
 #[cfg(not(target_family = "wasm"))]
@@ -21,7 +21,7 @@ use typed_builder::TypedBuilder;
 use super::shielded_sync::utils::{MaspClient, RetryStrategy};
 use crate::masp::shielded_sync::dispatcher::Dispatcher;
 use crate::masp::utils::DecryptedData;
-use crate::masp::{ShieldedUtils, NETWORK};
+use crate::masp::{NETWORK, ShieldedUtils};
 
 pub mod dispatcher;
 pub mod utils;

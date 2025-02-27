@@ -2,14 +2,14 @@
 //! defined via `router!` macro.
 
 // Re-export to show in rustdoc!
-use namada_state::{DBIter, StorageHasher, DB};
-pub use shell::Shell;
+use namada_state::{DB, DBIter, StorageHasher};
 use shell::SHELL;
+pub use shell::Shell;
 pub use types::{
     EncodedResponseQuery, Error, RequestCtx, RequestQuery, ResponseQuery,
     Router,
 };
-use vp::{Vp, VP};
+use vp::{VP, Vp};
 
 pub use self::shell::eth_bridge::{
     Erc20FlowControl, GenBridgePoolProofReq, GenBridgePoolProofRsp,

@@ -11,22 +11,22 @@ mod test_bridge_pool_vp {
     use namada_sdk::chain::ChainId;
     use namada_sdk::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada_sdk::eth_bridge::{
-        wrapped_erc20s, Contracts, Erc20WhitelistEntry, EthereumBridgeParams,
-        UpgradeableContract,
+        Contracts, Erc20WhitelistEntry, EthereumBridgeParams,
+        UpgradeableContract, wrapped_erc20s,
     };
     use namada_sdk::eth_bridge_pool::{
         GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,
     };
     use namada_sdk::ethereum_events::EthAddress;
     use namada_sdk::gas::VpGasMeter;
-    use namada_sdk::key::{common, ed25519, SecretKey};
+    use namada_sdk::key::{SecretKey, common, ed25519};
     use namada_sdk::token::Amount;
-    use namada_sdk::tx::{Tx, TX_BRIDGE_POOL_WASM as ADD_TRANSFER_WASM};
+    use namada_sdk::tx::{TX_BRIDGE_POOL_WASM as ADD_TRANSFER_WASM, Tx};
     use namada_sdk::validation::EthBridgePoolVp;
     use namada_tx_prelude::BatchedTx;
 
     use crate::native_vp::TestNativeVpEnv;
-    use crate::tx::{tx_host_env, TestTxEnv};
+    use crate::tx::{TestTxEnv, tx_host_env};
     const ASSET: EthAddress = EthAddress([1; 20]);
     const BERTHA_WEALTH: u64 = 1_000_000;
     const BERTHA_TOKENS: u64 = 10_000;

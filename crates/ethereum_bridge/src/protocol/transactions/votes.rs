@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use eyre::{eyre, Result};
+use eyre::{Result, eyre};
 use namada_core::address::Address;
 use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::collections::HashMap;
@@ -14,10 +14,10 @@ use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_proof_of_stake::queries::get_total_voting_power;
-use namada_state::{DBIter, StorageHasher, StorageRead, WlState, DB};
+use namada_state::{DB, DBIter, StorageHasher, StorageRead, WlState};
 use namada_systems::governance;
 
-use super::{read, ChangedKeys};
+use super::{ChangedKeys, read};
 
 pub(super) mod storage;
 pub(super) mod update;

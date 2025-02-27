@@ -8,7 +8,7 @@ use thiserror::Error;
 
 use crate::parameters::MAX_VALIDATOR_METADATA_LEN;
 use crate::types::ValidatorState;
-use crate::{rewards, Error};
+use crate::{Error, rewards};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]

@@ -3,9 +3,9 @@
 use namada_core::address::Address;
 use namada_core::token;
 use namada_proof_of_stake::rewards::{
-    estimate_staking_reward_rate, PosRewardsRates,
+    PosRewardsRates, estimate_staking_reward_rate,
 };
-use namada_state::{DBIter, StorageHasher, DB};
+use namada_state::{DB, DBIter, StorageHasher};
 use namada_token::{
     get_effective_total_native_supply, read_denom, read_total_supply,
 };

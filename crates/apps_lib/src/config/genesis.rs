@@ -441,7 +441,7 @@ pub fn make_dev_genesis(
     use namada_sdk::wallet::alias::Alias;
 
     use crate::config::genesis::chain::{
-        finalize, DeriveEstablishedAddress, FinalizedEstablishedAccountTx,
+        DeriveEstablishedAddress, FinalizedEstablishedAccountTx, finalize,
     };
     use crate::wallet::defaults;
 

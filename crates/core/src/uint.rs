@@ -21,8 +21,8 @@ use uint::construct_uint;
 
 use super::dec::{Dec, POS_DECIMAL_PRECISION};
 use crate::arith::{
-    self, checked, CheckedAdd, CheckedNeg, CheckedSub, OverflowingAdd,
-    OverflowingSub,
+    self, CheckedAdd, CheckedNeg, CheckedSub, OverflowingAdd, OverflowingSub,
+    checked,
 };
 use crate::token;
 use crate::token::{AmountParseError, MaspDigitPos};

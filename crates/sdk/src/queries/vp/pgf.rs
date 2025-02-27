@@ -2,7 +2,7 @@ use namada_core::address::Address;
 use namada_governance::pgf::parameters::PgfParameters;
 use namada_governance::pgf::storage::steward::StewardDetail;
 use namada_governance::storage::proposal::StoragePgfFunding;
-use namada_state::{DBIter, StorageHasher, DB};
+use namada_state::{DB, DBIter, StorageHasher};
 
 use crate::queries::types::RequestCtx;
 

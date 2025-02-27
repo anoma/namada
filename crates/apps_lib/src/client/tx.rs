@@ -4,7 +4,7 @@ use std::io::Write;
 use color_eyre::owo_colors::OwoColorize;
 use ledger_namada_rs::{BIP44Path, KeyResponse, NamadaApp, NamadaKeys};
 use masp_primitives::sapling::redjubjub::PrivateKey;
-use masp_primitives::sapling::{redjubjub, ProofGenerationKey};
+use masp_primitives::sapling::{ProofGenerationKey, redjubjub};
 use masp_primitives::transaction::components::sapling;
 use masp_primitives::transaction::components::sapling::builder::{
     BuildParams, ConvertBuildParams, OutputBuildParams, RngBuildParams,
@@ -23,7 +23,7 @@ use namada_sdk::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
 use namada_sdk::ibc::convert_masp_tx_to_ibc_memo;
-use namada_sdk::io::{display_line, edisplay_line, Io};
+use namada_sdk::io::{Io, display_line, edisplay_line};
 use namada_sdk::key::*;
 use namada_sdk::rpc::{InnerTxResult, TxBroadcastData, TxResponse};
 use namada_sdk::state::EPOCH_SWITCH_BLOCKS_DELAY;
@@ -31,19 +31,19 @@ use namada_sdk::tx::data::compute_inner_tx_hash;
 use namada_sdk::tx::{CompressedAuthorization, Section, Signer, Tx};
 use namada_sdk::wallet::alias::{validator_address, validator_consensus_key};
 use namada_sdk::wallet::{Wallet, WalletIo};
-use namada_sdk::{error, signing, tx, ExtendedViewingKey, Namada};
+use namada_sdk::{ExtendedViewingKey, Namada, error, signing, tx};
 use rand::rngs::OsRng;
 use tokio::sync::RwLock;
 
 use super::rpc;
 use crate::cli::{args, safe_exit};
-use crate::client::tx::signing::{default_sign, SigningTxData};
+use crate::client::tx::signing::{SigningTxData, default_sign};
 use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::tendermint_node;
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::wallet::{
-    gen_validator_keys, read_and_confirm_encryption_password, WalletTransport,
+    WalletTransport, gen_validator_keys, read_and_confirm_encryption_password,
 };
 
 // Maximum number of spend description randomness parameters that can be

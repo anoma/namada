@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 use namada_events::extend::{EventAttributeEntry, ExtendAttributesMap};
 use namada_events::{Event, EventLevel, EventToEmit};
 
-use crate::utils::TallyResult as GovTallyResult;
 use crate::ProposalType as GovProposalType;
+use crate::utils::TallyResult as GovTallyResult;
 
 pub mod types {
     //! Governance event types.

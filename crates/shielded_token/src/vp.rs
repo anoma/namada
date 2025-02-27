@@ -14,10 +14,10 @@ use masp_primitives::transaction::components::{
 };
 use masp_primitives::transaction::{Transaction, TransparentAddress};
 use namada_core::address::{self, Address};
-use namada_core::arith::{checked, CheckedAdd, CheckedSub};
+use namada_core::arith::{CheckedAdd, CheckedSub, checked};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashSet;
-use namada_core::masp::{addr_taddr, encode_asset_type, MaspEpoch, TAddrData};
+use namada_core::masp::{MaspEpoch, TAddrData, addr_taddr, encode_asset_type};
 use namada_core::storage::Key;
 use namada_core::token;
 use namada_core::token::{Amount, MaspDigitPos};
@@ -956,19 +956,19 @@ mod shielded_token_tests {
     use std::cell::RefCell;
     use std::collections::BTreeSet;
 
-    use namada_core::address::testing::nam;
     use namada_core::address::MASP;
+    use namada_core::address::testing::nam;
     use namada_core::borsh::BorshSerializeExt;
     use namada_gas::{TxGasMeter, VpGasMeter};
-    use namada_state::testing::{arb_account_storage_key, arb_key, TestState};
+    use namada_state::testing::{TestState, arb_account_storage_key, arb_key};
     use namada_state::{StateRead, TxIndex};
-    use namada_trans_token::storage_key::balance_key;
     use namada_trans_token::Amount;
+    use namada_trans_token::storage_key::balance_key;
     use namada_tx::{BatchedTx, Tx};
+    use namada_vm::WasmCacheRwAccess;
+    use namada_vm::wasm::VpCache;
     use namada_vm::wasm::compilation_cache::common::testing::vp_cache;
     use namada_vm::wasm::run::VpEvalWasm;
-    use namada_vm::wasm::VpCache;
-    use namada_vm::WasmCacheRwAccess;
     use namada_vp::native_vp::{self, CtxPostStorageRead, CtxPreStorageRead};
     use namada_vp_env::Error;
     use proptest::proptest;

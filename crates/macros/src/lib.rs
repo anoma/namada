@@ -8,10 +8,10 @@
 
 use proc_macro::TokenStream;
 use proc_macro2::{Span as Span2, Span, TokenStream as TokenStream2};
-use quote::{quote, ToTokens};
+use quote::{ToTokens, quote};
 use sha2::Digest;
 use syn::punctuated::Punctuated;
-use syn::{parse_macro_input, ItemEnum, ItemFn, ItemStruct, LitByte};
+use syn::{ItemEnum, ItemFn, ItemStruct, LitByte, parse_macro_input};
 
 /// Generate WASM binding for a transaction main entrypoint function.
 ///

@@ -3,7 +3,7 @@ use namada_core::key::common;
 use namada_core::storage::{self, DbKeySeg};
 use namada_macros::StorageKeys;
 use namada_storage::collections::lazy_map::LazyMap;
-use namada_storage::collections::{lazy_map, LazyCollection};
+use namada_storage::collections::{LazyCollection, lazy_map};
 
 /// Storage keys for account.
 #[derive(StorageKeys)]

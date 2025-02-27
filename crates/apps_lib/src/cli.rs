@@ -17,7 +17,7 @@ use clap::{ArgGroup, ArgMatches, ColorChoice};
 use color_eyre::eyre::Result;
 use namada_sdk::io::StdIo;
 use utils::*;
-pub use utils::{safe_exit, Cmd};
+pub use utils::{Cmd, safe_exit};
 
 pub use self::context::Context;
 use crate::cli::api::CliIo;
@@ -34,7 +34,7 @@ pub mod cmds {
     use super::args::CliTypes;
     use super::utils::*;
     use super::{
-        args, ArgMatches, CLIENT_CMD, NODE_CMD, RELAYER_CMD, WALLET_CMD,
+        ArgMatches, CLIENT_CMD, NODE_CMD, RELAYER_CMD, WALLET_CMD, args,
     };
     use crate::wrap;
 
@@ -3426,7 +3426,7 @@ pub mod args {
         TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
         VP_USER_WASM,
     };
-    use namada_sdk::{token, DEFAULT_GAS_LIMIT};
+    use namada_sdk::{DEFAULT_GAS_LIMIT, token};
 
     use super::context::*;
     use super::utils::*;

@@ -20,6 +20,7 @@ use namada_sdk::collections::{HashMap, HashSet};
 use namada_sdk::control_flow::time::{Duration, Instant};
 use namada_sdk::dec::Dec;
 use namada_sdk::events::Event;
+use namada_sdk::governance::ProposalVote;
 use namada_sdk::governance::parameters::GovernanceParameters;
 use namada_sdk::governance::pgf::parameters::PgfParameters;
 use namada_sdk::governance::pgf::storage::steward::StewardDetail;
@@ -28,15 +29,14 @@ use namada_sdk::governance::storage::proposal::{
     StoragePgfFunding, StorageProposal,
 };
 use namada_sdk::governance::utils::{ProposalVotes, VotePower};
-use namada_sdk::governance::ProposalVote;
 use namada_sdk::hash::Hash;
 use namada_sdk::ibc::parameters::{IbcParameters, IbcTokenRateLimits};
-use namada_sdk::io::{display, display_line, edisplay_line, Client, Io};
+use namada_sdk::io::{Client, Io, display, display_line, edisplay_line};
 use namada_sdk::key::*;
-use namada_sdk::masp::shielded_wallet::ShieldedApi;
 use namada_sdk::masp::MaspTokenRewardData;
+use namada_sdk::masp::shielded_wallet::ShieldedApi;
 use namada_sdk::parameters::{
-    storage as param_storage, EpochDuration, ProposalBytes,
+    EpochDuration, ProposalBytes, storage as param_storage,
 };
 use namada_sdk::proof_of_stake::rewards::PosRewardsRates;
 use namada_sdk::proof_of_stake::types::{
@@ -46,8 +46,8 @@ use namada_sdk::proof_of_stake::types::{
 use namada_sdk::proof_of_stake::{self, OwnedPosParams, PosParams};
 use namada_sdk::queries::RPC;
 use namada_sdk::rpc::{
-    self, enriched_bonds_and_unbonds, format_denominated_amount, query_epoch,
-    query_ibc_params, TxResponse,
+    self, TxResponse, enriched_bonds_and_unbonds, format_denominated_amount,
+    query_epoch, query_ibc_params,
 };
 use namada_sdk::state::LastBlock;
 use namada_sdk::storage::BlockResults;
@@ -56,7 +56,7 @@ use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::{DenominatedAmount, MaspDigitPos};
 use namada_sdk::tx::display_batch_resp;
 use namada_sdk::wallet::AddressVpType;
-use namada_sdk::{error, state as storage, token, Namada};
+use namada_sdk::{Namada, error, state as storage, token};
 
 use crate::cli::{self, args};
 use crate::tendermint::merkle::proof::ProofOps;

@@ -5,12 +5,12 @@ use std::str::FromStr;
 use borsh::schema::{Declaration, Definition, Fields};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
+use ibc::apps::nft_transfer::types::PORT_ID_STR as NFT_PORT_ID_STR;
 use ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
 use ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
-use ibc::apps::nft_transfer::types::PORT_ID_STR as NFT_PORT_ID_STR;
+use ibc::apps::transfer::types::PORT_ID_STR as FT_PORT_ID_STR;
 use ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use ibc::apps::transfer::types::packet::PacketData;
-use ibc::apps::transfer::types::PORT_ID_STR as FT_PORT_ID_STR;
 use ibc::core::channel::types::msgs::{
     MsgRecvPacket as IbcMsgRecvPacket, PacketMsg,
 };

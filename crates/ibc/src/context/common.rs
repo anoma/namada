@@ -27,7 +27,7 @@ use prost::Message;
 
 use super::client::{AnyClientState, AnyConsensusState};
 use super::storage::IbcStorageContext;
-use crate::{storage, trace, NftClass, NftMetadata};
+use crate::{NftClass, NftMetadata, storage, trace};
 
 /// Result of IBC common function call
 pub type Result<T> = std::result::Result<T, HostError>;
