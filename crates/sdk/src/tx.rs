@@ -1726,6 +1726,7 @@ pub async fn build_claim_rewards(
         tx: tx_args,
         validator,
         source,
+        receiver,
         tx_code_path,
     }: &args::ClaimRewards,
 ) -> Result<(Tx, SigningTxData)> {
@@ -1757,7 +1758,30 @@ pub async fn build_claim_rewards(
         None => Ok(source.clone()),
     }?;
 
-    let data = pos::ClaimRewardsCompat { validator, source };
+    // Check that the receiver address exists on chain
+    let receiver = match receiver.clone() {
+        Some(receiver) => {
+            let message = format!(
+                "The receiver address {receiver} doesn't exist on chain."
+            );
+            address_exists_or_err(
+                receiver,
+                tx_args.force,
+                context,
+                message,
+                |err| Error::from(TxSubmitError::LocationDoesNotExist(err)),
+            )
+            .await
+            .map(Some)
+        }
+        None => Ok(receiver.clone()),
+    }?;
+
+    let data = pos::ClaimRewards {
+        validator,
+        source,
+        receiver,
+    };
 
     build(
         context,
