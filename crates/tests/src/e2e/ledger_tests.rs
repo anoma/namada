@@ -38,27 +38,27 @@ use namada_sdk::token;
 use namada_test_utils::TestWasms;
 use serde::Serialize;
 use serde_json::json;
-use setup::constants::*;
 use setup::Test;
+use setup::constants::*;
 
 use super::helpers::{
     epochs_per_year_from_min_duration, get_height, get_pregenesis_wallet,
     wait_for_block_height, wait_for_wasm_pre_compile,
 };
-use super::setup::{set_ethereum_bridge_mode, working_dir, NamadaCmd};
+use super::setup::{NamadaCmd, set_ethereum_bridge_mode, working_dir};
 use crate::e2e::helpers::{
     epoch_sleep, find_address, find_bonded_stake, get_actor_rpc, get_epoch,
     is_debug_mode, parse_reached_epoch,
 };
 use crate::e2e::setup::{
-    self, allow_duplicate_ips, apply_use_device, default_port_offset, sleep,
-    speculos_app_elf, speculos_path, Bin, Who,
+    self, Bin, Who, allow_duplicate_ips, apply_use_device, default_port_offset,
+    sleep, speculos_app_elf, speculos_path,
 };
 use crate::strings::{
     LEDGER_SHUTDOWN, LEDGER_STARTED, NON_VALIDATOR_NODE, TX_APPLIED_SUCCESS,
     TX_REJECTED, VALIDATOR_NODE,
 };
-use crate::{hw_wallet_automation, run, run_as, LastSignState};
+use crate::{LastSignState, hw_wallet_automation, run, run_as};
 
 const ENV_VAR_NAMADA_SEED_NODES: &str = "NAMADA_SEED_NODES";
 
@@ -1167,7 +1167,7 @@ fn double_signing_gets_slashed() -> Result<()> {
 
     use namada_apps_lib::client;
     use namada_apps_lib::config::Config;
-    use namada_sdk::key::{self, ed25519, SigScheme};
+    use namada_sdk::key::{self, SigScheme, ed25519};
 
     let mut pipeline_len = 0;
     let mut unbonding_len = 0;

@@ -5,7 +5,7 @@ pub mod genesis;
 pub mod global;
 pub mod utils;
 
-use std::fs::{create_dir_all, File};
+use std::fs::{File, create_dir_all};
 use std::io::Write;
 use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};

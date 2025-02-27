@@ -138,10 +138,10 @@ where
 #[cfg(test)]
 mod test_vote_extensions {
     use namada_sdk::address::testing::gen_established_address;
+    use namada_sdk::eth_bridge::EthBridgeQueries;
     use namada_sdk::eth_bridge::storage::bridge_pool;
     use namada_sdk::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
     use namada_sdk::eth_bridge::test_utils::GovStore;
-    use namada_sdk::eth_bridge::EthBridgeQueries;
     use namada_sdk::ethereum_events::{
         EthAddress, EthereumEvent, TransferToEthereum, Uint,
     };

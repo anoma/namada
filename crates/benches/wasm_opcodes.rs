@@ -11,13 +11,13 @@
 
 use std::fmt::Display;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use lazy_static::lazy_static;
 use wasm_instrument::parity_wasm::elements::Instruction::*;
 use wasm_instrument::parity_wasm::elements::{
     BlockType, BrTableData, SignExtInstruction,
 };
-use wasmer::{imports, Instance, Module, Store};
+use wasmer::{Instance, Module, Store, imports};
 
 // Don't reduce this value too much or it will be impossible to see the
 // differences in execution times between the diffent instructions

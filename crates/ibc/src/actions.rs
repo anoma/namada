@@ -7,9 +7,9 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 use borsh::BorshDeserialize;
+use ibc::apps::transfer::types::PrefixedCoin;
 use ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use ibc::apps::transfer::types::packet::PacketData;
-use ibc::apps::transfer::types::PrefixedCoin;
 use ibc::core::channel::types::timeout::{TimeoutHeight, TimeoutTimestamp};
 use ibc::primitives::IntoTimestamp;
 use namada_core::address::Address;
@@ -27,8 +27,8 @@ use namada_systems::{parameters, trans_token};
 
 use crate::event::IbcEvent;
 use crate::{
-    storage as ibc_storage, IbcActions, IbcCommonContext, IbcStorageContext,
-    MsgTransfer,
+    IbcActions, IbcCommonContext, IbcStorageContext, MsgTransfer,
+    storage as ibc_storage,
 };
 
 /// IBC protocol context
@@ -43,7 +43,10 @@ impl<S, Token> StorageRead for IbcProtocolContext<'_, S, Token>
 where
     S: State,
 {
-    type PrefixIter<'iter> = <S as StorageRead>::PrefixIter<'iter> where Self: 'iter;
+    type PrefixIter<'iter>
+        = <S as StorageRead>::PrefixIter<'iter>
+    where
+        Self: 'iter;
 
     fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         self.state.read_bytes(key)

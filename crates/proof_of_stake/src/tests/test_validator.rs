@@ -9,7 +9,7 @@ use namada_core::dec::Dec;
 use namada_core::key::testing::{
     arb_common_keypair, common_sk_from_simple_seed,
 };
-use namada_core::key::{self, common, RefTo};
+use namada_core::key::{self, RefTo, common};
 use namada_core::token;
 use namada_state::testing::TestState;
 use namada_trans_token::credit_tokens;
@@ -34,20 +34,20 @@ use crate::tests::helpers::{
     get_tendermint_set_updates,
 };
 use crate::tests::{
-    become_validator, bond_tokens, change_consensus_key, init_genesis_helper,
-    read_below_threshold_validator_set_addresses, test_init_genesis,
-    unbond_tokens, update_validator_deltas, withdraw_tokens, GovStore,
+    GovStore, become_validator, bond_tokens, change_consensus_key,
+    init_genesis_helper, read_below_threshold_validator_set_addresses,
+    test_init_genesis, unbond_tokens, update_validator_deltas, withdraw_tokens,
 };
 use crate::types::{
-    into_tm_voting_power, ConsensusValidator, GenesisValidator, Position,
-    ReverseOrdTokenAmount, ValidatorSetUpdate, WeightedValidator,
+    ConsensusValidator, GenesisValidator, Position, ReverseOrdTokenAmount,
+    ValidatorSetUpdate, WeightedValidator, into_tm_voting_power,
 };
 use crate::validator_set_update::{
     insert_validator_into_validator_set, update_validator_set,
 };
 use crate::{
-    is_validator, lazy_map, staking_token_address, BecomeValidator,
-    OwnedPosParams,
+    BecomeValidator, OwnedPosParams, is_validator, lazy_map,
+    staking_token_address,
 };
 
 proptest! {

@@ -29,8 +29,8 @@ use namada_core::key::common;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::TxType;
+use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::{Authorization, Signed, Tx, TxError};
 
 /// This type represents the data we pass to the extension of

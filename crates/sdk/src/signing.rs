@@ -38,7 +38,7 @@ use namada_token as token;
 use namada_token::storage_key::balance_key;
 use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::pos::BecomeValidator;
-use namada_tx::data::{pos, Fee};
+use namada_tx::data::{Fee, pos};
 use namada_tx::{Authorization, MaspBuilder, Section, SignatureIndex, Tx};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
@@ -63,7 +63,7 @@ use crate::tx::{
 };
 pub use crate::wallet::store::AddressVpType;
 use crate::wallet::{Wallet, WalletIo};
-use crate::{args, rpc, Namada};
+use crate::{Namada, args, rpc};
 
 /// A structure holding the signing data to craft a transaction
 #[derive(Clone)]
@@ -2232,8 +2232,8 @@ mod test_signing {
     use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
     use namada_core::chain::ChainId;
     use namada_core::hash::Hash;
-    use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
     use namada_core::ibc::PGFIbcTarget;
+    use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
     use namada_core::masp::TxIdInner;
     use namada_core::token::{Denomination, MaspDigitPos};
     use namada_governance::storage::proposal::PGFInternalTarget;

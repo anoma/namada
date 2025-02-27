@@ -25,8 +25,8 @@ use namada_ethereum_bridge::protocol::transactions::votes::{
 use namada_ethereum_bridge::storage::bridge_pool::get_key_from_hash;
 use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
 use namada_ethereum_bridge::storage::parameters::UpgradeableContract;
-use namada_ethereum_bridge::storage::proof::{sort_sigs, EthereumProof};
-use namada_ethereum_bridge::storage::vote_tallies::{eth_msgs_prefix, Keys};
+use namada_ethereum_bridge::storage::proof::{EthereumProof, sort_sigs};
+use namada_ethereum_bridge::storage::vote_tallies::{Keys, eth_msgs_prefix};
 use namada_ethereum_bridge::storage::{
     bridge_contract_key, native_erc20_key, vote_tallies,
 };
@@ -34,7 +34,7 @@ use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_state::MembershipProof::BridgePool;
-use namada_state::{DBIter, StorageHasher, StoreRef, StoreType, DB};
+use namada_state::{DB, DBIter, StorageHasher, StoreRef, StoreType};
 use namada_storage::{CustomError, ResultExt, StorageRead};
 use namada_vote_ext::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
@@ -848,14 +848,14 @@ mod test_ethbridge_router {
     use namada_core::voting_power::EthBridgeVotingPower;
     use namada_ethereum_bridge::protocol::transactions::validator_set_update::aggregate_votes;
     use namada_ethereum_bridge::storage::bridge_pool::{
-        get_pending_key, get_signed_root_key, BridgePoolTree,
+        BridgePoolTree, get_pending_key, get_signed_root_key,
     };
     use namada_ethereum_bridge::storage::proof::BridgePoolRootProof;
     use namada_ethereum_bridge::storage::whitelist;
     use namada_ethereum_bridge::test_utils::GovStore;
     use namada_proof_of_stake::queries::get_total_voting_power;
-    use namada_storage::mockdb::MockDBWriteBatch;
     use namada_storage::StorageWrite;
+    use namada_storage::mockdb::MockDBWriteBatch;
     use namada_vote_ext::validator_set_update;
     use namada_vote_ext::validator_set_update::{
         EthAddrBook, VotingPowersMapExt,
@@ -863,8 +863,8 @@ mod test_ethbridge_router {
 
     use super::test_utils::bertha_address;
     use super::*;
-    use crate::queries::testing::TestClient;
     use crate::queries::RPC;
+    use crate::queries::testing::TestClient;
 
     /// Test that reading the bridge validator set works.
     #[tokio::test]

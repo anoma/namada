@@ -35,13 +35,13 @@ use namada_proof_of_stake::types::{
     WeightedValidator,
 };
 use namada_proof_of_stake::{bond_amount, query_reward_tokens};
-use namada_state::{DBIter, KeySeg, StorageHasher, StorageRead, DB};
+use namada_state::{DB, DBIter, KeySeg, StorageHasher, StorageRead};
 use namada_storage::collections::lazy_map;
 use namada_storage::{OptionExt, ResultExt};
 
 use crate::governance;
 use crate::queries::types::RequestCtx;
-use crate::queries::{shell, RequestQuery};
+use crate::queries::{RequestQuery, shell};
 
 // PoS validity predicate queries
 router! {POS,
@@ -907,7 +907,7 @@ mod test {
 
     use super::*;
     use crate::queries::testing::TestClient;
-    use crate::queries::{RequestCtx, RequestQuery, Router, RPC};
+    use crate::queries::{RPC, RequestCtx, RequestQuery, Router};
 
     #[tokio::test]
     async fn test_validator_by_tm_addr_sanitized_input() {

@@ -8,13 +8,13 @@ use std::ops::{Add, AddAssign, Mul};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::ethereum_types as ethereum;
-use eyre::{eyre, Result};
+use eyre::{Result, eyre};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use num_rational::Ratio;
 use serde::de::Visitor;
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
 use crate::token::Amount;
 use crate::uint::Uint;

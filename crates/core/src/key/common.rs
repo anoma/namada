@@ -14,9 +14,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
 use super::{
-    ed25519, secp256k1, ParsePublicKeyError, ParseSecretKeyError,
-    ParseSignatureError, RefTo, SchemeType, SigScheme as SigSchemeTrait,
-    VerifySigError,
+    ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
+    SchemeType, SigScheme as SigSchemeTrait, VerifySigError, ed25519,
+    secp256k1,
 };
 use crate::borsh::BorshSerializeExt;
 use crate::ethereum_events::EthAddress;

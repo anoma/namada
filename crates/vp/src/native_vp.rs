@@ -167,7 +167,10 @@ where
     EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
     CA: 'static + Clone,
 {
-    type PrefixIter<'iter> = PrefixIter<'iter,<S as StateRead>:: D> where Self: 'iter;
+    type PrefixIter<'iter>
+        = PrefixIter<'iter, <S as StateRead>::D>
+    where
+        Self: 'iter;
 
     fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         vp_host_fns::read_pre(self.ctx.gas_meter, self.ctx.state, key)
@@ -242,7 +245,10 @@ where
     EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
     CA: 'static + Clone,
 {
-    type PrefixIter<'iter> = PrefixIter<'iter, <S as StateRead>::D> where Self: 'iter;
+    type PrefixIter<'iter>
+        = PrefixIter<'iter, <S as StateRead>::D>
+    where
+        Self: 'iter;
 
     fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         vp_host_fns::read_post(self.ctx.gas_meter, self.ctx.state, key)
@@ -318,7 +324,10 @@ where
 {
     type Post = CtxPostStorageRead<'view, 'a, S, CA, EVAL>;
     type Pre = CtxPreStorageRead<'view, 'a, S, CA, EVAL>;
-    type PrefixIter<'iter> = PrefixIter<'iter, <S as StateRead>::D> where Self: 'iter;
+    type PrefixIter<'iter>
+        = PrefixIter<'iter, <S as StateRead>::D>
+    where
+        Self: 'iter;
 
     fn pre(&'view self) -> Self::Pre {
         CtxPreStorageRead { ctx: self }

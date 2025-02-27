@@ -32,11 +32,10 @@ use crate::types::{
 };
 use crate::validator_set_update::update_validator_set;
 use crate::{
-    fold_and_slash_redelegated_bonds, get_total_consensus_stake,
-    iter_prefix_bytes, jail_validator, storage, storage_key, types,
     EagerRedelegatedUnbonds, Error, FoldRedelegatedBondsResult, LazyMap,
     OptionExt, OwnedPosParams, PosParams, Result, ResultExt, StorageRead,
-    StorageWrite,
+    StorageWrite, fold_and_slash_redelegated_bonds, get_total_consensus_stake,
+    iter_prefix_bytes, jail_validator, storage, storage_key, types,
 };
 
 /// Apply PoS slashes from the evidence

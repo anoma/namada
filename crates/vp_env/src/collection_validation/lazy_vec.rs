@@ -6,12 +6,12 @@ use std::fmt::Debug;
 use namada_core::arith::checked;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::storage;
+use namada_storage::ResultExt;
 use namada_storage::collections::lazy_vec::{
     Index, LazyVec, SubKey, ValidationError,
 };
-use namada_storage::ResultExt;
 
-use super::{read_data, Data, LazyCollectionExt};
+use super::{Data, LazyCollectionExt, read_data};
 use crate::VpEnv;
 
 /// Possible sub-keys of a [`LazyVec`], together with their [`Data`]

@@ -3,11 +3,11 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use base64::prelude::{Engine, BASE64_STANDARD};
+use base64::prelude::{BASE64_STANDARD, Engine};
 use color_eyre::owo_colors::OwoColorize;
+use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use flate2::Compression;
 use itertools::Either;
 use namada_sdk::address::{Address, ImplicitAddress};
 use namada_sdk::args::DeviceTransport;
@@ -21,7 +21,7 @@ use namada_sdk::string_encoding::StringEncoded;
 use namada_sdk::token;
 use namada_sdk::tx::Tx;
 use namada_sdk::uint::Uint;
-use namada_sdk::wallet::{alias, LoadStoreError, Wallet};
+use namada_sdk::wallet::{LoadStoreError, Wallet, alias};
 use namada_vm::validate_untrusted_wasm;
 use prost::bytes::Bytes;
 use serde_json::json;
@@ -32,13 +32,13 @@ use crate::cli::args;
 use crate::cli::context::wasm_dir_from_env_or;
 use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::transactions::{
-    sign_delegation_bond_tx, sign_validator_account_tx, UnsignedTransactions,
+    UnsignedTransactions, sign_delegation_bond_tx, sign_validator_account_tx,
 };
 use crate::config::genesis::{AddrOrPk, GenesisAddress};
 use crate::config::global::GlobalConfig;
-use crate::config::{self, genesis, get_default_namada_folder, TendermintMode};
+use crate::config::{self, TendermintMode, genesis, get_default_namada_folder};
 use crate::tendermint::node::Id as TendermintNodeId;
-use crate::wallet::{pre_genesis, CliWalletUtils};
+use crate::wallet::{CliWalletUtils, pre_genesis};
 use crate::{tendermint_node, wasm_loader};
 
 pub const NET_ACCOUNTS_DIR: &str = "setup";

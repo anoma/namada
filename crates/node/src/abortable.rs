@@ -2,7 +2,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 use namada_sdk::control_flow::{
-    install_shutdown_signal, ShutdownSignal, ShutdownSignalChan,
+    ShutdownSignal, ShutdownSignalChan, install_shutdown_signal,
 };
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;

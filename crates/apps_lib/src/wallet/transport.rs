@@ -4,11 +4,11 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::ops::Deref;
 use std::str::FromStr;
 
-use ledger_lib::transport::TcpInfo;
 use ledger_lib::Transport;
+use ledger_lib::transport::TcpInfo;
 use ledger_transport::{APDUAnswer, APDUCommand};
-use ledger_transport_hid::hidapi::HidApi;
 use ledger_transport_hid::TransportNativeHID;
+use ledger_transport_hid::hidapi::HidApi;
 use namada_sdk::args;
 
 /// Hardware wallet transport

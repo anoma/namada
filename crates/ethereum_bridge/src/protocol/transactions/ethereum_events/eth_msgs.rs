@@ -5,7 +5,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use namada_vote_ext::ethereum_events::MultiSignedEthEvent;
 
-use crate::protocol::transactions::votes::{dedupe, Tally, Votes};
+use crate::protocol::transactions::votes::{Tally, Votes, dedupe};
 
 /// Represents an Ethereum event being seen by some validators
 #[derive(

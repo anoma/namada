@@ -6,7 +6,7 @@ use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::common;
 use namada_core::token::Amount;
-use namada_state::{DBIter, StorageHasher, WlState, DB};
+use namada_state::{DB, DBIter, StorageHasher, WlState};
 use namada_systems::governance;
 use namada_tx::data::BatchedTxResult;
 use namada_vote_ext::validator_set_update;

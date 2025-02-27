@@ -27,8 +27,8 @@ use thiserror::Error;
 use crate::data::{Fee, GasLimit, TxType, WrapperTx};
 use crate::sign::{SignatureIndex, VerifySigError};
 use crate::{
-    proto, Authorization, Code, Data, Header, MaspBuilder, Section, Signer,
-    TxCommitments,
+    Authorization, Code, Data, Header, MaspBuilder, Section, Signer,
+    TxCommitments, proto,
 };
 
 #[allow(missing_docs)]

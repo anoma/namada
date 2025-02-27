@@ -7,15 +7,15 @@ use namada_sdk::state::mockdb::MockDB;
 use namada_sdk::state::prefix_iter::PrefixIterators;
 use namada_sdk::state::testing::TestState;
 use namada_sdk::storage::{self, Key, TxIndex};
-use namada_sdk::tx::data::TxType;
 use namada_sdk::tx::Tx;
+use namada_sdk::tx::data::TxType;
 use namada_tx_prelude::BatchedTx;
-use namada_vm::wasm::{self, VpCache};
 use namada_vm::WasmCacheRwAccess;
+use namada_vm::wasm::{self, VpCache};
 use namada_vp_prelude::Ctx;
 use tempfile::TempDir;
 
-use crate::tx::{tx_host_env, TestTxEnv};
+use crate::tx::{TestTxEnv, tx_host_env};
 
 /// VP execution context provides access to host env functions
 pub static CTX: Ctx = unsafe { Ctx::new() };

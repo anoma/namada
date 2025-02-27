@@ -1,7 +1,7 @@
 //! The shielded wallet implementation
-use std::collections::{btree_map, BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, btree_map};
 
-use eyre::{eyre, Context};
+use eyre::{Context, eyre};
 use masp_primitives::asset_type::AssetType;
 #[cfg(feature = "mainnet")]
 use masp_primitives::consensus::MainNetwork as Network;
@@ -22,16 +22,16 @@ use masp_primitives::transaction::components::{
     I128Sum, TxOut, U64Sum, ValueSum,
 };
 use masp_primitives::transaction::fees::fixed::FeeRule;
-use masp_primitives::transaction::{builder, Transaction};
+use masp_primitives::transaction::{Transaction, builder};
 use masp_primitives::zip32::{ExtendedKey, PseudoExtendedKey};
 use namada_core::address::Address;
-use namada_core::arith::{checked, CheckedAdd, CheckedSub};
+use namada_core::arith::{CheckedAdd, CheckedSub, checked};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::chain::BlockHeight;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::control_flow;
 use namada_core::masp::{
-    encode_asset_type, AssetData, MaspEpoch, TransferSource, TransferTarget,
+    AssetData, MaspEpoch, TransferSource, TransferTarget, encode_asset_type,
 };
 use namada_core::task_env::TaskEnvironment;
 use namada_core::time::{DateTimeUtc, DurationSecs};
@@ -40,8 +40,8 @@ use namada_core::token::{
 };
 use namada_io::client::Client;
 use namada_io::{
-    display_line, edisplay_line, Io, MaybeSend, MaybeSync, NamadaIo,
-    ProgressBar,
+    Io, MaybeSend, MaybeSync, NamadaIo, ProgressBar, display_line,
+    edisplay_line,
 };
 use namada_wallet::{DatedKeypair, DatedSpendingKey};
 use rand::prelude::StdRng;
@@ -49,15 +49,15 @@ use rand_core::{OsRng, SeedableRng};
 
 use super::utils::MaspIndexedTx;
 use crate::masp::utils::MaspClient;
-#[cfg(any(test, feature = "testing"))]
-use crate::masp::{testing, ENV_VAR_MASP_TEST_SEED};
 use crate::masp::{
     ContextSyncStatus, Conversions, MaspAmount, MaspDataLogEntry, MaspFeeData,
     MaspSourceTransferData, MaspTargetTransferData, MaspTransferData,
-    MaspTxReorderedData, NoteIndex, ShieldedSyncConfig, ShieldedTransfer,
-    ShieldedUtils, SpentNotesTracker, TransferErr, WalletMap, WitnessMap,
-    NETWORK,
+    MaspTxReorderedData, NETWORK, NoteIndex, ShieldedSyncConfig,
+    ShieldedTransfer, ShieldedUtils, SpentNotesTracker, TransferErr, WalletMap,
+    WitnessMap,
 };
+#[cfg(any(test, feature = "testing"))]
+use crate::masp::{ENV_VAR_MASP_TEST_SEED, testing};
 
 /// Represents the current state of the shielded pool from the perspective of
 /// the chosen viewing keys.
@@ -1859,7 +1859,7 @@ mod test_shielded_wallet {
     use super::*;
     use crate::masp::fs::FsShieldedUtils;
     use crate::masp::test_utils::{
-        arbitrary_pa, arbitrary_vk, create_note, MockNamadaIo, TestingContext,
+        MockNamadaIo, TestingContext, arbitrary_pa, arbitrary_vk, create_note,
     };
 
     #[tokio::test]
