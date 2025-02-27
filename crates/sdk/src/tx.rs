@@ -1757,7 +1757,7 @@ pub async fn build_claim_rewards(
         None => Ok(source.clone()),
     }?;
 
-    let data = pos::ClaimRewards { validator, source };
+    let data = pos::ClaimRewardsCompat { validator, source };
 
     build(
         context,
