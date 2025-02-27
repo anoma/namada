@@ -106,7 +106,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: install_cargo_msrv
         if: matrix.build == 'ubuntu'
-        run: cargo install cargo-msrv
+        run: cargo install cargo-msrv --locked
       - name: install_cargo_msrv_no_default
         if: matrix.build != 'ubuntu'
         run: cargo install cargo-msrv --no-default-features
