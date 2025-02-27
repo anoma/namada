@@ -212,6 +212,7 @@ impl Ctx {
         self.push_action(Action::Pos(PosAction::ClaimRewards(ClaimRewards {
             validator: validator.clone(),
             source: source.cloned(),
+            receiver: receiver.cloned(),
         })))?;
 
         let current_epoch = self.get_block_epoch()?;
