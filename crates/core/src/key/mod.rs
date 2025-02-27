@@ -84,7 +84,6 @@ pub trait RefTo<T> {
 
 /// Simple and safe type conversions that may fail in a controlled
 /// way under some circumstances.
-
 pub trait TryFromRef<T: ?Sized>: Sized {
     /// The type returned in the event of a conversion error.
     type Error;
@@ -117,7 +116,6 @@ impl FromStr for SchemeType {
 }
 
 /// Represents a signature
-
 pub trait Signature:
     Hash + PartialOrd + Serialize + BorshSerialize + BorshDeserialize + BorshSchema
 {
@@ -142,7 +140,6 @@ pub trait Signature:
 }
 
 /// Represents a public key
-
 pub trait PublicKey:
     BorshSerialize
     + BorshDeserialize
@@ -177,7 +174,6 @@ pub trait PublicKey:
 }
 
 /// Represents a secret key
-
 pub trait SecretKey:
     BorshSerialize
     + BorshDeserialize
@@ -603,7 +599,7 @@ pub mod testing {
 #[cfg(test)]
 macro_rules! sigscheme_test {
     ($name:ident, $type:ty) => {
-        pub mod $name {
+        mod $name {
             use super::*;
 
             /// Run `cargo test gen_keypair -- --nocapture` to generate a

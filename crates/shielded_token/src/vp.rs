@@ -56,7 +56,7 @@ struct ChangedBalances {
     post: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
 }
 
-impl<'view, 'ctx: 'view, CTX, Params, Gov, Ibc, TransToken, Transfer>
+impl<'ctx, CTX, Params, Gov, Ibc, TransToken, Transfer>
     MaspVp<'ctx, CTX, Params, Gov, Ibc, TransToken, Transfer>
 where
     CTX: VpEnv<'ctx>

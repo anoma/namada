@@ -2879,7 +2879,7 @@ fn wait_for_pass(test: &Test) -> Result<()> {
         sleep(5);
         let mut gaia = run_cosmos_cmd(test, args, Some(40))?;
         let (_, matched) = gaia.exp_regex("status: .*")?;
-        if matched.split(' ').last().unwrap() == "PROPOSAL_STATUS_PASSED" {
+        if matched.split(' ').next_back().unwrap() == "PROPOSAL_STATUS_PASSED" {
             break;
         }
     }
@@ -3221,7 +3221,11 @@ fn gen_ibc_shielding_data(
     let mut client = run!(dst_test, Bin::Client, args, Some(120))?;
     let (_unread, matched) =
         client.exp_regex("Output IBC shielding transfer .*")?;
-    let file_path = matched.trim().split(' ').last().expect("invalid output");
+    let file_path = matched
+        .trim()
+        .split(' ')
+        .next_back()
+        .expect("invalid output");
     client.assert_success();
 
     Ok(PathBuf::from_str(file_path).expect("invalid file path"))
@@ -3400,7 +3404,11 @@ fn get_cosmwasm_port_id(test: &Test, ics721_contract: &str) -> Result<PortId> {
         vec!["query", "wasm", "contract", ics721_contract, "--node", &rpc];
     let mut cosmos = run_cosmos_cmd(test, args, Some(40))?;
     let (_unread, matched) = cosmos.exp_regex("ibc_port_id: wasm.*")?;
-    let port_id = matched.trim().split(' ').last().expect("invalid output");
+    let port_id = matched
+        .trim()
+        .split(' ')
+        .next_back()
+        .expect("invalid output");
     cosmos.exp_eof()?;
     port_id
         .parse()

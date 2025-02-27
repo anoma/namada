@@ -445,15 +445,17 @@ impl ArgFromContext for Address {
         FromStr::from_str(raw)
             // An Ethereum address
             .or_else(|_| {
-                (raw.len() == 42 && raw.starts_with("0x"))
-                    .then(|| {
+                if raw.len() == 42 && raw.starts_with("0x") {
+                    {
                         raw.parse::<EthAddress>()
                             .map(|addr| {
                                 Address::Internal(InternalAddress::Erc20(addr))
                             })
                             .map_err(|_| SkipErr)
-                    })
-                    .unwrap_or(Err(SkipErr))
+                    }
+                } else {
+                    Err(SkipErr)
+                }
             })
             // An IBC token
             .or_else(|_| {

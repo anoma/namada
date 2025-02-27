@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_macros::BorshDeserializer;
+use namada_migrations::REGISTER_DESERIALIZERS;
 use namada_sdk::address::Address;
 use namada_sdk::masp_primitives::asset_type::AssetType;
 use namada_sdk::masp_primitives::merkle_tree::FrozenCommitmentTree;

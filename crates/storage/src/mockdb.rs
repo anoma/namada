@@ -632,7 +632,7 @@ impl DB for MockDB {
             if key.starts_with(&current_key_prefix.to_string()) {
                 let hash = key
                     .rsplit(KEY_SEGMENT_SEPARATOR)
-                    .last()
+                    .next_back()
                     .unwrap()
                     .to_string();
                 target_hashes.push(hash);

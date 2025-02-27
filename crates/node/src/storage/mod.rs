@@ -356,7 +356,7 @@ mod tests {
         // 1. For each `blocks_write_value`, write the current block height if
         // true or delete otherwise.
         // We `.enumerate()` height (starting from `0`)
-        let blocks_write_value = blocks_write_value
+        let mut blocks_write_value = blocks_write_value
             .into_iter()
             .enumerate()
             .map(|(height, write_value)| {
@@ -409,7 +409,7 @@ mod tests {
         // value, if any.
 
         // If height is >= storage.last_height, it should read the latest state.
-        let is_last_write = blocks_write_value.last().unwrap().1;
+        let is_last_write = blocks_write_value.next_back().unwrap().1;
 
         // The upper bound is arbitrary.
         for height in state.in_mem().get_last_block_height().0

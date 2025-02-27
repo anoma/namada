@@ -814,18 +814,3 @@ pub fn into_tm_voting_power(votes_per_token: Dec, tokens: Amount) -> i64 {
     let res = i128::try_from(prod.change()).expect("Failed conversion to i128");
     i64::try_from(res).expect("Invalid validator voting power (i64)")
 }
-
-#[cfg(test)]
-pub mod tests {
-
-    use std::ops::Range;
-
-    use proptest::prelude::*;
-
-    use super::*;
-
-    /// Generate arbitrary epoch in given range
-    pub fn arb_epoch(range: Range<u64>) -> impl Strategy<Value = Epoch> {
-        range.prop_map(Epoch)
-    }
-}

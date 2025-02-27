@@ -112,6 +112,7 @@ mod wrap_tx {
     //! that can be passed to [`wasmer`], to be used by the guest wasm code.
 
     #![allow(missing_docs)]
+    #![allow(clippy::type_complexity)]
 
     use namada_state::{DB, DBIter, StorageHasher};
     use wasmer::FunctionEnvMut;
@@ -293,6 +294,7 @@ mod wrap_vp {
     //! that can be passed to [`wasmer`], to be used by the guest wasm code.
 
     #![allow(missing_docs)]
+    #![allow(clippy::type_complexity)]
 
     use namada_state::{DB, DBIter, StorageHasher};
     use wasmer::FunctionEnvMut;

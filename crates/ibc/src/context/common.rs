@@ -169,7 +169,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             }
         }
         lowest_height_value
-            .map(|(_, value)| value.try_into().map_err(HostError::from))
+            .map(|(_, value)| value.try_into())
             .transpose()
     }
 
@@ -198,7 +198,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             }
         }
         highest_height_value
-            .map(|(_, value)| value.try_into().map_err(HostError::from))
+            .map(|(_, value)| value.try_into())
             .transpose()
     }
 

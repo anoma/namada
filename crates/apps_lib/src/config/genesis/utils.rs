@@ -48,7 +48,7 @@ pub fn write_toml<T: Serialize>(
     })
 }
 
-pub(super) async fn with_hardware_wallet<'a, T>(
+pub(super) async fn with_hardware_wallet<T>(
     tx: Tx,
     pubkey: common::PublicKey,
     parts: signing::Signable,

@@ -91,7 +91,7 @@ pub struct TestIbcVp<'a> {
     pub ibc: IbcVp<'a, TestState, WasmCacheRwAccess>,
 }
 
-impl<'a> TestIbcVp<'a> {
+impl TestIbcVp<'_> {
     pub fn validate(&self, batched_tx: &BatchedTxRef) -> native_vp::Result<()> {
         self.ibc.validate_tx(
             batched_tx,

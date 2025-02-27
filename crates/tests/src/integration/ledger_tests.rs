@@ -453,7 +453,7 @@ fn pos_rewards() -> Result<()> {
     let words = res.split(' ').collect::<Vec<_>>();
     let res = words[words.len() - 2];
     let mut last_amount = token::Amount::from_str(
-        res.split(' ').last().unwrap(),
+        res.split(' ').next_back().unwrap(),
         NATIVE_MAX_DECIMAL_PLACES,
     )
     .unwrap();
@@ -478,7 +478,7 @@ fn pos_rewards() -> Result<()> {
         let words = res.split(' ').collect::<Vec<_>>();
         let res = words[words.len() - 2];
         let amount = token::Amount::from_str(
-            res.split(' ').last().unwrap(),
+            res.split(' ').next_back().unwrap(),
             NATIVE_MAX_DECIMAL_PLACES,
         )
         .unwrap();
@@ -502,7 +502,7 @@ fn pos_rewards() -> Result<()> {
     assert_matches!(captured.result, Ok(_));
     let res = captured.matches(r"nam: [0-9\.]+").expect("Test failed");
     let amount_pre = token::Amount::from_str(
-        res.split(' ').last().unwrap(),
+        res.split(' ').next_back().unwrap(),
         NATIVE_MAX_DECIMAL_PLACES,
     )
     .unwrap();
@@ -538,7 +538,7 @@ fn pos_rewards() -> Result<()> {
     assert_matches!(captured.result, Ok(_));
     let res = captured.matches(r"nam: [0-9\.]+").expect("Test failed");
     let amount_post = token::Amount::from_str(
-        res.split(' ').last().unwrap(),
+        res.split(' ').next_back().unwrap(),
         NATIVE_MAX_DECIMAL_PLACES,
     )
     .unwrap();
@@ -656,7 +656,7 @@ fn test_bond_queries() -> Result<()> {
         .matches(r"withdrawable starting from epoch [0-9]+")
         .expect("Test failed");
     let withdraw_epoch =
-        Epoch::from_str(res.split(' ').last().unwrap()).unwrap();
+        Epoch::from_str(res.split(' ').next_back().unwrap()).unwrap();
 
     // 6. Wait for withdraw_epoch
     loop {

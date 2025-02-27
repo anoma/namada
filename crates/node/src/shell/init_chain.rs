@@ -195,7 +195,7 @@ where
     }
 }
 
-impl<'shell, D, H> InitChainValidation<'shell, D, H>
+impl<D, H> InitChainValidation<'_, D, H>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -729,7 +729,7 @@ where
     shell: &'shell mut Shell<D, H>,
 }
 
-impl<'shell, D, H> std::ops::Deref for InitChainValidation<'shell, D, H>
+impl<D, H> std::ops::Deref for InitChainValidation<'_, D, H>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -741,7 +741,7 @@ where
     }
 }
 
-impl<'shell, D, H> std::ops::DerefMut for InitChainValidation<'shell, D, H>
+impl<D, H> std::ops::DerefMut for InitChainValidation<'_, D, H>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,

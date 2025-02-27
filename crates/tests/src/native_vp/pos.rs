@@ -661,7 +661,6 @@ pub mod testing {
     /// PoS storage modifications
     #[derive(Clone, Derivative)]
     #[derivative(Debug)]
-
     pub enum PosStorageChange {
         /// Ensure that the account exists when initializing a valid new
         /// validator or delegation from a new owner

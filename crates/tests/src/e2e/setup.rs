@@ -635,7 +635,7 @@ impl TestDir {
     /// is set to `true`.
     pub fn new() -> Self {
         let keep_temp = match env::var(ENV_VAR_KEEP_TEMP) {
-            Ok(val) => val.to_ascii_lowercase() != "false",
+            Ok(val) => !val.eq_ignore_ascii_case("false"),
             _ => false,
         };
 

@@ -138,7 +138,7 @@ impl<'de> Deserialize<'de> for KeccakHash {
     {
         struct KeccakVisitor;
 
-        impl<'de> de::Visitor<'de> for KeccakVisitor {
+        impl de::Visitor<'_> for KeccakVisitor {
             type Value = KeccakHash;
 
             fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
