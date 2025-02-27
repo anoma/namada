@@ -2132,6 +2132,10 @@ fn apply_snapshot() -> Result<()> {
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, args));
     assert!(captured.contains("1981234"));
 
+    // DB must be flushed before checkpoint
+    namada_sdk::state::DB::flush(node.shell.lock().unwrap().state.db(), true)
+        .unwrap();
+
     let base_dir = node.test_dir.path();
     let db = namada_node::storage::open(node.db_path(), true, None)
         .expect("Could not open DB");
