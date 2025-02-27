@@ -288,7 +288,7 @@ impl Serialize for FractionalVotingPower {
 
 struct VPVisitor;
 
-impl<'de> Visitor<'de> for VPVisitor {
+impl Visitor<'_> for VPVisitor {
     type Value = FractionalVotingPower;
 
     fn expecting(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {

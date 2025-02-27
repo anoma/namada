@@ -257,7 +257,7 @@ impl Deref for AtomicBuffer {
     }
 }
 
-impl<'a> AsyncRead for &'a AtomicBuffer {
+impl AsyncRead for &AtomicBuffer {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,

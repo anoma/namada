@@ -378,11 +378,7 @@ pub async fn query_proposal(context: &impl Namada, args: args::QueryProposal) {
         }
         let last_proposal_id = next_proposal_id.checked_sub(1).unwrap();
 
-        let from_id = if last_proposal_id > 10 {
-            last_proposal_id - 10
-        } else {
-            0
-        };
+        let from_id = last_proposal_id.saturating_sub(10);
 
         for id in from_id..=last_proposal_id {
             let proposal = query_proposal_by_id(context.client(), id)

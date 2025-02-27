@@ -120,7 +120,7 @@ impl<T: TypeHash + BorshSerialize + BorshDeserialize> From<T> for UpdateValue {
 #[derive(Default)]
 struct UpdateValueVisitor;
 
-impl<'de> Visitor<'de> for UpdateValueVisitor {
+impl Visitor<'_> for UpdateValueVisitor {
     type Value = UpdateValue;
 
     fn expecting(&self, formatter: &mut Formatter<'_>) -> core::fmt::Result {

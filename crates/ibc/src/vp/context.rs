@@ -83,8 +83,8 @@ where
     }
 }
 
-impl<'view, 'a, S, CA, EVAL> StorageRead
-    for PseudoExecutionStorage<'view, 'a, S, CA, EVAL>
+impl<'a, S, CA, EVAL> StorageRead
+    for PseudoExecutionStorage<'_, 'a, S, CA, EVAL>
 where
     S: 'static + StateRead,
     CA: 'static + Clone,
@@ -176,8 +176,8 @@ where
     }
 }
 
-impl<'view, 'a, S, CA, EVAL> StorageWrite
-    for PseudoExecutionStorage<'view, 'a, S, CA, EVAL>
+impl<'a, S, CA, EVAL> StorageWrite
+    for PseudoExecutionStorage<'_, 'a, S, CA, EVAL>
 where
     S: 'static + StateRead,
     CA: 'static + Clone,
@@ -303,8 +303,7 @@ where
     }
 }
 
-impl<'view, 'a, S, CA, EVAL> StorageRead
-    for VpValidationContext<'view, 'a, S, CA, EVAL>
+impl<'a, S, CA, EVAL> StorageRead for VpValidationContext<'_, 'a, S, CA, EVAL>
 where
     S: 'static + StateRead,
     CA: 'static + Clone,
@@ -369,8 +368,7 @@ where
     }
 }
 
-impl<'view, 'a, S, CA, EVAL> StorageWrite
-    for VpValidationContext<'view, 'a, S, CA, EVAL>
+impl<'a, S, CA, EVAL> StorageWrite for VpValidationContext<'_, 'a, S, CA, EVAL>
 where
     S: 'static + StateRead,
     CA: 'static + Clone,
@@ -389,8 +387,8 @@ where
     }
 }
 
-impl<'view, 'a, S, CA, EVAL> IbcStorageContext
-    for VpValidationContext<'view, 'a, S, CA, EVAL>
+impl<'a, S, CA, EVAL> IbcStorageContext
+    for VpValidationContext<'_, 'a, S, CA, EVAL>
 where
     S: 'static + StateRead,
     CA: 'static + Clone,
@@ -448,8 +446,8 @@ where
     }
 }
 
-impl<'view, 'a, S, CA, EVAL> IbcCommonContext
-    for VpValidationContext<'view, 'a, S, CA, EVAL>
+impl<'a, S, CA, EVAL> IbcCommonContext
+    for VpValidationContext<'_, 'a, S, CA, EVAL>
 where
     S: 'static + StateRead,
     CA: 'static + Clone,

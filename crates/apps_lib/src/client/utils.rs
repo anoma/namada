@@ -89,7 +89,7 @@ pub async fn join_network(
 
     let validator_alias_and_dir = pre_genesis_path
         .and_then(|path| {
-            let alias = path.components().last()?;
+            let alias = path.components().next_back()?;
             match alias {
                 std::path::Component::Normal(alias) => {
                     let alias = alias.to_string_lossy().to_string();

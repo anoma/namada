@@ -823,9 +823,8 @@ pub mod client_only_methods {
                 .pos()
                 .bonds_and_unbonds(client, source, validator)
                 .await?;
-            Ok(enrich_bonds_and_unbonds(current_epoch, data).map_err(|e| {
-                std::io::Error::new(std::io::ErrorKind::Other, e)
-            })?)
+            Ok(enrich_bonds_and_unbonds(current_epoch, data)
+                .map_err(std::io::Error::other)?)
         }
     }
 }

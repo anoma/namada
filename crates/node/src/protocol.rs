@@ -211,7 +211,7 @@ pub fn dispatch_tx<'a, D, H, CA>(
     dispatch_args: DispatchArgs<'a, CA>,
     tx_gas_meter: &'a RefCell<TxGasMeter>,
     state: &'a mut WlState<D, H>,
-) -> std::result::Result<TxResult<Error>, DispatchError>
+) -> std::result::Result<TxResult<Error>, Box<DispatchError>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -232,10 +232,10 @@ where
                 if state.write_log().has_replay_protection_entry(&tx_hash) {
                     // If the same batch has already been committed in
                     // this block, skip execution and return
-                    return Err(DispatchError {
+                    return Err(Box::new(DispatchError {
                         error: Error::ReplayAttempt(tx_hash),
                         tx_result: None,
-                    });
+                    }));
                 }
 
                 dispatch_inner_txs(
@@ -252,8 +252,9 @@ where
             } else {
                 // Governance proposal. We don't allow tx batches in this case,
                 // just take the first one
-                let cmt =
-                    tx.first_commitments().ok_or(Error::MissingInnerTxs)?;
+                let cmt = tx.first_commitments().ok_or_else(|| {
+                    Box::new(DispatchError::from(Error::MissingInnerTxs))
+                })?;
                 let batched_tx_result = apply_wasm_tx(
                     wrapper_hash,
                     &tx.batch_ref_tx(cmt),
@@ -264,7 +265,8 @@ where
                         vp_wasm_cache,
                         tx_wasm_cache,
                     },
-                )?;
+                )
+                .map_err(|e| Box::new(DispatchError::from(e)))?;
 
                 Ok({
                     let mut batch_results = TxResult::new();
@@ -279,9 +281,12 @@ where
         }
         DispatchArgs::Protocol(protocol_tx) => {
             // No bundles of protocol transactions, only take the first one
-            let cmt = tx.first_commitments().ok_or(Error::MissingInnerTxs)?;
+            let cmt = tx.first_commitments().ok_or_else(|| {
+                Box::new(DispatchError::from(Error::MissingInnerTxs))
+            })?;
             let batched_tx_result =
-                apply_protocol_tx(protocol_tx.tx, tx.data(cmt), state)?;
+                apply_protocol_tx(protocol_tx.tx, tx.data(cmt), state)
+                    .map_err(|e| Box::new(DispatchError::from(e)))?;
 
             Ok({
                 let mut batch_results = TxResult::new();
@@ -319,7 +324,9 @@ where
                 &mut shell_params,
                 Some(block_proposer),
             )
-            .map_err(|e| Error::WrapperRunnerError(e.to_string()).into())
+            .map_err(|e| {
+                Box::new(Error::WrapperRunnerError(e.to_string()).into())
+            })
         }
     }
 }
@@ -335,7 +342,7 @@ pub(crate) fn dispatch_inner_txs<'a, S, D, H, CA>(
     state: &'a mut S,
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
-) -> std::result::Result<TxResult<Error>, DispatchError>
+) -> std::result::Result<TxResult<Error>, Box<DispatchError>>
 where
     S: 'static
         + State<D = D, H = H>
@@ -379,10 +386,10 @@ where
                     Err(Error::GasError(msg.to_owned())),
                 );
                 state.write_log_mut().drop_tx();
-                return Err(DispatchError {
+                return Err(Box::new(DispatchError {
                     error: Error::GasError(msg.to_owned()),
                     tx_result: Some(tx_result),
-                });
+                }));
             }
             Ok(mut batched_tx_result) if batched_tx_result.is_accepted() => {
                 // If the transaction was a masp one generate the
@@ -391,7 +398,9 @@ where
                     state,
                     cmt,
                     Either::Right(&batched_tx_result),
-                )? {
+                )
+                .map_err(|e| Box::new(DispatchError::from(e)))?
+                {
                     batched_tx_result.events.insert(
                         MaspEvent {
                             tx_index: IndexedTx {
@@ -433,10 +442,10 @@ where
                 if tx.header.atomic {
                     // Stop the execution of an atomic batch at the
                     // first failed transaction
-                    return Err(DispatchError {
+                    return Err(Box::new(DispatchError {
                         error: Error::FailingAtomicBatch(cmt.get_hash()),
                         tx_result: Some(tx_result),
-                    });
+                    }));
                 }
             }
         };

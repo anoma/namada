@@ -729,7 +729,7 @@ where
         .collect();
 
     #[allow(clippy::arithmetic_side_effects)]
-    let notes_per_thread_max = (assets.len() + num_threads - 1) / num_threads;
+    let notes_per_thread_max = assets.len().div_ceil(num_threads);
     // floor(assets.len() / num_threads)
     #[allow(clippy::arithmetic_side_effects)]
     let notes_per_thread_min = assets.len() / num_threads;

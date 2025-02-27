@@ -1404,11 +1404,11 @@ fn double_signing_gets_slashed() -> Result<()> {
     validator_1.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
     let bg_validator_1 = validator_1.background();
 
-    let exp_processing_epoch = Epoch::from_str(res.split(' ').last().unwrap())
-        .unwrap()
-        + unbonding_len
-        + cubic_offset
-        + 1u64;
+    let exp_processing_epoch =
+        Epoch::from_str(res.split(' ').next_back().unwrap()).unwrap()
+            + unbonding_len
+            + cubic_offset
+            + 1u64;
 
     // Query slashes
     let validator_1_rpc = get_actor_rpc(&test, Who::Validator(1));
@@ -1424,7 +1424,7 @@ fn double_signing_gets_slashed() -> Result<()> {
         .exp_regex(r"To be processed in epoch [0-9]+")
         .unwrap();
     let processing_epoch =
-        Epoch::from_str(res.split(' ').last().unwrap()).unwrap();
+        Epoch::from_str(res.split(' ').next_back().unwrap()).unwrap();
 
     assert_eq!(processing_epoch, exp_processing_epoch);
 

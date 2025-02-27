@@ -48,7 +48,7 @@ where
             }) => response::Query {
                 value: data.into(),
                 info,
-                proof: proof.map(Into::into),
+                proof,
                 height: height.0.try_into().expect("Height should be parsable"),
                 ..Default::default()
             },

@@ -101,7 +101,7 @@ pub async fn aux_signing_data(
     Ok(signing_data)
 }
 
-pub async fn with_hardware_wallet<'a, U, T>(
+pub async fn with_hardware_wallet<U, T>(
     mut tx: Tx,
     pubkey: common::PublicKey,
     parts: signing::Signable,

@@ -195,7 +195,7 @@ impl AbortableSpawner {
     }
 }
 
-impl<'a, A> AbortableTaskBuilder<'a, A> {
+impl<A> AbortableTaskBuilder<'_, A> {
     /// Spawn the built abortable task into the runtime.
     #[inline]
     pub fn spawn<F>(self)

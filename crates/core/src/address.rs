@@ -661,7 +661,7 @@ impl InternalAddress {
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use proptest::prelude::*;
 
     use super::*;

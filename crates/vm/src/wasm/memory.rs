@@ -548,7 +548,7 @@ impl<T: Tunables> Tunables for Limit<T> {
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use wasmer::sys::Features;
     use wasmer::{
         Cranelift, Engine, Instance, Module, NativeEngineExt, Store, Target,

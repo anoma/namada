@@ -748,10 +748,7 @@ where
 
         match result {
             Ok((bytes, _gas)) => match bytes {
-                Some(bytes) => match T::try_from_slice(&bytes) {
-                    Ok(value) => Some(value),
-                    Err(_) => None,
-                },
+                Some(bytes) => T::try_from_slice(&bytes).ok(),
                 None => None,
             },
             Err(_) => None,

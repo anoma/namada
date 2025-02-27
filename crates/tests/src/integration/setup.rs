@@ -46,7 +46,7 @@ pub fn initialize_genesis(
 ) -> Result<(MockNode, MockServicesController)> {
     let working_dir = std::fs::canonicalize("../..").unwrap();
     let keep_temp = match std::env::var(ENV_VAR_KEEP_TEMP) {
-        Ok(val) => val.to_ascii_lowercase() != "false",
+        Ok(val) => !val.eq_ignore_ascii_case("false"),
         _ => false,
     };
     let test_dir = TestDir::new();

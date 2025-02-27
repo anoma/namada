@@ -246,7 +246,7 @@ pub enum StoreRef<'a> {
     CommitData,
 }
 
-impl<'a> StoreRef<'a> {
+impl StoreRef<'_> {
     /// Get owned copies of backing stores of our Merkle tree.
     pub fn to_owned(&self) -> Store {
         match *self {
@@ -927,7 +927,7 @@ pub struct MerkleTreeStoresWrite<'a> {
     commit: Hash,
 }
 
-impl<'a> MerkleTreeStoresWrite<'a> {
+impl MerkleTreeStoresWrite<'_> {
     /// Get the root of the given store type
     pub fn root(&self, store_type: &StoreType) -> &Hash {
         match store_type {
@@ -1004,7 +1004,7 @@ impl From<Proof> for namada_core::tendermint::merkle::proof::ProofOps {
     }
 }
 
-impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Smt<H> {
+impl<H: StorageHasher + Default> SubTreeRead for &Smt<H> {
     fn root(&self) -> MerkleRoot {
         Smt::<H>::root(self).into()
     }
@@ -1055,7 +1055,7 @@ impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Smt<H> {
     }
 }
 
-impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Smt<H> {
+impl<H: StorageHasher + Default> SubTreeWrite for &mut Smt<H> {
     fn subtree_update(
         &mut self,
         key: &Key,
@@ -1075,7 +1075,7 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Smt<H> {
     }
 }
 
-impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Amt<H> {
+impl<H: StorageHasher + Default> SubTreeRead for &Amt<H> {
     fn root(&self) -> MerkleRoot {
         Amt::<H>::root(self).into()
     }
@@ -1126,7 +1126,7 @@ impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Amt<H> {
     }
 }
 
-impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Amt<H> {
+impl<H: StorageHasher + Default> SubTreeWrite for &mut Amt<H> {
     fn subtree_update(
         &mut self,
         key: &Key,
@@ -1148,7 +1148,7 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Amt<H> {
     }
 }
 
-impl<'a> SubTreeRead for &'a BridgePoolTree {
+impl SubTreeRead for &BridgePoolTree {
     fn root(&self) -> MerkleRoot {
         BridgePoolTree::root(self).into()
     }
@@ -1184,7 +1184,7 @@ impl<'a> SubTreeRead for &'a BridgePoolTree {
     }
 }
 
-impl<'a> SubTreeWrite for &'a mut BridgePoolTree {
+impl SubTreeWrite for &mut BridgePoolTree {
     fn subtree_update(
         &mut self,
         key: &Key,
@@ -1203,7 +1203,7 @@ impl<'a> SubTreeWrite for &'a mut BridgePoolTree {
     }
 }
 
-impl<'a> SubTreeRead for &'a CommitDataRoot {
+impl SubTreeRead for &CommitDataRoot {
     fn root(&self) -> MerkleRoot {
         self.0.into()
     }
@@ -1236,7 +1236,7 @@ impl<'a> SubTreeRead for &'a CommitDataRoot {
     }
 }
 
-impl<'a> SubTreeWrite for &'a mut CommitDataRoot {
+impl SubTreeWrite for &mut CommitDataRoot {
     fn subtree_update(
         &mut self,
         _key: &Key,

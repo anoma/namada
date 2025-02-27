@@ -377,7 +377,7 @@ impl From<Erc20Transfer> for TransferToEthereum {
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
 
     use super::*;
 

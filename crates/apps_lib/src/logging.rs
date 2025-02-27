@@ -60,7 +60,7 @@ pub fn init_log_tracer() -> Result<()> {
 
 pub fn set_subscriber(filter: EnvFilter) -> Result<Option<WorkerGuard>> {
     let with_color = if let Ok(val) = env::var(COLOR_ENV_KEY) {
-        val.to_ascii_lowercase() != "false"
+        !val.eq_ignore_ascii_case("false")
     } else {
         true
     };

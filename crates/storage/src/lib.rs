@@ -522,7 +522,7 @@ pub mod testing {
         pub db_iter: <MockDB as DBIter<'iter>>::PrefixIter,
     }
 
-    impl<'iter> Iterator for PrefixIter<'iter> {
+    impl Iterator for PrefixIter<'_> {
         type Item = (String, Vec<u8>);
 
         fn next(&mut self) -> Option<Self::Item> {

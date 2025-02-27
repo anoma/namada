@@ -263,9 +263,7 @@ mod test {
                 };
                 self.rpc.handle(ctx, &request)
             }
-            .map_err(|err| {
-                std::io::Error::new(std::io::ErrorKind::Other, err.to_string())
-            })
+            .map_err(|err| std::io::Error::other(err.to_string()))
         }
 
         async fn perform<R>(

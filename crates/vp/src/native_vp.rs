@@ -437,30 +437,30 @@ where
         &self,
         key: &Key,
     ) -> Result<Option<T>> {
-        self.pre().read(key).map_err(Into::into)
+        self.pre().read(key)
     }
 
     fn read_bytes_pre(&self, key: &Key) -> Result<Option<Vec<u8>>> {
-        self.pre().read_bytes(key).map_err(Into::into)
+        self.pre().read_bytes(key)
     }
 
     fn read_post<T: borsh::BorshDeserialize>(
         &self,
         key: &Key,
     ) -> Result<Option<T>> {
-        self.post().read(key).map_err(Into::into)
+        self.post().read(key)
     }
 
     fn read_bytes_post(&self, key: &Key) -> Result<Option<Vec<u8>>> {
-        self.post().read_bytes(key).map_err(Into::into)
+        self.post().read_bytes(key)
     }
 
     fn has_key_pre(&self, key: &Key) -> Result<bool> {
-        self.pre().has_key(key).map_err(Into::into)
+        self.pre().has_key(key)
     }
 
     fn has_key_post(&self, key: &Key) -> Result<bool> {
-        self.post().has_key(key).map_err(Into::into)
+        self.post().has_key(key)
     }
 }
 
