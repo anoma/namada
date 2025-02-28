@@ -4084,8 +4084,7 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9736dbd86140a9d6711b464297a87af9cc0ae485d73a956c595f1bc1f6a7920"
+source = "git+https://github.com/anoma/masp?rev=badb4b00e2ea358f4051069c7d0ab66ff76b694c#badb4b00e2ea358f4051069c7d0ab66ff76b694c"
 dependencies = [
  "borsh",
  "chacha20",
@@ -4098,8 +4097,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fb184254ca5cd5fb12e11b81a6a0d6b955d98c7263eae11057f669c31c7123c"
+source = "git+https://github.com/anoma/masp?rev=badb4b00e2ea358f4051069c7d0ab66ff76b694c#badb4b00e2ea358f4051069c7d0ab66ff76b694c"
 dependencies = [
  "aes",
  "bip0039",
@@ -4131,8 +4129,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "833eb23ccc5e4781636f6a7b2e720f60f31e53e534d1abb2b0ac5e86eb099c14"
+source = "git+https://github.com/anoma/masp?rev=badb4b00e2ea358f4051069c7d0ab66ff76b694c#badb4b00e2ea358f4051069c7d0ab66ff76b694c"
 dependencies = [
  "bellman",
  "blake2b_simd",
