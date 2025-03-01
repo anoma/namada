@@ -16,7 +16,7 @@ use namada_events::extend::{
     IndexedMaspData, MaspDataRefs as MaspDataRefsAttr, MaspTxRef, MaspTxRefs,
     ReadFromEventAttributes,
 };
-use namada_ibc::{decode_message, extract_masp_tx_from_envelope, IbcMessage};
+use namada_ibc::{decode_message, IbcMessage};
 use namada_io::client::Client;
 use namada_token::masp::shielded_wallet::ShieldedQueries;
 pub use namada_token::masp::{utils, *};
@@ -30,10 +30,66 @@ use crate::rpc::{
 };
 use crate::{token, MaybeSend, MaybeSync};
 
+use crate::ibc::extract_masp_tx_from_packet;
+use crate::ibc::core::channel::types::msgs::PacketMsg;
+use crate::token::MaspTransaction;
+use crate::ibc::core::handler::types::msgs::MsgEnvelope;
+use crate::ibc::core::channel::types::commitment::AcknowledgementCommitment;
+use crate::rpc::query_storage_value_bytes;
+use crate::ibc::apps::nft_transfer::types::ack_success_b64;
+use crate::ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
+use crate::ibc::core::channel::types::commitment::compute_ack_commitment;
+use crate::ibc::storage;
+use crate::ibc::core::host::types::identifiers::Sequence;
+use crate::ChannelId;
+use crate::PortId;
+
+// Check if IBC message was received successfully in this state transition
+async fn is_receiving_success(
+    client: &(impl Client + Sync),
+    dst_port_id: &PortId,
+    dst_channel_id: &ChannelId,
+    sequence: Sequence,
+) -> Result<Option<bool>, Error> {
+    // Ensure that the event corresponds to the current changes to storage
+    let ack_key = storage::ack_key(dst_port_id, dst_channel_id, sequence);
+    // If the receive is a success, then the commitment is unique
+    let succ_ack_commitment = compute_ack_commitment(
+        &AcknowledgementStatus::success(ack_success_b64()).into(),
+    );
+    Ok(match query_storage_value_bytes(client, &ack_key, None, false).await?.0 {
+        // Success happens only if commitment equals the above
+        Some(value) => {
+            Some(AcknowledgementCommitment::from(value) == succ_ack_commitment)
+        }
+        // Acknowledgement key non-existence is failure
+        None => None,
+    })
+}
+
+/// Extract MASP transaction from IBC envelope
+async fn extract_masp_tx_from_envelope(
+    client: &(impl Client + Sync),
+    envelope: &MsgEnvelope,
+) -> Result<Option<MaspTransaction>, Error> {
+    match envelope {
+        MsgEnvelope::Packet(PacketMsg::Recv(msg)) if
+            is_receiving_success(client, &msg.packet.port_id_on_b,
+                &msg.packet.chan_id_on_b,
+                msg.packet.seq_on_a,).await?
+            .is_some_and(|ack_succ| ack_succ) => {
+                Ok(extract_masp_tx_from_packet(&msg.packet))
+            }
+        _ => Ok(None),
+    }
+}
+
+
 /// Extract the relevant shield portions from a [`Tx`] MASP section or an IBC
 /// message, if any.
 #[allow(clippy::result_large_err)]
-fn extract_masp_tx(
+async fn extract_masp_tx(
+    client: &(impl Client + Sync),
     tx: &Tx,
     masp_refs: &MaspTxRefs,
 ) -> Result<Vec<Transaction>, Error> {
@@ -44,10 +100,10 @@ fn extract_masp_tx(
     // and in the returned type): if the same reference shows up multiple
     // times in the input we must process it the same number of times to
     // ensure we contruct the correct state
-    masp_refs
+    let mut acc = vec![];
+    for ref masp_ref in masp_refs
         .0
-        .iter()
-        .try_fold(vec![], |mut acc, ref masp_ref| {
+        .iter() {
             match masp_ref {
                 MaspTxRef::MaspSection(id) => {
                     // Simply looking for masp sections attached to the tx
@@ -65,8 +121,6 @@ fn extract_masp_tx(
                         })?
                         .clone();
                     acc.push(transaction);
-
-                    Ok(acc)
                 }
                 MaspTxRef::IbcData(hash) => {
                     // Dereference the masp ref to the first instance that
@@ -97,20 +151,19 @@ fn extract_masp_tx(
                     };
 
                     if let Some(transaction) =
-                        extract_masp_tx_from_envelope(&envelope)
+                        extract_masp_tx_from_envelope(client, &envelope).await?
                     {
                         acc.push(transaction);
-
-                        Ok(acc)
                     } else {
-                        Err(Error::Other(
+                        return Err(Error::Other(
                             "Failed to retrieve MASP over IBC transaction"
                                 .to_string(),
                         ))
                     }
                 }
             }
-        })
+        }
+    Ok(acc)
 }
 
 // Retrieves all the indexes at the specified height which refer

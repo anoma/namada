@@ -119,7 +119,8 @@ impl<C: Client + Send + Sync> LedgerMaspClient<C> {
                 let tx =
                     Tx::try_from_bytes(block[tx_index.0 as usize].as_ref())
                         .map_err(|e| Error::Other(e.to_string()))?;
-                let extracted_masp_txs = extract_masp_tx(&tx, &masp_refs)
+                let extracted_masp_txs = extract_masp_tx(&self.inner
+                    .client, &tx, &masp_refs).await
                     .map_err(|e| Error::Other(e.to_string()))?;
 
                 index_txs(
