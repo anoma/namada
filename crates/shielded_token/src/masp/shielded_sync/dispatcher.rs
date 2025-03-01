@@ -350,7 +350,7 @@ where
                 Ok(None)
             }
             DispatcherState::Normal => {
-                self.apply_cache_to_shielded_context(&initial_state)?;
+                self.apply_cache_to_shielded_context(&initial_state).await?;
                 self.finish_progress_bars();
                 self.ctx.save().await.map_err(|err| {
                     eyre!("Failed to save the shielded context: {err}")
@@ -381,7 +381,7 @@ where
         }
     }
 
-    fn apply_cache_to_shielded_context(
+    async fn apply_cache_to_shielded_context(
         &mut self,
         InitialState {
             last_witnessed_tx,
@@ -407,7 +407,7 @@ where
             if needs_witness_map_update
                 && Some(&indexed_tx) > last_witnessed_tx.as_ref()
             {
-                self.ctx.update_witness_map(indexed_tx, &stx_batch)?;
+                self.ctx.update_witness_map(&self.client, indexed_tx, &stx_batch).await?;
             }
             let first_note_pos = self.ctx.note_index[&indexed_tx];
             let mut vk_heights = BTreeMap::new();

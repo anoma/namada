@@ -79,7 +79,7 @@ async fn extract_masp_tx_from_envelope(
                 msg.packet.seq_on_a,).await?
             .is_some_and(|ack_succ| ack_succ) => {
                 Ok(extract_masp_tx_from_packet(&msg.packet))
-            }
+            },
         _ => Ok(None),
     }
 }

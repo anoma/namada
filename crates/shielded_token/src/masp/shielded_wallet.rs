@@ -143,8 +143,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
 
     /// Update the merkle tree of witnesses the first time we
     /// scan new MASP transactions.
-    pub(crate) fn update_witness_map(
+    pub(crate) async fn update_witness_map<M: MaspClient + Send + Sync + Unpin + 'static,>(
         &mut self,
+        client: &M,
         indexed_tx: IndexedTx,
         shielded: &Transaction,
     ) -> Result<(), eyre::Error> {
@@ -172,6 +173,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
             let witness = IncrementalWitness::<Node>::from_tree(&self.tree);
             self.witness_map.insert(note_pos, witness);
             note_pos = checked!(note_pos + 1).unwrap();
+        }
+        let root = self.tree.root();
+        println!("Index: {:?}", indexed_tx);
+        println!("Anchor: {:?}", self.tree.root());
+        if client.commitment_anchor_exists(&root).await? {
+            println!("Anchor not found");
+        } else {
+            println!("Anchor found");
         }
         Ok(())
     }
