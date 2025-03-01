@@ -23,6 +23,7 @@ use namada_core::task_env::TaskSpawner;
 use namada_io::{MaybeSend, MaybeSync, ProgressBar};
 use namada_tx::IndexedTx;
 use namada_wallet::{DatedKeypair, DatedSpendingKey};
+use itertools::Itertools;
 
 use super::utils::{IndexedNoteEntry, MaspClient};
 use crate::masp::shielded_sync::trial_decrypt;
@@ -399,7 +400,53 @@ where
             self.ctx.note_index = nm;
         }
 
-        for (indexed_tx, stx_batch) in self.cache.fetched.take() {
+        let beginning_note_index = self.ctx.note_index.clone();
+        let beginning_witness_map = self.ctx.witness_map.clone();
+        let beginning_tree = self.ctx.tree.clone();
+        let mut ordered_txs = vec![];
+        let indexed_txs: Vec<_> = self.cache.fetched.take().into_iter().collect();
+        let mut i = 0;
+        while i < indexed_txs.len() {
+            let mut block_txs = vec![indexed_txs[i].clone()];
+            i += 1;
+            while i < indexed_txs.len() {
+                if indexed_txs[i].0.height == block_txs[0].0.height {
+                    block_txs.push(indexed_txs[i].clone());
+                    i += 1;
+                } else {
+                    break;
+                }
+            }
+            let mut anchor_exists = false;
+
+            let initial_note_index = self.ctx.note_index.clone();
+            let initial_witness_map = self.ctx.witness_map.clone();
+            let initial_tree = self.ctx.tree.clone();
+            for perm in block_txs.iter().permutations(block_txs.len()) {
+                self.ctx.note_index = initial_note_index.clone();
+                self.ctx.witness_map = initial_witness_map.clone();
+                self.ctx.tree = initial_tree.clone();
+                for (indexed_tx, stx_batch) in &perm {
+                    anchor_exists = self.ctx.update_witness_map(&self.client, *indexed_tx, &stx_batch).await?;
+                }
+                if anchor_exists {
+                    for (indexed_tx, stx_batch) in perm {
+                        ordered_txs.push((*indexed_tx, stx_batch.clone()));
+                    }
+                    break;
+                }
+            }
+            if !anchor_exists {
+                return Err(eyre!(
+                    "Unable to find anchor for block {}", block_txs[0].0.height,
+                ));
+            }
+        }
+        self.ctx.note_index = beginning_note_index.clone();
+        self.ctx.witness_map = beginning_witness_map.clone();
+        self.ctx.tree = beginning_tree.clone();
+
+        for (indexed_tx, stx_batch) in ordered_txs {
             let needs_witness_map_update =
                 self.client.capabilities().needs_witness_map_update();
             self.ctx

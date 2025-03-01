@@ -148,7 +148,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
         client: &M,
         indexed_tx: IndexedTx,
         shielded: &Transaction,
-    ) -> Result<(), eyre::Error> {
+    ) -> Result<bool, eyre::Error> {
         let mut note_pos = self.tree.size();
         self.note_index.insert(indexed_tx, note_pos);
 
@@ -177,12 +177,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
         let root = self.tree.root();
         println!("Index: {:?}", indexed_tx);
         println!("Anchor: {:?}", self.tree.root());
-        if client.commitment_anchor_exists(&root).await? {
-            println!("Anchor not found");
-        } else {
+        let anchor_found = client.commitment_anchor_exists(&root).await?;
+        if anchor_found {
             println!("Anchor found");
+        } else {
+            println!("Anchor not found");
         }
-        Ok(())
+        Ok(anchor_found)
     }
 
     /// Sync the current state of the multi-asset shielded pool in a
