@@ -468,7 +468,7 @@ where
                         "Removing Continuous PGF for {} from Proposal {} (set \
                          to {} native tokens, end epoch: {}).",
                         target.target.target(),
-                        proposal_id,
+                        target.proposal_id,
                         target.target.amount().to_string_native(),
                         if let Some(ep) = target.end_epoch {
                             format!("{}", ep)
@@ -478,7 +478,7 @@ where
                     );
                     pgf_keys::fundings_handle()
                         .at(&target.target.target())
-                        .remove(storage, &proposal_id)?;
+                        .remove(storage, &target.proposal_id)?;
                 }
             },
             PGFAction::Retro(target) => {
