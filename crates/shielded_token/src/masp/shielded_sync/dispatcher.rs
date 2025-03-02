@@ -466,6 +466,10 @@ where
                  sync"
             ));
         }
+        // NOTE: Set the next height of the given height because `block_results`
+        // could respond empty results and the results could be moved to the
+        // next block in the future.
+        let last_query_height = last_query_height.map(|h| h.next_height());
 
         for vk in sks
             .iter()
