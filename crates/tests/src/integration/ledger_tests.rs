@@ -23,6 +23,7 @@ use namada_sdk::account::AccountPublicKeysMap;
 use namada_sdk::borsh::BorshSerializeExt;
 use namada_sdk::collections::HashMap;
 use namada_sdk::error::TxSubmitError;
+use namada_sdk::governance::cli::onchain::{PgfAction, PgfContinuous};
 use namada_sdk::migrations;
 use namada_sdk::proof_of_stake::parameters::MAX_VALIDATOR_METADATA_LEN;
 use namada_sdk::queries::RPC;
@@ -1068,6 +1069,646 @@ fn inflation() -> Result<()> {
     Ok(())
 }
 
+/// Test adding and removal of continuous PGF proposal payments
+///
+/// 1. Submit a first funding proposal where
+///   - Add ALB - 10k unam until epoch 52
+///   - Add CHR - 35k unam indefinitely
+/// 2. Query the proposal
+/// 3. Vote for the accepted proposals and query balances
+/// 4. Check the result passed
+/// 5. Wait until activation epoch and check balances
+/// 6. Submit a new funding proposal where
+///   - Remove CHR - prop 0
+///   - Add CHR - 75k unam until epoch 71
+///   - Add EST - 66.6k unam indefinitely
+///   - Add ALB - 166 unam until epoch 55
+/// 7. Vote and confirm it passes then wait until activation epoch
+/// 8. Query balances
+/// 9. Query PGF fundings
+/// 10. Advance to epoch 52 and check that the ALB prop 0 cPGF has expired
+/// 10. Submit a new funding proposal where
+///   - Remove EST - prop 1
+/// 11. Vote on proposal and pass it
+/// 12. Advance to epoch 71 and confirm that no cPGF exists anymore
+#[test]
+fn continuous_pgf_proposals() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // 1. start the ledger node
+    let (mut node, _services) = setup::setup()?;
+
+    let tx_args = apply_use_device(vec![
+        "bond",
+        "--validator",
+        "validator-0-validator",
+        "--source",
+        BERTHA,
+        "--amount",
+        "100000",
+        "--ledger-address",
+        &validator_one_rpc,
+    ]);
+    let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    let albert = defaults::albert_address();
+    let ester = defaults::ester_address();
+    let christel = defaults::christel_address();
+
+    println!(
+        "\n\nALBERT: {}\nESTER: {}\nCHRISTEL: {}\n\n",
+        &albert, &ester, &christel
+    );
+
+    // 1. Submit first PGF funding proposal
+    let pgf_funding = PgfFunding {
+        continuous: vec![
+            PgfContinuous {
+                target: ContPGFTarget {
+                    target: PGFTarget::Internal(PGFInternalTarget {
+                        amount: token::Amount::from_u64(10_000),
+                        target: albert.clone(),
+                    }),
+                    end_epoch: Some(Epoch(52)),
+                    proposal_id: 999999, // doesn't matter
+                },
+                action: PgfAction::Add,
+            },
+            PgfContinuous {
+                target: ContPGFTarget {
+                    target: PGFTarget::Internal(PGFInternalTarget {
+                        amount: token::Amount::from_u64(35_000),
+                        target: christel.clone(),
+                    }),
+                    end_epoch: None,
+                    proposal_id: 9999999, // doesn't matter
+                },
+                action: PgfAction::Add,
+            },
+        ],
+        retro: vec![PGFTarget::Internal(PGFInternalTarget {
+            amount: token::Amount::from_u64(5),
+            target: ester.clone(),
+        })],
+    };
+
+    let valid_proposal_json_path = prepare_proposal_data(
+        node.test_dir.path(),
+        albert.clone(),
+        pgf_funding,
+        12,
+    );
+    let submit_proposal_args = apply_use_device(vec![
+        "init-proposal",
+        "--pgf-funding",
+        "--data-path",
+        valid_proposal_json_path.to_str().unwrap(),
+        "--ledger-address",
+        &validator_one_rpc,
+    ]);
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // 2. Query the proposal
+    let proposal_query_args = vec![
+        "query-proposal",
+        "--proposal-id",
+        "0",
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, proposal_query_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("Proposal Id: 0"));
+
+    // Query token balance proposal author (submitted funds)
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        ALBERT,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 1979500"));
+
+    // Query token balance governance
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        GOVERNANCE_ADDRESS,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 500"));
+
+    // 3. Send a yay vote from a validator
+    while node.current_epoch().0 <= 13 {
+        node.next_epoch();
+    }
+
+    let submit_proposal_vote = apply_use_device(vec![
+        "vote-proposal",
+        "--proposal-id",
+        "0",
+        "--vote",
+        "yay",
+        "--address",
+        "validator-0-validator",
+        "--ledger-address",
+        &validator_one_rpc,
+    ]);
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_vote));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // Send different yay vote from delegator to check majority on 1/3
+    let submit_proposal_vote_delegator = apply_use_device(vec![
+        "vote-proposal",
+        "--proposal-id",
+        "0",
+        "--vote",
+        "yay",
+        "--address",
+        BERTHA,
+        "--ledger-address",
+        &validator_one_rpc,
+    ]);
+    let captured = CapturedOutput::of(|| {
+        run(&node, Bin::Client, submit_proposal_vote_delegator)
+    });
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    while node.current_epoch().0 <= 25 {
+        node.next_epoch();
+    }
+
+    let query_proposal = vec![
+        "query-proposal-result",
+        "--proposal-id",
+        "0",
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_proposal));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("Passed"));
+
+    // 5. Wait for proposal activation epoch and check proposal author funds
+    while node.current_epoch().0 < 30 {
+        node.next_epoch();
+    }
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        ALBERT,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 1980000.01"));
+
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        CHRISTEL,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 2000000.035"));
+
+    let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
+    let captured = CapturedOutput::of(|| run(&node, Bin::Client, query_pgf));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("Continuous PGF distributions"));
+    assert!(captured.contains(&format!("- {}", &christel)));
+    assert!(
+        captured.contains("- Prop 0: 0.035000 native tokens, end epoch = None")
+    );
+    assert!(captured.contains(&format!("- {}", &albert)));
+    assert!(
+        captured.contains("- Prop 0: 0.010000 native tokens, end epoch = 52")
+    );
+
+    // 6. Submit a new cPGF proposal
+    let pgf_funding = PgfFunding {
+        continuous: vec![
+            PgfContinuous {
+                target: ContPGFTarget {
+                    target: PGFTarget::Internal(PGFInternalTarget {
+                        amount: token::Amount::zero(), // doesn't matter
+                        target: christel.clone(),
+                    }),
+                    end_epoch: Some(Epoch(999999)), // doesn't matter
+                    proposal_id: 0,
+                },
+                action: PgfAction::Remove,
+            },
+            PgfContinuous {
+                target: ContPGFTarget {
+                    target: PGFTarget::Internal(PGFInternalTarget {
+                        amount: token::Amount::from_u64(75000),
+                        target: christel.clone(),
+                    }),
+                    end_epoch: Some(Epoch(71)),
+                    proposal_id: 9999999, // doesn't matter
+                },
+                action: PgfAction::Add,
+            },
+            PgfContinuous {
+                target: ContPGFTarget {
+                    target: PGFTarget::Internal(PGFInternalTarget {
+                        amount: token::Amount::from_u64(66_600),
+                        target: ester.clone(),
+                    }),
+                    end_epoch: None,
+                    proposal_id: 9999999, // doesn't matter
+                },
+                action: PgfAction::Add,
+            },
+            PgfContinuous {
+                target: ContPGFTarget {
+                    target: PGFTarget::Internal(PGFInternalTarget {
+                        amount: token::Amount::from_u64(166),
+                        target: albert.clone(),
+                    }),
+                    end_epoch: Some(Epoch(55)),
+                    proposal_id: 9999999, // doesn't matter
+                },
+                action: PgfAction::Add,
+            },
+        ],
+        retro: vec![],
+    };
+
+    let valid_proposal_json_path = prepare_proposal_data(
+        node.test_dir.path(),
+        albert.clone(),
+        pgf_funding,
+        31,
+    );
+    let submit_proposal_args = apply_use_device(vec![
+        "init-proposal",
+        "--pgf-funding",
+        "--data-path",
+        valid_proposal_json_path.to_str().unwrap(),
+        "--ledger-address",
+        &validator_one_rpc,
+    ]);
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    node.next_epoch();
+    let submit_proposal_vote = apply_use_device(vec![
+        "vote-proposal",
+        "--proposal-id",
+        "1",
+        "--vote",
+        "yay",
+        "--address",
+        "validator-0-validator",
+        "--ledger-address",
+        &validator_one_rpc,
+    ]);
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_vote));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // Send different yay vote from delegator to check majority on 1/3
+    let submit_proposal_vote_delegator = apply_use_device(vec![
+        "vote-proposal",
+        "--proposal-id",
+        "1",
+        "--vote",
+        "yay",
+        "--address",
+        BERTHA,
+        "--ledger-address",
+        &validator_one_rpc,
+    ]);
+    let captured = CapturedOutput::of(|| {
+        run(&node, Bin::Client, submit_proposal_vote_delegator)
+    });
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        ALBERT,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 1979500.02"));
+
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        CHRISTEL,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 2000000.07"));
+
+    // Wait until activation epoch
+    while node.current_epoch().0 < 49 {
+        node.next_epoch();
+    }
+
+    // 11. Query pgf fundings
+    let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
+    let captured = CapturedOutput::of(|| run(&node, Bin::Client, query_pgf));
+    assert_matches!(captured.result, Ok(_));
+
+    assert!(captured.contains("Continuous PGF distributions"));
+    assert!(captured.contains(&format!("- {}", &ester)));
+    assert!(
+        captured.contains("- Prop 1: 0.066600 native tokens, end epoch = None")
+    );
+    assert!(captured.contains(&format!("- {}", &christel)));
+    assert!(
+        captured.contains("- Prop 1: 0.075000 native tokens, end epoch = 71")
+    );
+    assert!(captured.contains(&format!("- {}", &albert)));
+    assert!(
+        captured.contains("- Prop 0: 0.010000 native tokens, end epoch = 52")
+    );
+    assert!(
+        captured.contains("- Prop 1: 0.000166 native tokens, end epoch = 55")
+    );
+
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        ALBERT,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 1980000.200166"));
+
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        CHRISTEL,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 2000000.74"));
+
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        ESTER,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 1000000.066605"));
+
+    while node.current_epoch().0 < 52 {
+        node.next_epoch();
+    }
+    let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
+    let captured = CapturedOutput::of(|| run(&node, Bin::Client, query_pgf));
+    assert_matches!(captured.result, Ok(_));
+
+    // TODO: How can I check the absence of a string??
+
+    assert!(captured.contains("Continuous PGF distributions"));
+    assert!(captured.contains(&format!("- {}", &ester)));
+    assert!(
+        captured.contains("- Prop 1: 0.066600 native tokens, end epoch = None")
+    );
+    assert!(captured.contains(&format!("- {}", &christel)));
+    assert!(
+        captured.contains("- Prop 1: 0.075000 native tokens, end epoch = 71")
+    );
+    assert!(captured.contains(&format!("- {}", &albert)));
+    assert!(
+        captured.contains("- Prop 1: 0.000166 native tokens, end epoch = 55")
+    );
+
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        ALBERT,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 1980000.220664"));
+
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        CHRISTEL,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 2000000.965"));
+
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        ESTER,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 1000000.266405"));
+
+    let pgf_funding = PgfFunding {
+        continuous: vec![PgfContinuous {
+            target: ContPGFTarget {
+                target: PGFTarget::Internal(PGFInternalTarget {
+                    amount: token::Amount::zero(), // doesn't matter
+                    target: ester.clone(),
+                }),
+                end_epoch: Some(Epoch(0)), // doesn't matter
+                proposal_id: 1,
+            },
+            action: PgfAction::Remove,
+        }],
+        retro: vec![],
+    };
+
+    let valid_proposal_json_path = prepare_proposal_data(
+        node.test_dir.path(),
+        albert.clone(),
+        pgf_funding,
+        53,
+    );
+    let submit_proposal_args = apply_use_device(vec![
+        "init-proposal",
+        "--pgf-funding",
+        "--data-path",
+        valid_proposal_json_path.to_str().unwrap(),
+        "--ledger-address",
+        &validator_one_rpc,
+    ]);
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    node.next_epoch();
+    let submit_proposal_vote = apply_use_device(vec![
+        "vote-proposal",
+        "--proposal-id",
+        "2",
+        "--vote",
+        "yay",
+        "--address",
+        "validator-0-validator",
+        "--ledger-address",
+        &validator_one_rpc,
+    ]);
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_vote));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // Send different yay vote from delegator to check majority on 1/3
+    let submit_proposal_vote_delegator = apply_use_device(vec![
+        "vote-proposal",
+        "--proposal-id",
+        "2",
+        "--vote",
+        "yay",
+        "--address",
+        BERTHA,
+        "--ledger-address",
+        &validator_one_rpc,
+    ]);
+    let captured = CapturedOutput::of(|| {
+        run(&node, Bin::Client, submit_proposal_vote_delegator)
+    });
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // 10. Wait
+    while node.current_epoch().0 < 71 {
+        node.next_epoch();
+    }
+    let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
+    let captured = CapturedOutput::of(|| run(&node, Bin::Client, query_pgf));
+    assert_matches!(captured.result, Ok(_));
+
+    assert!(
+        captured.contains("No continous PGF distributions exist currently")
+    );
+
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        ALBERT,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 1980000.220996"));
+
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        CHRISTEL,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 2000002.315"));
+
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        ESTER,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 1000001.465205"));
+
+    Ok(())
+}
+
 /// Test submission and vote of a PGF proposal
 ///
 /// 1. Submit proposal
@@ -1318,19 +1959,27 @@ fn pgf_governance_proposal() -> Result<()> {
 
     let pgf_funding = PgfFunding {
         continuous: vec![
-            ContPGFTarget {
-                target: PGFTarget::Internal(PGFInternalTarget {
-                    amount: token::Amount::from_u64(10),
-                    target: bertha.clone(),
-                }),
-                end_epoch: Some(cont_end_epoch),
+            PgfContinuous {
+                target: ContPGFTarget {
+                    target: PGFTarget::Internal(PGFInternalTarget {
+                        amount: token::Amount::from_u64(10),
+                        target: bertha.clone(),
+                    }),
+                    end_epoch: Some(cont_end_epoch),
+                    proposal_id: 0,
+                },
+                action: PgfAction::Add,
             },
-            ContPGFTarget {
-                target: PGFTarget::Internal(PGFInternalTarget {
-                    amount: token::Amount::from_u64(35),
-                    target: christel.clone(),
-                }),
-                end_epoch: None,
+            PgfContinuous {
+                target: ContPGFTarget {
+                    target: PGFTarget::Internal(PGFInternalTarget {
+                        amount: token::Amount::from_u64(35),
+                        target: christel.clone(),
+                    }),
+                    end_epoch: None,
+                    proposal_id: 0,
+                },
+                action: PgfAction::Add,
             },
         ],
         retro: vec![PGFTarget::Internal(PGFInternalTarget {

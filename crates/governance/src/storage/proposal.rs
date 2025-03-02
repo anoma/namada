@@ -139,11 +139,12 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
             .continuous
             .iter()
             .cloned()
-            .map(|c_target| {
-                if c_target.target.amount().is_zero() {
-                    PGFAction::Continuous(AddRemove::Remove(c_target))
-                } else {
-                    PGFAction::Continuous(AddRemove::Add(c_target))
+            .map(|c_target| match c_target.action {
+                PgfAction::Add => {
+                    PGFAction::Continuous(AddRemove::Add(c_target.target))
+                }
+                PgfAction::Remove => {
+                    PGFAction::Continuous(AddRemove::Remove(c_target.target))
                 }
             })
             .collect::<BTreeSet<PGFAction>>();
@@ -284,6 +285,8 @@ pub struct ContPGFTarget {
     pub target: PGFTarget,
     /// The epoch at which the funding ends, if any
     pub end_epoch: Option<Epoch>,
+    /// The proposal ID that added this PGF payment
+    pub proposal_id: u64,
 }
 
 impl Display for ContPGFTarget {
@@ -746,10 +749,11 @@ pub mod testing {
         pub fn arb_cpgf_target()(
             target in arb_pgf_target(),
             end_epoch in arb_epoch_opt(),
+            proposal_id in 0..u64::MAX,
         ) -> ContPGFTarget {
             ContPGFTarget {
                 target,
-                end_epoch,
+                end_epoch,proposal_id
             }
         }
     }

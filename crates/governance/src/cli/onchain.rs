@@ -289,6 +289,15 @@ impl PgfAction {
     }
 }
 
+impl Display for PgfAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PgfAction::Add => write!(f, "Add"),
+            PgfAction::Remove => write!(f, "Remove"),
+        }
+    }
+}
+
 /// PGF funding
 #[derive(
     Debug,
@@ -301,7 +310,7 @@ impl PgfAction {
 )]
 pub struct PgfFunding {
     /// PGF continuous funding
-    pub continuous: Vec<ContPGFTarget>,
+    pub continuous: Vec<PgfContinuous>,
     /// PGF retro fundings
     pub retro: Vec<PGFTarget>,
 }
@@ -339,6 +348,12 @@ pub struct PgfContinuous {
     pub target: ContPGFTarget,
     /// PGF action
     pub action: PgfAction,
+}
+
+impl Display for PgfContinuous {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "\n{}:\n{}", &self.action, &self.target)
+    }
 }
 
 /// PGF retro funding

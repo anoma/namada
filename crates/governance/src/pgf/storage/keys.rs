@@ -61,7 +61,8 @@ pub fn fundings_key_prefix() -> Key {
     }
 }
 
-/// LazyMap handler for the pgf fundings substorage
+/// Nested LazyMap handler for the continuous PGF substorage. Structure: Address
+/// -> Proposal ID -> Target data
 pub fn fundings_handle()
 -> lazy_map::NestedMap<String, LazyMap<u64, ContPGFTarget>> {
     LazyMap::open(fundings_key_prefix())

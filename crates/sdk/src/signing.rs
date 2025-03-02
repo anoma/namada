@@ -998,10 +998,12 @@ fn proposal_type_to_ledger_vector(
                     PGFAction::Continuous(AddRemove::Add(ContPGFTarget {
                         target: PGFTarget::Internal(target),
                         end_epoch,
+                        proposal_id,
                     })) => {
                         output.push(
                             "PGF Action : Add Continuous Payment".to_string(),
                         );
+                        output.push(format!("Proposal ID: {}", proposal_id));
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
                             "Amount: NAM {}",
@@ -1021,10 +1023,12 @@ fn proposal_type_to_ledger_vector(
                     PGFAction::Continuous(AddRemove::Add(ContPGFTarget {
                         target: PGFTarget::Ibc(target),
                         end_epoch,
+                        proposal_id,
                     })) => {
                         output.push(
                             "PGF Action : Add Continuous Payment".to_string(),
                         );
+                        output.push(format!("Proposal ID: {}", proposal_id));
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
                             "Amount: NAM {}",
@@ -1048,12 +1052,14 @@ fn proposal_type_to_ledger_vector(
                         ContPGFTarget {
                             target: PGFTarget::Internal(target),
                             end_epoch,
+                            proposal_id,
                         },
                     )) => {
                         output.push(
                             "PGF Action : Remove Continuous Payment"
                                 .to_string(),
                         );
+                        output.push(format!("Proposal ID: {}", proposal_id));
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
                             "Amount: NAM {}",
@@ -1074,12 +1080,14 @@ fn proposal_type_to_ledger_vector(
                         ContPGFTarget {
                             target: PGFTarget::Ibc(target),
                             end_epoch,
+                            proposal_id,
                         },
                     )) => {
                         output.push(
                             "PGF Action : Remove Continuous Payment"
                                 .to_string(),
                         );
+                        output.push(format!("Proposal ID: {}", proposal_id));
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
                             "Amount: NAM {}",
@@ -3086,6 +3094,7 @@ mod test_signing {
                         amount: Amount::zero(),
                     }),
                     end_epoch: Some(Epoch::from(1)),
+                    proposal_id: 0,
                 }), // TODO: ask Murisi if this is ok
             )])),
             &tx,
@@ -3111,6 +3120,7 @@ mod test_signing {
                         amount: Amount::zero(),
                     }),
                     end_epoch: Some(Epoch::from(1)),
+                    proposal_id: 0,
                 }), // TODO: ask Murisi if this is ok
             )])),
             &tx,
@@ -3161,6 +3171,7 @@ mod test_signing {
                         channel_id: ChannelId::new(16),
                     }),
                     end_epoch: None,
+                    proposal_id: 0,
                 }), // TODO: ask Murisi if this is ok
             )])),
             &tx,
@@ -3191,6 +3202,7 @@ mod test_signing {
                         channel_id: ChannelId::new(16),
                     }),
                     end_epoch: None,
+                    proposal_id: 0,
                 }), // TODO: ask Murisi if this is ok
             )])),
             &tx,
