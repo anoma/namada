@@ -23,6 +23,7 @@ use namada_core::task_env::TaskSpawner;
 use namada_io::{MaybeSend, MaybeSync, ProgressBar};
 use namada_tx::IndexedTx;
 use namada_wallet::{DatedKeypair, DatedSpendingKey};
+use itertools::Itertools;
 
 use super::utils::{IndexedNoteEntry, MaspClient};
 use crate::masp::shielded_sync::trial_decrypt;
@@ -399,16 +400,57 @@ where
             self.ctx.note_index = nm;
         }
 
-        for (indexed_tx, stx_batch) in self.cache.fetched.take() {
-            let needs_witness_map_update =
-                self.client.capabilities().needs_witness_map_update();
+        let mut ordered_txs = vec![];
+        let mut indexed_txs = self.cache.fetched.take().into_iter().peekable();
+        let needs_witness_map_update =
+            self.client.capabilities().needs_witness_map_update();
+        while let Some(first_tx) = indexed_txs.next() {
+            let mut block_txs = vec![first_tx];
+            while let Some(next_tx) = indexed_txs.next_if(
+                |next_tx| next_tx.0.height == block_txs[0].0.height
+            ) {
+                block_txs.push(next_tx);
+            }
+            if !needs_witness_map_update
+                || Some(&block_txs[0].0) <= last_witnessed_tx.as_ref()
+            {
+                continue;
+            }
+            let mut anchor_exists = false;
+            let initial_note_index = self.ctx.note_index.clone();
+            let initial_witness_map = self.ctx.witness_map.clone();
+            let initial_tree = self.ctx.tree.clone();
+            for perm in block_txs.iter().permutations(block_txs.len()) {
+                self.ctx.note_index = initial_note_index.clone();
+                self.ctx.witness_map = initial_witness_map.clone();
+                self.ctx.tree = initial_tree.clone();
+                for (indexed_tx, stx_batch) in &perm {
+                    self.ctx.update_witness_map(*indexed_tx, stx_batch).await?;
+                }
+                let root = self.ctx.tree.root();
+                anchor_exists = self.client.commitment_anchor_exists(&root).await?;
+                #[allow(clippy::print_stdout)] {
+                    for (indexed_tx, _) in &perm {
+                        println!("Transaction Index: {:?}", indexed_tx);
+                    }
+                    println!("Commitment Anchor: {:?}", root);
+                    println!("Commitment Anchor Exists: {}", anchor_exists);
+                }
+                if anchor_exists {
+                    ordered_txs.extend(perm.into_iter().cloned());
+                    break;
+                }
+            }
+            if !anchor_exists {
+                return Err(eyre!(
+                    "Unable to find anchor for block {}", block_txs[0].0.height,
+                ));
+            }
+        }
+
+        for (indexed_tx, stx_batch) in ordered_txs {
             self.ctx
                 .save_shielded_spends(&stx_batch, needs_witness_map_update);
-            if needs_witness_map_update
-                && Some(&indexed_tx) > last_witnessed_tx.as_ref()
-            {
-                self.ctx.update_witness_map(&self.client, indexed_tx, &stx_batch).await?;
-            }
             let first_note_pos = self.ctx.note_index[&indexed_tx];
             let mut vk_heights = BTreeMap::new();
             std::mem::swap(&mut vk_heights, &mut self.ctx.vk_heights);
