@@ -998,12 +998,11 @@ fn proposal_type_to_ledger_vector(
                     PGFAction::Continuous(AddRemove::Add(ContPGFTarget {
                         target: PGFTarget::Internal(target),
                         end_epoch,
-                        proposal_id,
+                        proposal_id: _,
                     })) => {
                         output.push(
                             "PGF Action : Add Continuous Payment".to_string(),
                         );
-                        output.push(format!("Proposal ID: {}", proposal_id));
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
                             "Amount: NAM {}",
@@ -1023,12 +1022,11 @@ fn proposal_type_to_ledger_vector(
                     PGFAction::Continuous(AddRemove::Add(ContPGFTarget {
                         target: PGFTarget::Ibc(target),
                         end_epoch,
-                        proposal_id,
+                        proposal_id: _,
                     })) => {
                         output.push(
                             "PGF Action : Add Continuous Payment".to_string(),
                         );
-                        output.push(format!("Proposal ID: {}", proposal_id));
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
                             "Amount: NAM {}",
@@ -3106,6 +3104,7 @@ mod test_signing {
             vec![
                 "Proposal type : PGF Payment".to_string(),
                 "PGF Action : Add Continuous Payment".to_string(),
+                "Proposal ID: 0".to_string(),
                 format!("Target: {addr}"),
                 "Amount: NAM 0".to_string(),
                 "End Epoch: 1".to_string(),
@@ -3132,6 +3131,7 @@ mod test_signing {
             vec![
                 "Proposal type : PGF Payment".to_string(),
                 "PGF Action : Remove Continuous Payment".to_string(),
+                "Proposal ID: 0".to_string(),
                 format!("Target: {addr}"),
                 "Amount: NAM 0".to_string(),
                 "End Epoch: 1".to_string(),
@@ -3214,6 +3214,7 @@ mod test_signing {
             vec![
                 "Proposal type : PGF Payment".to_string(),
                 "PGF Action : Remove Continuous Payment".to_string(),
+                "Proposal ID: 0".to_string(),
                 "Target: bloop".to_string(),
                 "Amount: NAM 0".to_string(),
                 "End Epoch: None".to_string(),
