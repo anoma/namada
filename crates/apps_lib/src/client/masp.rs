@@ -19,7 +19,7 @@ pub async fn syncing<
     IO: Io + Send + Sync,
 >(
     mut shielded: ShieldedContext<U>,
-    client: C,
+    tendermint_client: C,
     args: ShieldedSync,
     io: &IO,
 ) -> Result<ShieldedContext<U>, Error> {
@@ -128,6 +128,7 @@ pub async fn syncing<
 
         dispatch_client!(IndexerMaspClient::new(
             client,
+            tendermint_client,
             url,
             true,
             args.max_concurrent_fetches,
@@ -140,7 +141,7 @@ pub async fn syncing<
         );
 
         dispatch_client!(LedgerMaspClient::new(
-            client,
+            tendermint_client,
             args.max_concurrent_fetches,
             Duration::from_millis(5),
         ))?

@@ -11,6 +11,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::{eyre, WrapErr};
 use futures::future::{select, Either};
 use futures::task::AtomicWaker;
+use itertools::Itertools;
 use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
 use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::transaction::Transaction;
@@ -23,7 +24,6 @@ use namada_core::task_env::TaskSpawner;
 use namada_io::{MaybeSend, MaybeSync, ProgressBar};
 use namada_tx::IndexedTx;
 use namada_wallet::{DatedKeypair, DatedSpendingKey};
-use itertools::Itertools;
 
 use super::utils::{IndexedNoteEntry, MaspClient};
 use crate::masp::shielded_sync::trial_decrypt;
@@ -396,9 +396,9 @@ where
         while let Some(first_tx) = indexed_txs.next() {
             // Take only Transactions belonging to one block
             let mut block_txs = vec![first_tx];
-            while let Some(next_tx) = indexed_txs.next_if(
-                |next_tx| next_tx.0.height == block_txs[0].0.height
-            ) {
+            while let Some(next_tx) = indexed_txs
+                .next_if(|next_tx| next_tx.0.height == block_txs[0].0.height)
+            {
                 block_txs.push(next_tx);
             }
             // Do not apply these Transactions if they have been applied before
@@ -426,7 +426,7 @@ where
                 // Apply the first subsequence, which corresponds to the
                 // Transactions that were first applied for the fees
                 for (indexed_tx, stx_batch) in &subset {
-                    tracing::info!("Transaction Index: {:?}", indexed_tx);
+                    tracing::debug!("Transaction Index: {:?}", indexed_tx);
                     fee_transfers.insert(indexed_tx);
                     self.ctx.update_witness_map(*indexed_tx, stx_batch).await?;
                 }
@@ -436,17 +436,20 @@ where
                     // The second subsequence consists of elements not in the
                     // first
                     if !fee_transfers.contains(indexed_tx) {
-                        tracing::info!("Transaction Index: {:?}", indexed_tx);
-                        self.ctx.update_witness_map(*indexed_tx, stx_batch).await?;
+                        tracing::debug!("Transaction Index: {:?}", indexed_tx);
+                        self.ctx
+                            .update_witness_map(*indexed_tx, stx_batch)
+                            .await?;
                     }
                 }
                 // Compute what the note commitment tree root would look like
                 // after applying the above order and check if it's recognized
                 // by the protocol
                 let root = self.ctx.tree.root();
-                anchor_exists = self.client.commitment_anchor_exists(&root).await?;
-                tracing::info!("Commitment Anchor: {:?}", root);
-                tracing::info!("Commitment Anchor Exists: {}", anchor_exists);
+                anchor_exists =
+                    self.client.commitment_anchor_exists(&root).await?;
+                tracing::debug!("Commitment Anchor: {:?}", root);
+                tracing::debug!("Commitment Anchor Exists: {}", anchor_exists);
                 if anchor_exists {
                     // If this ordering is recognized by the protocol, then
                     // record it
@@ -464,7 +467,8 @@ where
             // client is missing notes or has phantom notes, or both
             if !anchor_exists {
                 return Err(eyre!(
-                    "Unable to find anchor for block {}", block_txs[0].0.height,
+                    "Unable to find anchor for block {}",
+                    block_txs[0].0.height,
                 ));
             }
         }
