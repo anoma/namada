@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
 use std::ops::ControlFlow;
 use std::pin::Pin;
@@ -420,24 +420,33 @@ where
             let initial_note_index = self.ctx.note_index.clone();
             let initial_witness_map = self.ctx.witness_map.clone();
             let initial_tree = self.ctx.tree.clone();
-            for perm in block_txs.iter().permutations(block_txs.len()) {
+            for subset in block_txs.iter().powerset() {
                 self.ctx.note_index = initial_note_index.clone();
                 self.ctx.witness_map = initial_witness_map.clone();
                 self.ctx.tree = initial_tree.clone();
-                for (indexed_tx, stx_batch) in &perm {
+                let mut fee_transfers = BTreeSet::new();
+                for (indexed_tx, stx_batch) in &subset {
+                    tracing::info!("Transaction Index: {:?}", indexed_tx);
+                    fee_transfers.insert(indexed_tx);
                     self.ctx.update_witness_map(*indexed_tx, stx_batch).await?;
+                }
+                for (indexed_tx, stx_batch) in &block_txs {
+                    if !fee_transfers.contains(indexed_tx) {
+                        tracing::info!("Transaction Index: {:?}", indexed_tx);
+                        self.ctx.update_witness_map(*indexed_tx, stx_batch).await?;
+                    }
                 }
                 let root = self.ctx.tree.root();
                 anchor_exists = self.client.commitment_anchor_exists(&root).await?;
-                #[allow(clippy::print_stdout)] {
-                    for (indexed_tx, _) in &perm {
-                        println!("Transaction Index: {:?}", indexed_tx);
-                    }
-                    println!("Commitment Anchor: {:?}", root);
-                    println!("Commitment Anchor Exists: {}", anchor_exists);
-                }
+                tracing::info!("Commitment Anchor: {:?}", root);
+                tracing::info!("Commitment Anchor Exists: {}", anchor_exists);
                 if anchor_exists {
-                    ordered_txs.extend(perm.into_iter().cloned());
+                    ordered_txs.extend(subset.into_iter().cloned());
+                    let complement = block_txs
+                        .iter()
+                        .filter(|tx| !fee_transfers.contains(&tx.0))
+                        .cloned();
+                    ordered_txs.extend(complement);
                     break;
                 }
             }
