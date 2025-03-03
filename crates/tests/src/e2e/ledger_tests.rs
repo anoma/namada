@@ -286,6 +286,8 @@ fn test_namada_shuts_down_if_tendermint_dies() -> Result<()> {
 /// 4. Shut it down
 /// 5. Reset the ledger's state
 /// 6. Run the ledger again, it should start from fresh state
+/// 7. Shut it down again
+/// 8. Do a full reset the ledger's
 #[test]
 fn run_ledger_load_state_and_reset() -> Result<()> {
     let test = setup::single_node_net()?;
@@ -342,10 +344,31 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     session.exp_eof()?;
 
     // 6. Run the ledger again, it should start from fresh state
-    let mut session = start_namada_ledger_node(&test, Some(0), Some(40))?;
+    let mut ledger = start_namada_ledger_node(&test, Some(0), Some(40))?;
 
     // There should be no previous state
-    session.exp_string("No state could be found")?;
+    ledger.exp_string("No state could be found")?;
+    // Wait to commit a block again
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+
+    // 7. Shut it down again
+    ledger.interrupt()?;
+    // Wait for it to stop
+    ledger.exp_eof()?;
+    drop(ledger);
+
+    // 8. Do a full reset the ledger's
+    let mut session = run_as!(
+        test,
+        Who::Validator(0),
+        Bin::Node,
+        &["ledger", "reset", "--full-reset"],
+        Some(10),
+    )?;
+    session.exp_eof()?;
+
+    let chain_dir = test.get_chain_dir(Who::Validator(0));
+    assert!(!chain_dir.exists());
 
     Ok(())
 }
