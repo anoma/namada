@@ -11,6 +11,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::{eyre, WrapErr};
 use futures::future::{select, Either};
 use futures::task::AtomicWaker;
+use itertools::Itertools;
 use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
 use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::transaction::Transaction;
@@ -23,7 +24,6 @@ use namada_core::task_env::TaskSpawner;
 use namada_io::{MaybeSend, MaybeSync, ProgressBar};
 use namada_tx::IndexedTx;
 use namada_wallet::{DatedKeypair, DatedSpendingKey};
-use itertools::Itertools;
 
 use super::utils::{IndexedNoteEntry, MaspClient};
 use crate::masp::shielded_sync::trial_decrypt;
@@ -382,6 +382,100 @@ where
         }
     }
 
+    // Search for the Transaction order usedby the protocol using trial and
+    // error.
+    async fn transaction_order_search(
+        &mut self,
+        last_witnessed_tx: &Option<IndexedTx>,
+    ) -> Result<Vec<(IndexedTx, Transaction)>, eyre::Error> {
+        let mut ordered_txs = vec![];
+        // Get the unordered Transactions with their indices
+        let mut indexed_txs = self.cache.fetched.take().into_iter().peekable();
+        let needs_witness_map_update =
+            self.client.capabilities().needs_witness_map_update();
+        while let Some(first_tx) = indexed_txs.next() {
+            // Take only Transactions belonging to one block
+            let mut block_txs = vec![first_tx];
+            while let Some(next_tx) = indexed_txs
+                .next_if(|next_tx| next_tx.0.height == block_txs[0].0.height)
+            {
+                block_txs.push(next_tx);
+            }
+            // Do not apply these Transactions if they have been applied before
+            if !needs_witness_map_update
+                || Some(&block_txs[0].0) <= last_witnessed_tx.as_ref()
+            {
+                continue;
+            }
+            // Save the initial state of the ShieldedContext in case reversion
+            // to initial state is necessary
+            let initial_note_index = self.ctx.note_index.clone();
+            let initial_witness_map = self.ctx.witness_map.clone();
+            let initial_tree = self.ctx.tree.clone();
+            let mut anchor_exists = false;
+            // Valid Transaction orderings are always the concatenation of two
+            // subsequences of the ordered events. Let's iterate through
+            // possible values of the first subsequence
+            for subset in block_txs.iter().powerset() {
+                // First make sure that we start with a clean state uncorrupted
+                // by previous trials
+                self.ctx.note_index = initial_note_index.clone();
+                self.ctx.witness_map = initial_witness_map.clone();
+                self.ctx.tree = initial_tree.clone();
+                let mut fee_transfers = BTreeSet::new();
+                // Apply the first subsequence, which corresponds to the
+                // Transactions that were first applied for the fees
+                for (indexed_tx, stx_batch) in &subset {
+                    tracing::debug!("Transaction Index: {:?}", indexed_tx);
+                    fee_transfers.insert(indexed_tx);
+                    self.ctx.update_witness_map(*indexed_tx, stx_batch).await?;
+                }
+                // Apply the second subsequence, which corresponds to the
+                // Transactions not used in the fees
+                for (indexed_tx, stx_batch) in &block_txs {
+                    // The second subsequence consists of elements not in the
+                    // first
+                    if !fee_transfers.contains(indexed_tx) {
+                        tracing::debug!("Transaction Index: {:?}", indexed_tx);
+                        self.ctx
+                            .update_witness_map(*indexed_tx, stx_batch)
+                            .await?;
+                    }
+                }
+                // Compute what the note commitment tree root would look like
+                // after applying the above order and check if it's recognized
+                // by the protocol
+                let root = self.ctx.tree.root();
+                anchor_exists =
+                    self.client.commitment_anchor_exists(&root).await?;
+                tracing::debug!("Commitment Anchor: {:?}", root);
+                tracing::debug!("Commitment Anchor Exists: {}", anchor_exists);
+                if anchor_exists {
+                    // If this ordering is recognized by the protocol, then
+                    // record it
+                    ordered_txs.extend(subset.into_iter().cloned());
+                    let complement = block_txs
+                        .iter()
+                        .filter(|tx| !fee_transfers.contains(&tx.0))
+                        .cloned();
+                    ordered_txs.extend(complement);
+                    break;
+                }
+            }
+            // If none of the orderings yield an anchor recognized by the
+            // protocol, then something has gone seriously wrong. Either the
+            // client is missing notes or has phantom notes, or both
+            if !anchor_exists {
+                return Err(eyre!(
+                    "Unable to find anchor for block {}",
+                    block_txs[0].0.height,
+                ));
+            }
+        }
+        // Return the ordering that has been found by the above trials
+        Ok(ordered_txs)
+    }
+
     async fn apply_cache_to_shielded_context(
         &mut self,
         InitialState {
@@ -400,62 +494,10 @@ where
             self.ctx.note_index = nm;
         }
 
-        let mut ordered_txs = vec![];
-        let mut indexed_txs = self.cache.fetched.take().into_iter().peekable();
         let needs_witness_map_update =
             self.client.capabilities().needs_witness_map_update();
-        while let Some(first_tx) = indexed_txs.next() {
-            let mut block_txs = vec![first_tx];
-            while let Some(next_tx) = indexed_txs.next_if(
-                |next_tx| next_tx.0.height == block_txs[0].0.height
-            ) {
-                block_txs.push(next_tx);
-            }
-            if !needs_witness_map_update
-                || Some(&block_txs[0].0) <= last_witnessed_tx.as_ref()
-            {
-                continue;
-            }
-            let mut anchor_exists = false;
-            let initial_note_index = self.ctx.note_index.clone();
-            let initial_witness_map = self.ctx.witness_map.clone();
-            let initial_tree = self.ctx.tree.clone();
-            for subset in block_txs.iter().powerset() {
-                self.ctx.note_index = initial_note_index.clone();
-                self.ctx.witness_map = initial_witness_map.clone();
-                self.ctx.tree = initial_tree.clone();
-                let mut fee_transfers = BTreeSet::new();
-                for (indexed_tx, stx_batch) in &subset {
-                    tracing::info!("Transaction Index: {:?}", indexed_tx);
-                    fee_transfers.insert(indexed_tx);
-                    self.ctx.update_witness_map(*indexed_tx, stx_batch).await?;
-                }
-                for (indexed_tx, stx_batch) in &block_txs {
-                    if !fee_transfers.contains(indexed_tx) {
-                        tracing::info!("Transaction Index: {:?}", indexed_tx);
-                        self.ctx.update_witness_map(*indexed_tx, stx_batch).await?;
-                    }
-                }
-                let root = self.ctx.tree.root();
-                anchor_exists = self.client.commitment_anchor_exists(&root).await?;
-                tracing::info!("Commitment Anchor: {:?}", root);
-                tracing::info!("Commitment Anchor Exists: {}", anchor_exists);
-                if anchor_exists {
-                    ordered_txs.extend(subset.into_iter().cloned());
-                    let complement = block_txs
-                        .iter()
-                        .filter(|tx| !fee_transfers.contains(&tx.0))
-                        .cloned();
-                    ordered_txs.extend(complement);
-                    break;
-                }
-            }
-            if !anchor_exists {
-                return Err(eyre!(
-                    "Unable to find anchor for block {}", block_txs[0].0.height,
-                ));
-            }
-        }
+        let ordered_txs =
+            self.transaction_order_search(last_witnessed_tx).await?;
 
         for (indexed_tx, stx_batch) in ordered_txs {
             self.ctx
