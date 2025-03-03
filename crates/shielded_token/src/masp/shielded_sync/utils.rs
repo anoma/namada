@@ -262,6 +262,10 @@ pub trait MaspClient: Clone {
         &self,
         height: BlockHeight,
     ) -> Result<HashMap<usize, IncrementalWitness<Node>>, Self::Error>;
+
+    /// Check whether the given commitment anchor exists
+    #[allow(async_fn_in_trait)]
+    async fn commitment_anchor_exists(&self, root: &Node) -> Result<bool, Self::Error>;
 }
 
 /// Given a block height range we wish to request and a cache of fetched block

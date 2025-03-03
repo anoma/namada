@@ -143,11 +143,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
 
     /// Update the merkle tree of witnesses the first time we
     /// scan new MASP transactions.
-    pub(crate) fn update_witness_map(
+    pub(crate) async fn update_witness_map<M: MaspClient + Send + Sync + Unpin + 'static,>(
         &mut self,
+        client: &M,
         indexed_tx: IndexedTx,
         shielded: &Transaction,
-    ) -> Result<(), eyre::Error> {
+    ) -> Result<bool, eyre::Error> {
         let mut note_pos = self.tree.size();
         self.note_index.insert(indexed_tx, note_pos);
 
@@ -173,7 +174,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
             self.witness_map.insert(note_pos, witness);
             note_pos = checked!(note_pos + 1).unwrap();
         }
-        Ok(())
+        let root = self.tree.root();
+        let anchor_exists = client.commitment_anchor_exists(&root).await?;
+        #[allow(clippy::print_stdout)] {
+            println!("Transaction Index: {:?}", indexed_tx);
+            println!("Commitment Anchor: {:?}", root);
+            println!("Commitment Anchor Exists: {}", anchor_exists);
+        }
+        Ok(anchor_exists)
     }
 
     /// Sync the current state of the multi-asset shielded pool in a

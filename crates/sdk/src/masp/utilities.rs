@@ -205,6 +205,12 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
                 .to_string(),
         ))
     }
+
+    async fn commitment_anchor_exists(&self, root: &Node) -> Result<bool, Error> {
+        let anchor_key =
+            crate::token::storage_key::masp_commitment_anchor_key(*root);
+        crate::rpc::query_has_storage_key(&self.inner.client, &anchor_key).await
+    }
 }
 
 #[derive(Debug)]
@@ -727,6 +733,13 @@ impl MaspClient for IndexerMaspClient {
                 Ok(accum)
             },
         )
+    }
+
+    async fn commitment_anchor_exists(&self, _root: &Node) -> Result<bool, Error> {
+        Err(Error::Other(
+            "Commitment anchor checking is not implemented by this client"
+                .to_string(),
+        ))
     }
 }
 

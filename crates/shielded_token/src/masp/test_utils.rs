@@ -439,6 +439,15 @@ impl MaspClient for TestingMaspClient {
     ) -> Result<HashMap<usize, IncrementalWitness<Node>>, Self::Error> {
         unimplemented!("Witness map fetching is not implemented by this client")
     }
+
+    async fn commitment_anchor_exists(
+        &self,
+        _: &Node,
+    ) -> Result<bool, Self::Error> {
+        unimplemented!(
+            "Commitment anchor checking is not implemented by this client"
+        )
+    }
 }
 
 /// A shielded context for testing
