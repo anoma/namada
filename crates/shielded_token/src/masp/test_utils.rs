@@ -444,9 +444,7 @@ impl MaspClient for TestingMaspClient {
         &self,
         _: &Node,
     ) -> Result<bool, Self::Error> {
-        unimplemented!(
-            "Commitment anchor checking is not implemented by this client"
-        )
+        Ok(true)
     }
 }
 

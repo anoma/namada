@@ -143,7 +143,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
 
     /// Update the merkle tree of witnesses the first time we
     /// scan new MASP transactions.
-    pub(crate) async fn update_witness_map(
+    pub(crate) fn update_witness_map(
         &mut self,
         indexed_tx: IndexedTx,
         shielded: &Transaction,
