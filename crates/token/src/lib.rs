@@ -338,9 +338,7 @@ pub mod testing {
     use masp_primitives::transaction::components::{TxOut, U64Sum};
     use masp_primitives::transaction::fees::fixed::FeeRule;
     use masp_primitives::zip32::PseudoExtendedKey;
-    use namada_core::address::testing::{
-        arb_established_address, arb_non_internal_address,
-    };
+    use namada_core::address::testing::arb_non_internal_address;
     use namada_core::address::{Address, MASP};
     use namada_core::collections::HashMap;
     use namada_core::masp::{encode_asset_type, AssetData, TAddrData};
@@ -367,7 +365,7 @@ pub mod testing {
         fn arb_single_transparent_transfer()(
             source in arb_non_internal_address(),
             target in arb_non_internal_address(),
-            token in arb_established_address().prop_map(Address::Established),
+            token in arb_non_internal_address(),
             amount in arb_denominated_amount(),
         ) -> (Address, Address, Address, DenominatedAmount) {
             (
