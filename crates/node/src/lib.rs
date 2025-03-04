@@ -382,8 +382,11 @@ fn handle_tendermint_mode_change(config: &config::Config) {
 }
 
 /// Resets the tendermint_node state and removes database files
-pub fn reset(config: config::Ledger) -> Result<(), shell::Error> {
-    shell::reset(config)
+pub fn reset(
+    config: config::Config,
+    args::LedgerReset { full_reset }: args::LedgerReset,
+) -> Result<(), shell::Error> {
+    shell::reset(config, full_reset)
 }
 
 /// Dump Namada ledger node's DB from a block into a file

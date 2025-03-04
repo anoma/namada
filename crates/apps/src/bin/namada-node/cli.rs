@@ -48,9 +48,9 @@ pub fn main() -> Result<()> {
                     namada_apps::namada_version(),
                 );
             }
-            cmds::Ledger::Reset(_) => {
+            cmds::Ledger::Reset(cmds::LedgerReset(args)) => {
                 let chain_ctx = ctx.take_chain_or_exit();
-                node::reset(chain_ctx.config.ledger)
+                node::reset(chain_ctx.config, args)
                     .wrap_err("Failed to reset Namada node")?;
             }
             cmds::Ledger::DumpDb(cmds::LedgerDumpDb(args)) => {
