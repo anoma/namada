@@ -205,10 +205,19 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
                 .to_string(),
         ))
     }
+
+    async fn commitment_anchor_exists(
+        &self,
+        root: &Node,
+    ) -> Result<bool, Error> {
+        let anchor_key =
+            crate::token::storage_key::masp_commitment_anchor_key(*root);
+        crate::rpc::query_has_storage_key(&self.inner.client, &anchor_key).await
+    }
 }
 
 #[derive(Debug)]
-struct IndexerMaspClientShared {
+struct IndexerMaspClientShared<C> {
     /// Limits open connections so as not to exhaust
     /// the connection limit at the OS level.
     semaphore: Semaphore,
@@ -219,16 +228,27 @@ struct IndexerMaspClientShared {
     block_index: init_once::InitOnce<Option<(BlockHeight, xorf::BinaryFuse16)>>,
     /// Maximum number of concurrent fetches.
     max_concurrent_fetches: usize,
+    /// Blockchain client for simple queries
+    tendermint_client: C,
 }
 
 /// MASP client implementation that queries data from the
 /// [`namada-masp-indexer`].
 ///
 /// [`namada-masp-indexer`]: <https://github.com/anoma/namada-masp-indexer>
-#[derive(Clone, Debug)]
-pub struct IndexerMaspClient {
+#[derive(Debug)]
+pub struct IndexerMaspClient<C> {
     client: reqwest::Client,
-    shared: Arc<IndexerMaspClientShared>,
+    shared: Arc<IndexerMaspClientShared<C>>,
+}
+
+impl<C> Clone for IndexerMaspClient<C> {
+    fn clone(&self) -> Self {
+        Self {
+            client: self.client.clone(),
+            shared: Arc::clone(&self.shared),
+        }
+    }
 }
 
 trait RequestBuilderExt {
@@ -242,17 +262,19 @@ impl RequestBuilderExt for reqwest::RequestBuilder {
     }
 }
 
-impl IndexerMaspClient {
+impl<C> IndexerMaspClient<C> {
     /// Create a new [`IndexerMaspClient`].
     #[inline]
     pub fn new(
         client: reqwest::Client,
+        tendermint_client: C,
         indexer_api: reqwest::Url,
         using_block_index: bool,
         max_concurrent_fetches: usize,
     ) -> Self {
         let shared = Arc::new(IndexerMaspClientShared {
             indexer_api,
+            tendermint_client,
             max_concurrent_fetches,
             semaphore: Semaphore::new(max_concurrent_fetches),
             block_index: {
@@ -330,7 +352,7 @@ impl IndexerMaspClient {
     }
 }
 
-impl MaspClient for IndexerMaspClient {
+impl<C: Client + Send + Sync> MaspClient for IndexerMaspClient<C> {
     type Error = Error;
 
     async fn last_block_height(&self) -> Result<Option<BlockHeight>, Error> {
@@ -727,6 +749,19 @@ impl MaspClient for IndexerMaspClient {
                 Ok(accum)
             },
         )
+    }
+
+    async fn commitment_anchor_exists(
+        &self,
+        root: &Node,
+    ) -> Result<bool, Error> {
+        let anchor_key =
+            crate::token::storage_key::masp_commitment_anchor_key(*root);
+        crate::rpc::query_has_storage_key(
+            &self.shared.tendermint_client,
+            &anchor_key,
+        )
+        .await
     }
 }
 
