@@ -7,8 +7,8 @@ use std::str::FromStr;
 use color_eyre::eyre::Result;
 use itertools::sorted;
 use ledger_namada_rs::{BIP44Path, KeyResponse, NamadaApp, NamadaKeys};
-use ledger_transport_hid::hidapi::HidApi;
 use ledger_transport_hid::TransportNativeHID;
+use ledger_transport_hid::hidapi::HidApi;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_core::chain::BlockHeight;
 use namada_core::masp::{
@@ -16,7 +16,7 @@ use namada_core::masp::{
 };
 use namada_sdk::address::{Address, DecodeError};
 use namada_sdk::borsh::{BorshDeserialize, BorshSerializeExt};
-use namada_sdk::io::{display_line, edisplay_line, Io};
+use namada_sdk::io::{Io, display_line, edisplay_line};
 use namada_sdk::key::*;
 use namada_sdk::wallet::{
     DecryptionError, DerivationPath, DerivationPathError, FindKeyError, Wallet,
@@ -26,11 +26,11 @@ use rand_core::OsRng;
 use crate::cli;
 use crate::cli::api::CliApi;
 use crate::cli::args::CliToSdk;
-use crate::cli::{args, cmds, Context};
+use crate::cli::{Context, args, cmds};
 use crate::client::utils::PRE_GENESIS_DIR;
 use crate::tendermint_node::validator_key_to_json;
 use crate::wallet::{
-    self, read_and_confirm_encryption_password, CliWalletUtils, WalletTransport,
+    self, CliWalletUtils, WalletTransport, read_and_confirm_encryption_password,
 };
 
 impl CliApi {

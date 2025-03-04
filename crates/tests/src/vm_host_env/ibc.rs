@@ -2,7 +2,7 @@ use core::time::Duration;
 use std::cell::RefCell;
 
 use ibc_testkit::testapp::ibc::clients::mock::client_state::{
-    client_type, MockClientState,
+    MockClientState, client_type,
 };
 use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
 use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
@@ -16,8 +16,9 @@ use namada_sdk::ibc::apps::transfer::types::error::TokenTransferError;
 use namada_sdk::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use namada_sdk::ibc::apps::transfer::types::packet::PacketData;
 use namada_sdk::ibc::apps::transfer::types::{
-    ack_success_b64, PrefixedCoin, VERSION,
+    PrefixedCoin, VERSION, ack_success_b64,
 };
+use namada_sdk::ibc::core::channel::types::Version as ChanVersion;
 use namada_sdk::ibc::core::channel::types::acknowledgement::{
     AcknowledgementStatus, StatusValue,
 };
@@ -33,11 +34,10 @@ pub use namada_sdk::ibc::core::channel::types::packet::Packet;
 use namada_sdk::ibc::core::channel::types::timeout::{
     TimeoutHeight, TimeoutTimestamp,
 };
-use namada_sdk::ibc::core::channel::types::Version as ChanVersion;
+use namada_sdk::ibc::core::client::types::Height;
 use namada_sdk::ibc::core::client::types::msgs::{
     MsgCreateClient, MsgUpdateClient,
 };
-use namada_sdk::ibc::core::client::types::Height;
 use namada_sdk::ibc::core::commitment_types::commitment::{
     CommitmentPrefix, CommitmentProofBytes,
 };
@@ -53,21 +53,21 @@ pub use namada_sdk::ibc::core::host::types::identifiers::{
     ChannelId, ClientId, ConnectionId, PortId, Sequence,
 };
 use namada_sdk::ibc::parameters::{IbcParameters, IbcTokenRateLimits};
-use namada_sdk::ibc::primitives::proto::{Any, Protobuf};
 use namada_sdk::ibc::primitives::Timestamp;
+use namada_sdk::ibc::primitives::proto::{Any, Protobuf};
 pub use namada_sdk::ibc::storage::{
     channel_key, client_counter_key, client_state_key,
     client_update_height_key, client_update_timestamp_key,
     connection_counter_key, connection_key, consensus_state_key, port_key,
 };
 pub use namada_sdk::ibc::trace::ibc_token;
-use namada_sdk::ibc::{MsgTransfer, COMMITMENT_PREFIX};
-use namada_sdk::parameters::storage::get_epoch_duration_storage_key;
+use namada_sdk::ibc::{COMMITMENT_PREFIX, MsgTransfer};
 use namada_sdk::parameters::EpochDuration;
-use namada_sdk::proof_of_stake::test_utils::get_dummy_genesis_validator;
+use namada_sdk::parameters::storage::get_epoch_duration_storage_key;
 use namada_sdk::proof_of_stake::OwnedPosParams;
-use namada_sdk::state::testing::TestState;
+use namada_sdk::proof_of_stake::test_utils::get_dummy_genesis_validator;
 use namada_sdk::state::StateRead;
+use namada_sdk::state::testing::TestState;
 use namada_sdk::storage::{self, BlockHeight, Epoch, Key, TxIndex};
 use namada_sdk::tendermint::time::Time as TmTime;
 use namada_sdk::time::DurationSecs;
@@ -78,7 +78,7 @@ use namada_test_utils::TestWasms;
 use namada_tx_env::TxEnv;
 use namada_tx_prelude::BorshSerializeExt;
 use namada_vm::wasm::run::VpEvalWasm;
-use namada_vm::{wasm, WasmCacheRwAccess};
+use namada_vm::{WasmCacheRwAccess, wasm};
 use namada_vp::native_vp;
 use namada_vp::native_vp::{Ctx, NativeVp};
 
@@ -91,7 +91,7 @@ pub struct TestIbcVp<'a> {
     pub ibc: IbcVp<'a, TestState, WasmCacheRwAccess>,
 }
 
-impl<'a> TestIbcVp<'a> {
+impl TestIbcVp<'_> {
     pub fn validate(&self, batched_tx: &BatchedTxRef) -> native_vp::Result<()> {
         self.ibc.validate_tx(
             batched_tx,

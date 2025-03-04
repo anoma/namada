@@ -10,8 +10,8 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 
 use super::Tx;
-use crate::data::{ResultCode, TxResult};
 use crate::TxType;
+use crate::data::{ResultCode, TxResult};
 
 /// Transaction event.
 #[derive(

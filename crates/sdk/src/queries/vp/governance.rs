@@ -3,7 +3,7 @@
 use namada_governance::parameters::GovernanceParameters;
 use namada_governance::storage::proposal::StorageProposal;
 use namada_governance::utils::{ProposalResult, Vote};
-use namada_state::{DBIter, StorageHasher, DB};
+use namada_state::{DB, DBIter, StorageHasher};
 
 use crate::queries::types::RequestCtx;
 

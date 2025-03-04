@@ -27,7 +27,7 @@ use prost::Message;
 
 use super::client::{AnyClientState, AnyConsensusState};
 use super::storage::IbcStorageContext;
-use crate::{storage, trace, NftClass, NftMetadata};
+use crate::{NftClass, NftMetadata, storage, trace};
 
 /// Result of IBC common function call
 pub type Result<T> = std::result::Result<T, HostError>;
@@ -169,7 +169,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             }
         }
         lowest_height_value
-            .map(|(_, value)| value.try_into().map_err(HostError::from))
+            .map(|(_, value)| value.try_into())
             .transpose()
     }
 
@@ -198,7 +198,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             }
         }
         highest_height_value
-            .map(|(_, value)| value.try_into().map_err(HostError::from))
+            .map(|(_, value)| value.try_into())
             .transpose()
     }
 

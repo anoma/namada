@@ -8,7 +8,7 @@ use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
 use namada_core::token;
-use namada_core::uint::{Uint, I256};
+use namada_core::uint::{I256, Uint};
 use namada_systems::{governance, parameters, trans_token};
 use thiserror::Error;
 
@@ -22,11 +22,11 @@ use crate::storage::{
     validator_state_handle, write_last_pos_inflation_amount,
     write_last_staked_ratio,
 };
-use crate::types::{into_tm_voting_power, BondId, ValidatorState, VoteInfo};
+use crate::types::{BondId, ValidatorState, VoteInfo, into_tm_voting_power};
 use crate::{
+    InflationError, PosParams, Result, ResultExt, StorageRead, StorageWrite,
     bond_amounts_for_rewards, get_total_consensus_stake, staking_token_address,
-    storage, storage_key, InflationError, PosParams, Result, ResultExt,
-    StorageRead, StorageWrite,
+    storage, storage_key,
 };
 
 /// This is equal to 0.01.

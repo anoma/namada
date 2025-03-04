@@ -23,18 +23,18 @@ use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::address::Address;
 use namada_sdk::chain::Epoch;
 use namada_sdk::key::*;
-use namada_sdk::queries::{Rpc, RPC};
+use namada_sdk::queries::{RPC, Rpc};
 use namada_sdk::tendermint_rpc::HttpClient;
 use namada_sdk::token;
-use namada_sdk::wallet::fs::FsWalletUtils;
 use namada_sdk::wallet::Wallet;
+use namada_sdk::wallet::fs::FsWalletUtils;
 use toml::Value;
 
 use super::setup::{
-    self, run_cosmos_cmd, sleep, NamadaBgCmd, NamadaCmd, Test, TestDir,
-    ENV_VAR_DEBUG, ENV_VAR_USE_PREBUILT_BINARIES,
+    self, ENV_VAR_DEBUG, ENV_VAR_USE_PREBUILT_BINARIES, NamadaBgCmd, NamadaCmd,
+    Test, TestDir, run_cosmos_cmd, sleep,
 };
-use crate::e2e::setup::{constants, Bin, CosmosChainType, Who, APPS_PACKAGE};
+use crate::e2e::setup::{APPS_PACKAGE, Bin, CosmosChainType, Who, constants};
 use crate::strings::{LEDGER_STARTED, TX_APPLIED_SUCCESS};
 use crate::{run, run_as};
 
@@ -380,14 +380,14 @@ pub fn wait_for_block_height(
 /// Are the E2E tests be running in debug mode?
 pub fn is_debug_mode() -> bool {
     match env::var(ENV_VAR_DEBUG) {
-        Ok(val) => val.to_ascii_lowercase() != "false",
+        Ok(val) => !val.eq_ignore_ascii_case("false"),
         _ => false,
     }
 }
 
 pub fn generate_bin_command(bin_name: &str, manifest_path: &Path) -> Command {
     let use_prebuilt_binaries = match env::var(ENV_VAR_USE_PREBUILT_BINARIES) {
-        Ok(var) => var.to_ascii_lowercase() != "false",
+        Ok(var) => !var.eq_ignore_ascii_case("false"),
         Err(_) => false,
     };
 

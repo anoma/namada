@@ -4,10 +4,10 @@ use namada_sdk::address::Address;
 use namada_sdk::chain::{BlockHeight, Epoch};
 use namada_sdk::collections::{HashMap, HashSet};
 use namada_sdk::key::common;
+use namada_sdk::proof_of_stake::PosParams;
 use namada_sdk::proof_of_stake::types::{
     BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData, ValidatorState,
 };
-use namada_sdk::proof_of_stake::PosParams;
 use namada_sdk::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
 
 use super::*;

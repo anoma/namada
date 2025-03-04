@@ -31,7 +31,7 @@ pub use namada_core::borsh::{
 };
 use namada_core::chain::CHAIN_ID_LENGTH;
 pub use namada_core::chain::{
-    BlockHash, BlockHeader, BlockHeight, Epoch, BLOCK_HASH_LENGTH,
+    BLOCK_HASH_LENGTH, BlockHash, BlockHeader, BlockHeight, Epoch,
 };
 pub use namada_core::ethereum_events::EthAddress;
 use namada_core::internal::HostEnvResult;
@@ -46,11 +46,11 @@ pub use namada_governance::storage as gov_storage;
 pub use namada_macros::transaction;
 pub use namada_parameters::storage as parameters_storage;
 pub use namada_state::{
-    collections, iter_prefix, iter_prefix_bytes, Error, OptionExt, Result,
-    ResultExt, StorageRead, StorageWrite,
+    Error, OptionExt, Result, ResultExt, StorageRead, StorageWrite,
+    collections, iter_prefix, iter_prefix_bytes,
 };
 use namada_token::MaspTransaction;
-pub use namada_tx::{action, data as transaction, BatchedTx, Section, Tx};
+pub use namada_tx::{BatchedTx, Section, Tx, action, data as transaction};
 pub use namada_tx_env::TxEnv;
 use namada_vm_env::tx::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};

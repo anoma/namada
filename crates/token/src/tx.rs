@@ -6,11 +6,11 @@ use std::collections::BTreeSet;
 use namada_core::collections::HashSet;
 use namada_core::masp;
 use namada_events::EmitEvents;
-use namada_shielded_token::{utils, MaspTxId};
+use namada_shielded_token::{MaspTxId, utils};
 use namada_storage::{Error, OptionExt, ResultExt};
 pub use namada_trans_token::tx::transfer;
-use namada_tx::action::{self, Action, MaspAction};
 use namada_tx::BatchedTx;
+use namada_tx::action::{self, Action, MaspAction};
 use namada_tx_env::{Address, Result, TxEnv};
 
 use crate::{Transfer, TransparentTransfersRef};
@@ -135,7 +135,7 @@ mod test {
     use namada_core::token;
     use namada_tests::tx::{ctx, tx_host_env};
     use namada_trans_token::testing::arb_amount;
-    use namada_trans_token::{read_balance, Amount, DenominatedAmount};
+    use namada_trans_token::{Amount, DenominatedAmount, read_balance};
     use namada_tx::{Tx, TxCommitments};
     use proptest::prelude::*;
 

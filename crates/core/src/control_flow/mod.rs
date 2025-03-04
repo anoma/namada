@@ -89,7 +89,7 @@ mod non_wasm {
         announce_exit: bool,
         _guard: ListeningToInterruptGuard,
     ) {
-        use tokio::signal::unix::{signal, SignalKind};
+        use tokio::signal::unix::{SignalKind, signal};
         let mut sigterm = signal(SignalKind::terminate()).unwrap();
         let mut sighup = signal(SignalKind::hangup()).unwrap();
         let mut sigpipe = signal(SignalKind::pipe()).unwrap();

@@ -14,10 +14,10 @@ use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::storage::{DbColFam, Key};
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
+use namada_node::shell::SnapshotSync;
 use namada_node::shell::testing::client::run;
 use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
-use namada_node::shell::SnapshotSync;
 use namada_node::storage::DbSnapshot;
 use namada_sdk::account::AccountPublicKeysMap;
 use namada_sdk::borsh::BorshSerializeExt;
@@ -27,7 +27,7 @@ use namada_sdk::migrations;
 use namada_sdk::proof_of_stake::parameters::MAX_VALIDATOR_METADATA_LEN;
 use namada_sdk::queries::RPC;
 use namada_sdk::token::{self, DenominatedAmount};
-use namada_sdk::tx::{self, Tx, TX_TRANSFER_WASM, VP_USER_WASM};
+use namada_sdk::tx::{self, TX_TRANSFER_WASM, Tx, VP_USER_WASM};
 use namada_test_utils::TestWasms;
 use test_log::test;
 
@@ -453,7 +453,7 @@ fn pos_rewards() -> Result<()> {
     let words = res.split(' ').collect::<Vec<_>>();
     let res = words[words.len() - 2];
     let mut last_amount = token::Amount::from_str(
-        res.split(' ').last().unwrap(),
+        res.split(' ').next_back().unwrap(),
         NATIVE_MAX_DECIMAL_PLACES,
     )
     .unwrap();
@@ -478,7 +478,7 @@ fn pos_rewards() -> Result<()> {
         let words = res.split(' ').collect::<Vec<_>>();
         let res = words[words.len() - 2];
         let amount = token::Amount::from_str(
-            res.split(' ').last().unwrap(),
+            res.split(' ').next_back().unwrap(),
             NATIVE_MAX_DECIMAL_PLACES,
         )
         .unwrap();
@@ -502,7 +502,7 @@ fn pos_rewards() -> Result<()> {
     assert_matches!(captured.result, Ok(_));
     let res = captured.matches(r"nam: [0-9\.]+").expect("Test failed");
     let amount_pre = token::Amount::from_str(
-        res.split(' ').last().unwrap(),
+        res.split(' ').next_back().unwrap(),
         NATIVE_MAX_DECIMAL_PLACES,
     )
     .unwrap();
@@ -538,7 +538,7 @@ fn pos_rewards() -> Result<()> {
     assert_matches!(captured.result, Ok(_));
     let res = captured.matches(r"nam: [0-9\.]+").expect("Test failed");
     let amount_post = token::Amount::from_str(
-        res.split(' ').last().unwrap(),
+        res.split(' ').next_back().unwrap(),
         NATIVE_MAX_DECIMAL_PLACES,
     )
     .unwrap();
@@ -656,7 +656,7 @@ fn test_bond_queries() -> Result<()> {
         .matches(r"withdrawable starting from epoch [0-9]+")
         .expect("Test failed");
     let withdraw_epoch =
-        Epoch::from_str(res.split(' ').last().unwrap()).unwrap();
+        Epoch::from_str(res.split(' ').next_back().unwrap()).unwrap();
 
     // 6. Wait for withdraw_epoch
     loop {

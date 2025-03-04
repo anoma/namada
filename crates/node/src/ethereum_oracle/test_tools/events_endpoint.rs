@@ -4,8 +4,8 @@ use namada_sdk::borsh::BorshDeserialize;
 use namada_sdk::ethereum_events::EthereumEvent;
 use tokio::sync::mpsc::Sender as BoundedSender;
 use tokio::sync::oneshot::{Receiver, Sender};
-use warp::reply::WithStatus;
 use warp::Filter;
+use warp::reply::WithStatus;
 
 use crate::ethereum_oracle as oracle;
 

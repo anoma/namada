@@ -9,7 +9,7 @@ use std::marker::PhantomData;
 use borsh::schema::{self, Declaration, Definition};
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::key::{common, SerializeWithBorsh, SigScheme, Signable};
+use namada_core::key::{SerializeWithBorsh, SigScheme, Signable, common};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;

@@ -29,7 +29,7 @@ use namada_core::collections::HashSet;
 use namada_core::key::ed25519::{PublicKey, Signature};
 use namada_core::parameters::Parameters;
 use namada_core::storage;
-use namada_tx::data::{pos, TxType, WrapperTx};
+use namada_tx::data::{TxType, WrapperTx, pos};
 use {namada_account as account, namada_token as token};
 
 /// This generator will write output into this `docs` file.

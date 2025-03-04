@@ -1,10 +1,10 @@
 use namada_core::address::Address;
 use namada_core::storage::{DbKeySeg, Key, KeySeg};
 use namada_macros::StorageKeys;
-use namada_state::collections::{lazy_map, LazyCollection, LazyMap};
+use namada_state::collections::{LazyCollection, LazyMap, lazy_map};
 
-use crate::pgf::storage::steward::StewardDetail;
 use crate::pgf::ADDRESS;
+use crate::pgf::storage::steward::StewardDetail;
 use crate::storage::proposal::StoragePgfFunding;
 
 /// Storage keys for pgf internal address.

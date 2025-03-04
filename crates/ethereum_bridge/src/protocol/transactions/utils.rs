@@ -8,7 +8,7 @@ use namada_core::collections::{HashMap, HashSet};
 use namada_core::token;
 use namada_proof_of_stake::storage::read_consensus_validator_set_addresses_with_stake;
 use namada_proof_of_stake::types::WeightedValidator;
-use namada_state::{DBIter, StorageHasher, StorageRead, WlState, DB};
+use namada_state::{DB, DBIter, StorageHasher, StorageRead, WlState};
 
 /// Proof of some arbitrary tally whose voters can be queried.
 pub(super) trait GetVoters {

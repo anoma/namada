@@ -16,13 +16,13 @@ use ibc::apps::transfer::context::TokenTransferExecutionContext;
 use ibc::apps::transfer::types::error::TokenTransferError;
 use ibc::apps::transfer::types::packet::PacketData;
 use ibc::apps::transfer::types::{Coin, PrefixedDenom};
+use ibc::core::channel::types::Version;
 use ibc::core::channel::types::acknowledgement::{
     Acknowledgement, AcknowledgementStatus, StatusValue as AckStatusValue,
 };
 use ibc::core::channel::types::channel::{Counterparty, Order};
 use ibc::core::channel::types::error::ChannelError;
 use ibc::core::channel::types::packet::Packet;
-use ibc::core::channel::types::Version;
 use ibc::core::host::types::identifiers::{ChannelId, ConnectionId, PortId};
 use ibc::core::router::module::Module;
 use ibc::core::router::types::module::ModuleExtras;
@@ -152,10 +152,10 @@ impl ibc_middleware_overflow_receive::PacketMetadata
     type Amount = token::Amount;
 
     fn is_overflow_receive_msg(msg: &Map<String, Value>) -> bool {
-        msg.get("namada").map_or(false, |maybe_namada_obj| {
+        msg.get("namada").is_some_and(|maybe_namada_obj| {
             maybe_namada_obj
                 .as_object()
-                .map_or(false, |namada| namada.contains_key("osmosis_swap"))
+                .is_some_and(|namada| namada.contains_key("osmosis_swap"))
         })
     }
 

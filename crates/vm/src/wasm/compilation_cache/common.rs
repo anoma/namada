@@ -601,11 +601,11 @@ mod universal {
 /// Testing helpers
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use tempfile::{tempdir, TempDir};
+    use tempfile::{TempDir, tempdir};
 
     use super::*;
-    use crate::wasm::{TxCache, VpCache};
     use crate::WasmCacheRwAccess;
+    use crate::wasm::{TxCache, VpCache};
 
     /// Instantiate the default wasmer store.
     pub fn store() -> Store {
@@ -641,7 +641,7 @@ mod test {
     use assert_matches::assert_matches;
     use byte_unit::{Byte, UnitType};
     use namada_test_utils::TestWasms;
-    use tempfile::{tempdir, TempDir};
+    use tempfile::{TempDir, tempdir};
     use test_log::test;
 
     use super::*;

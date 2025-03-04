@@ -5,7 +5,7 @@ use namada_core::storage::DbKeySeg;
 
 use super::ADDRESS;
 use crate::types::BondId;
-use crate::{epoched, lazy_map, lazy_vec, Epoch, Key, KeySeg};
+use crate::{Epoch, Key, KeySeg, epoched, lazy_map, lazy_vec};
 
 const PARAMS_STORAGE_KEY: &str = "params";
 const VALIDATOR_ADDRESSES_KEY: &str = "validator_addresses";

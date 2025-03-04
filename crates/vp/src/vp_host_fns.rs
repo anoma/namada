@@ -6,17 +6,17 @@ use std::fmt::Debug;
 use namada_core::address::{Address, ESTABLISHED_ADDRESS_BYTES_LEN};
 use namada_core::arith::checked;
 use namada_core::chain::{BlockHeader, BlockHeight, ChainId, Epoch, Epochs};
-use namada_core::hash::{Hash, HASH_LENGTH};
-use namada_core::storage::{Key, TxIndex, TX_INDEX_LENGTH};
+use namada_core::hash::{HASH_LENGTH, Hash};
+use namada_core::storage::{Key, TX_INDEX_LENGTH, TxIndex};
 use namada_events::{Event, EventTypeBuilder};
 use namada_gas::{
-    self as gas, Gas, GasMetering, VpGasMeter, MEMORY_ACCESS_GAS_PER_BYTE,
+    self as gas, Gas, GasMetering, MEMORY_ACCESS_GAS_PER_BYTE, VpGasMeter,
 };
 use namada_tx::{BatchedTxRef, Section};
 use thiserror::Error;
 
 use crate::state::write_log::WriteLog;
-use crate::state::{write_log, DBIter, PrefixIter, ResultExt, StateRead, DB};
+use crate::state::{DB, DBIter, PrefixIter, ResultExt, StateRead, write_log};
 pub use crate::state::{Error, Result};
 
 /// These runtime errors will abort VP execution immediately

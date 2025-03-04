@@ -1,6 +1,6 @@
 //! Shell methods for querying state
 
-use namada_sdk::queries::{RequestCtx, ResponseQuery, RPC};
+use namada_sdk::queries::{RPC, RequestCtx, ResponseQuery};
 
 use super::*;
 use crate::dry_run_tx;
@@ -48,7 +48,7 @@ where
             }) => response::Query {
                 value: data.into(),
                 info,
-                proof: proof.map(Into::into),
+                proof,
                 height: height.0.try_into().expect("Height should be parsable"),
                 ..Default::default()
             },
@@ -81,8 +81,8 @@ where
 #[cfg(test)]
 mod test_queries {
     use namada_sdk::chain::Epoch;
-    use namada_sdk::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
     use namada_sdk::eth_bridge::SendValsetUpd;
+    use namada_sdk::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
     use namada_sdk::proof_of_stake::storage::read_consensus_validator_set_addresses_with_stake;
     use namada_sdk::proof_of_stake::types::WeightedValidator;
     use namada_sdk::tendermint::abci::types::VoteInfo;

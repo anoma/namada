@@ -1,8 +1,8 @@
 //! A tx for adding a transfer request across the Ethereum bridge
 //! into the bridge pool.
 use namada_tx_prelude::eth_bridge_pool::{
-    get_pending_key, GasFee, PendingTransfer, TransferToEthereum,
-    BRIDGE_POOL_ADDRESS,
+    BRIDGE_POOL_ADDRESS, GasFee, PendingTransfer, TransferToEthereum,
+    get_pending_key,
 };
 use namada_tx_prelude::parameters::native_erc20_key;
 use namada_tx_prelude::*;

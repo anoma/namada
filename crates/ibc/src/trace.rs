@@ -7,7 +7,7 @@ use ibc::apps::nft_transfer::types::{
 };
 use ibc::apps::transfer::types::{PrefixedDenom, TracePath};
 use ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::address::{Address, InternalAddress, HASH_LEN, SHA_HASH_LEN};
+use namada_core::address::{Address, HASH_LEN, InternalAddress, SHA_HASH_LEN};
 use namada_core::ibc::IbcTokenHash;
 use sha2::{Digest, Sha256};
 

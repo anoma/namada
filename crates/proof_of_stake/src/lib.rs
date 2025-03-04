@@ -50,22 +50,22 @@ use namada_core::key::common;
 use namada_core::tendermint::abci::types::Misbehavior;
 use namada_core::token;
 use namada_events::EmitEvents;
+pub use namada_state::collections::LazyCollection;
 pub use namada_state::collections::lazy_map::{
     self, Collectable, LazyMap, NestedMap,
 };
 pub use namada_state::collections::lazy_set::{self, LazySet};
 pub use namada_state::collections::lazy_vec::{self, LazyVec};
-pub use namada_state::collections::LazyCollection;
 pub use namada_state::{
-    iter_prefix_bytes, Error, Key, KeySeg, OptionExt, Result, ResultExt,
-    StorageRead, StorageWrite,
+    Error, Key, KeySeg, OptionExt, Result, ResultExt, StorageRead,
+    StorageWrite, iter_prefix_bytes,
 };
 pub use namada_systems::proof_of_stake::*;
 use namada_systems::{governance, trans_token};
 pub use parameters::{OwnedPosParams, PosParams};
 use storage::write_validator_name;
 pub use types::GenesisValidator;
-use types::{into_tm_voting_power, DelegationEpochs};
+use types::{DelegationEpochs, into_tm_voting_power};
 
 use crate::queries::{find_bonds, has_bonds};
 use crate::rewards::{

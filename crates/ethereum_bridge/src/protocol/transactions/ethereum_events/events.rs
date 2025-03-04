@@ -10,8 +10,8 @@ use namada_core::chain::BlockHeight;
 use namada_core::collections::HashSet;
 use namada_core::eth_abi::Encode;
 use namada_core::eth_bridge_pool::{
-    erc20_nut_address, erc20_token_address, PendingTransfer,
-    TransferToEthereumKind,
+    PendingTransfer, TransferToEthereumKind, erc20_nut_address,
+    erc20_token_address,
 };
 use namada_core::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada,
@@ -21,7 +21,7 @@ use namada_core::hints;
 use namada_core::storage::{Key, KeySeg};
 use namada_core::uint::Uint;
 use namada_parameters::read_epoch_duration_parameter;
-use namada_state::{DBIter, StorageHasher, WlState, DB};
+use namada_state::{DB, DBIter, StorageHasher, WlState};
 use namada_storage::{StorageRead, StorageWrite};
 use namada_trans_token::denominated;
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
@@ -29,12 +29,12 @@ use token::{burn_tokens, decrement_total_supply, increment_total_supply};
 
 use crate::event::EthBridgeEvent;
 use crate::storage::bridge_pool::{
-    get_nonce_key, is_pending_transfer_key, BRIDGE_POOL_ADDRESS,
+    BRIDGE_POOL_ADDRESS, get_nonce_key, is_pending_transfer_key,
 };
 use crate::storage::eth_bridge_queries::{EthAssetMint, EthBridgeQueries};
 use crate::storage::parameters::read_native_erc20_address;
 use crate::storage::{self as bridge_storage};
-use crate::{token, ADDRESS as BRIDGE_ADDRESS};
+use crate::{ADDRESS as BRIDGE_ADDRESS, token};
 
 /// Updates storage based on the given confirmed `event`. For example, for a
 /// confirmed [`EthereumEvent::TransfersToNamada`], mint the corresponding
@@ -529,12 +529,12 @@ mod tests {
     use namada_core::collections::HashMap;
     use namada_core::eth_bridge_pool::GasFee;
     use namada_core::ethereum_events::testing::{
-        arbitrary_keccak_hash, arbitrary_nonce, DAI_ERC20_ETH_ADDRESS,
+        DAI_ERC20_ETH_ADDRESS, arbitrary_keccak_hash, arbitrary_nonce,
     };
     use namada_core::time::DurationSecs;
     use namada_core::token::Amount;
     use namada_core::{address, eth_bridge_pool};
-    use namada_parameters::{update_epoch_parameter, EpochDuration};
+    use namada_parameters::{EpochDuration, update_epoch_parameter};
     use namada_state::testing::TestState;
     use token::increment_balance;
 

@@ -14,7 +14,7 @@ use core::time::Duration;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use base64::prelude::{Engine, BASE64_STANDARD};
+use base64::prelude::{BASE64_STANDARD, Engine};
 use color_eyre::eyre::Result;
 use eyre::eyre;
 use ibc_middleware_packet_forward::ForwardMetadata;
@@ -29,6 +29,7 @@ use namada_sdk::chain::Epoch;
 use namada_sdk::governance::cli::onchain::PgfFunding;
 use namada_sdk::governance::pgf::ADDRESS as PGF_ADDRESS;
 use namada_sdk::governance::storage::proposal::{PGFIbcTarget, PGFTarget};
+use namada_sdk::ibc::IbcShieldingData;
 use namada_sdk::ibc::apps::nft_transfer::types::{
     PORT_ID_STR as NFT_PORT_ID, VERSION as NFT_CHANNEL_VERSION,
 };
@@ -43,7 +44,6 @@ use namada_sdk::ibc::core::host::types::identifiers::{
 use namada_sdk::ibc::primitives::proto::Any;
 use namada_sdk::ibc::storage::*;
 use namada_sdk::ibc::trace::ibc_token;
-use namada_sdk::ibc::IbcShieldingData;
 use namada_sdk::token::Amount;
 use namada_test_utils::TestWasms;
 use prost::Message;
@@ -60,10 +60,10 @@ use crate::e2e::ledger_tests::{
     start_namada_ledger_node_wait_wasm, write_json_file,
 };
 use crate::e2e::setup::{
-    self, apply_use_device, osmosis_fixtures_dir, run_cosmos_cmd,
+    self, Bin, CosmosChainType, ENV_VAR_COSMWASM_CONTRACT_DIR, NamadaCmd, Test,
+    TestDir, Who, apply_use_device, osmosis_fixtures_dir, run_cosmos_cmd,
     run_cosmos_cmd_homeless, run_hermes_cmd, set_ethereum_bridge_mode,
-    setup_cosmos, setup_hermes, sleep, working_dir, Bin, CosmosChainType,
-    NamadaCmd, Test, TestDir, Who, ENV_VAR_COSMWASM_CONTRACT_DIR,
+    setup_cosmos, setup_hermes, sleep, working_dir,
 };
 use crate::ibc::primitives::Signer;
 use crate::strings::TX_APPLIED_SUCCESS;
@@ -2879,7 +2879,7 @@ fn wait_for_pass(test: &Test) -> Result<()> {
         sleep(5);
         let mut gaia = run_cosmos_cmd(test, args, Some(40))?;
         let (_, matched) = gaia.exp_regex("status: .*")?;
-        if matched.split(' ').last().unwrap() == "PROPOSAL_STATUS_PASSED" {
+        if matched.split(' ').next_back().unwrap() == "PROPOSAL_STATUS_PASSED" {
             break;
         }
     }
@@ -3221,7 +3221,11 @@ fn gen_ibc_shielding_data(
     let mut client = run!(dst_test, Bin::Client, args, Some(120))?;
     let (_unread, matched) =
         client.exp_regex("Output IBC shielding transfer .*")?;
-    let file_path = matched.trim().split(' ').last().expect("invalid output");
+    let file_path = matched
+        .trim()
+        .split(' ')
+        .next_back()
+        .expect("invalid output");
     client.assert_success();
 
     Ok(PathBuf::from_str(file_path).expect("invalid file path"))
@@ -3400,7 +3404,11 @@ fn get_cosmwasm_port_id(test: &Test, ics721_contract: &str) -> Result<PortId> {
         vec!["query", "wasm", "contract", ics721_contract, "--node", &rpc];
     let mut cosmos = run_cosmos_cmd(test, args, Some(40))?;
     let (_unread, matched) = cosmos.exp_regex("ibc_port_id: wasm.*")?;
-    let port_id = matched.trim().split(' ').last().expect("invalid output");
+    let port_id = matched
+        .trim()
+        .split(' ')
+        .next_back()
+        .expect("invalid output");
     cosmos.exp_eof()?;
     port_id
         .parse()

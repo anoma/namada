@@ -3,8 +3,8 @@
 
 use namada_core::eth_bridge_pool::Segments;
 pub use namada_core::eth_bridge_pool::{
-    get_key_from_hash, get_pending_key, is_pending_transfer_key,
-    BRIDGE_POOL_ADDRESS,
+    BRIDGE_POOL_ADDRESS, get_key_from_hash, get_pending_key,
+    is_pending_transfer_key,
 };
 use namada_core::storage::{DbKeySeg, Key};
 pub use namada_state::merkle_tree::eth_bridge_pool::BridgePoolTree;

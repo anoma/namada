@@ -11,7 +11,7 @@ use namada_tx_env::{Result, TxEnv};
 
 use crate::event::{TokenEvent, TokenOperation};
 use crate::storage_key::balance_key;
-use crate::{read_balance, Amount, UserAccount};
+use crate::{Amount, UserAccount, read_balance};
 
 /// Multi-transfer credit or debit amounts
 pub trait CreditOrDebit {

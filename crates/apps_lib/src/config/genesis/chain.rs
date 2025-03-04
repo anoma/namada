@@ -15,12 +15,12 @@ use namada_sdk::eth_bridge::EthereumBridgeParams;
 use namada_sdk::governance::pgf::parameters::PgfParameters;
 use namada_sdk::hash::Hash;
 use namada_sdk::ibc::parameters::{IbcParameters, IbcTokenRateLimits};
-use namada_sdk::key::{common, RefTo};
+use namada_sdk::key::{RefTo, common};
 use namada_sdk::parameters::EpochDuration;
 use namada_sdk::time::{DateTimeUtc, DurationNanos, Rfc3339String};
 use namada_sdk::token::Amount;
 use namada_sdk::wallet::store::AddressVpType;
-use namada_sdk::wallet::{pre_genesis, Wallet};
+use namada_sdk::wallet::{Wallet, pre_genesis};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
