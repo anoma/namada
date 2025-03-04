@@ -990,20 +990,26 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct LedgerReset;
+    pub struct LedgerReset(pub args::LedgerReset);
 
     impl SubCmd for LedgerReset {
         const CMD: &'static str = "reset";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|_matches| Self)
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::LedgerReset::parse(matches)))
         }
 
         fn def() -> App {
-            App::new(Self::CMD).about(wrap!(
-                "Delete Namada ledger node's and Tendermint node's storage \
-                 data."
-            ))
+            App::new(Self::CMD)
+                .about(wrap!(
+                    "Delete Namada ledger node's and Tendermint node's \
+                     storage data. Unless ran with `--full-reset` flag, this \
+                     command will preserve the chain's wallet, local and \
+                     genesis configuration and validator key, if any."
+                ))
+                .add_args::<args::LedgerReset>()
         }
     }
 
@@ -3513,6 +3519,7 @@ pub mod args {
     pub const FEE_PAYER_OPT: ArgOpt<WalletPublicKey> = arg_opt("gas-payer");
     pub const FILE_PATH: Arg<String> = arg("file");
     pub const FORCE: ArgFlag = flag("force");
+    pub const FULL_RESET: ArgFlag = flag("full-reset");
     pub const GAS_LIMIT: ArgDefault<GasLimit> = arg_default(
         "gas-limit",
         DefaultFn(|| GasLimit::from(DEFAULT_GAS_LIMIT)),
@@ -3883,6 +3890,27 @@ pub mod args {
                     .args([HALT_ACTION.name, SUSPEND_ACTION.name])
                     .required(true),
             )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerReset {
+        pub full_reset: bool,
+    }
+
+    impl Args for LedgerReset {
+        fn parse(matches: &ArgMatches) -> Self {
+            Self {
+                full_reset: FULL_RESET.parse(matches),
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(FULL_RESET.def().help(wrap!(
+                "CAUTION: This will delete the wallet, make sure to back it \
+                 up.\nDelete the chain's wallet including local and genesis \
+                 configuration and validator key, if any."
+            )))
         }
     }
 

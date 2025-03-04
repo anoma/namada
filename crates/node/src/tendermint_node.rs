@@ -201,39 +201,17 @@ async fn handle_abort(
 }
 
 pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
-    let tendermint_path = from_env_or_default()?;
-    let tendermint_dir = tendermint_dir.as_ref().to_string_lossy();
-    // reset all the Tendermint state, if any
-    std::process::Command::new(tendermint_path)
-        .args([
-            "reset-state",
-            "unsafe-all",
-            // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels
-            // "--log-level=\"*debug\"",
-            "--home",
-            &tendermint_dir,
-        ])
-        .output()
-        .expect("Failed to reset tendermint node's data");
-    std::fs::remove_dir_all(format!("{}/config", tendermint_dir,))
-        .expect("Failed to reset tendermint node's config");
-    Ok(())
-}
+    let tendermint_dir = tendermint_dir.as_ref();
 
-pub fn reset_state(tendermint_dir: impl AsRef<Path>) -> Result<()> {
-    let tendermint_path = from_env_or_default()?;
-    let tendermint_dir = tendermint_dir.as_ref().to_string_lossy();
-    // reset all the Tendermint state, if any
-    std::process::Command::new(tendermint_path)
-        .args([
-            "unsafe-reset-all",
-            // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels
-            // "--log-level=\"*debug\"",
-            "--home",
-            &tendermint_dir,
-        ])
-        .output()
+    // Delete data dir
+    let data_dir = tendermint_dir.join("data");
+    std::fs::remove_dir_all(&data_dir)
         .expect("Failed to reset tendermint node's data");
+
+    // Recreate an empty validator state
+    std::fs::create_dir(&data_dir).unwrap();
+    write_validator_state(tendermint_dir).unwrap();
+
     Ok(())
 }
 
