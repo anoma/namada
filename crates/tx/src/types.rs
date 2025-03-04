@@ -1,8 +1,10 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::fmt::Display;
 use std::hash::Hash;
 use std::io;
 use std::ops::{Bound, RangeBounds};
+use std::str::FromStr;
 
 use masp_primitives::transaction::Transaction;
 use namada_account::AccountPublicKeysMap;
@@ -903,15 +905,15 @@ impl<'tx> Tx {
     Ord,
     PartialOrd,
     Hash,
+    Serialize,
+    Deserialize,
 )]
 pub struct IndexedTx {
     /// The block height of the indexed tx
     pub block_height: BlockHeight,
-    /// Relative index of this tx in the MASP
-    pub masp_index: u32,
     /// The index in the block of the tx
     pub block_index: TxIndex,
-    /// The optional index of an inner tx within this batc
+    /// The optional index of an inner tx within this batch
     pub batch_index: Option<u32>,
 }
 
@@ -921,7 +923,6 @@ impl IndexedTx {
     pub const fn entire_block(height: BlockHeight) -> Self {
         Self {
             block_height: height,
-            masp_index: u32::MAX,
             block_index: TxIndex(u32::MAX),
             batch_index: None,
         }
@@ -932,10 +933,23 @@ impl Default for IndexedTx {
     fn default() -> Self {
         Self {
             block_height: BlockHeight::first(),
-            masp_index: 0,
             block_index: TxIndex(0),
             batch_index: None,
         }
+    }
+}
+
+impl Display for IndexedTx {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", serde_json::to_string(self).unwrap())
+    }
+}
+
+impl FromStr for IndexedTx {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
     }
 }
 
@@ -957,13 +971,11 @@ impl IndexedTxRange {
         Self::new(
             IndexedTx {
                 block_height: from,
-                masp_index: 0,
                 block_index: TxIndex(0),
                 batch_index: None,
             },
             IndexedTx {
                 block_height: to,
-                masp_index: u32::MAX,
                 block_index: TxIndex(u32::MAX),
                 batch_index: None,
             },

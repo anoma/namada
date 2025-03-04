@@ -2,6 +2,8 @@
 
 mod utilities;
 
+use std::str::FromStr;
+
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
@@ -12,15 +14,13 @@ use namada_core::chain::BlockHeight;
 use namada_core::masp::MaspEpoch;
 use namada_core::time::DurationSecs;
 use namada_core::token::{Denomination, MaspDigitPos};
-use namada_events::extend::{
-    IndexedMaspData, MaspDataRefs as MaspDataRefsAttr, MaspTxRef, MaspTxRefs,
-    ReadFromEventAttributes,
-};
+use namada_events::extend::ReadFromEventAttributes;
 use namada_ibc::{decode_message, extract_masp_tx_from_envelope, IbcMessage};
 use namada_io::client::Client;
 use namada_token::masp::shielded_wallet::ShieldedQueries;
 pub use namada_token::masp::{utils, *};
-use namada_tx::Tx;
+use namada_tx::event::{MaspEvent, MaspEventKind, MaspTxRef};
+use namada_tx::{IndexedTx, Tx};
 pub use utilities::{IndexerMaspClient, LedgerMaspClient};
 
 use crate::error::{Error, QueryError};
@@ -35,8 +35,8 @@ use crate::{token, MaybeSend, MaybeSync};
 #[allow(clippy::result_large_err)]
 fn extract_masp_tx(
     tx: &Tx,
-    masp_refs: &MaspTxRefs,
-) -> Result<Vec<Transaction>, Error> {
+    masp_ref: &MaspTxRef,
+) -> Result<Transaction, Error> {
     // NOTE: It is possible to have two identical references in a same batch:
     // this is because, some types of MASP data packet can be correctly executed
     // more than once (output descriptions). We have to make sure we account for
@@ -44,81 +44,65 @@ fn extract_masp_tx(
     // and in the returned type): if the same reference shows up multiple
     // times in the input we must process it the same number of times to
     // ensure we contruct the correct state
-    masp_refs
-        .0
-        .iter()
-        .try_fold(vec![], |mut acc, ref masp_ref| {
-            match masp_ref {
-                MaspTxRef::MaspSection(id) => {
-                    // Simply looking for masp sections attached to the tx
-                    // is not safe. We don't validate the sections attached to a
-                    // transaction se we could end up with transactions carrying
-                    // an unnecessary masp section. We must instead look for the
-                    // required masp sections published in the events
-                    let transaction = tx
-                        .get_masp_section(id)
-                        .ok_or_else(|| {
-                            Error::Other(format!(
-                                "Missing expected masp transaction with id \
-                                 {id}"
-                            ))
-                        })?
-                        .clone();
-                    acc.push(transaction);
+    match masp_ref {
+        MaspTxRef::MaspSection(id) => {
+            // Simply looking for masp sections attached to the tx
+            // is not safe. We don't validate the sections attached to a
+            // transaction se we could end up with transactions carrying
+            // an unnecessary masp section. We must instead look for the
+            // required masp sections published in the events
+            Ok(tx
+                .get_masp_section(id)
+                .ok_or_else(|| {
+                    Error::Other(format!(
+                        "Missing expected masp transaction with id {id}"
+                    ))
+                })?
+                .clone())
+        }
+        MaspTxRef::IbcData(hash) => {
+            // Dereference the masp ref to the first instance that
+            // matches is, even if it is not the exact one that produced
+            // the event, the data we extract will be exactly the same
+            let masp_ibc_tx = tx
+                .commitments()
+                .iter()
+                .find(|cmt| cmt.data_sechash() == hash)
+                .ok_or_else(|| {
+                    Error::Other(format!(
+                        "Couldn't find data section with hash {hash}"
+                    ))
+                })?;
+            let tx_data = tx.data(masp_ibc_tx).ok_or_else(|| {
+                Error::Other("Missing expected data section".to_string())
+            })?;
 
-                    Ok(acc)
-                }
-                MaspTxRef::IbcData(hash) => {
-                    // Dereference the masp ref to the first instance that
-                    // matches is, even if it is not the exact one that produced
-                    // the event, the data we extract will be exactly the same
-                    let masp_ibc_tx = tx
-                        .commitments()
-                        .iter()
-                        .find(|cmt| cmt.data_sechash() == hash)
-                        .ok_or_else(|| {
-                            Error::Other(format!(
-                                "Couldn't find data section with hash {hash}"
-                            ))
-                        })?;
-                    let tx_data = tx.data(masp_ibc_tx).ok_or_else(|| {
-                        Error::Other(
-                            "Missing expected data section".to_string(),
-                        )
-                    })?;
+            let IbcMessage::Envelope(envelope) =
+                decode_message::<token::Transfer>(&tx_data)
+                    .map_err(|e| Error::Other(e.to_string()))?
+            else {
+                return Err(Error::Other(
+                    "Expected IBC packet to be an envelope".to_string(),
+                ));
+            };
 
-                    let IbcMessage::Envelope(envelope) =
-                        decode_message::<token::Transfer>(&tx_data)
-                            .map_err(|e| Error::Other(e.to_string()))?
-                    else {
-                        return Err(Error::Other(
-                            "Expected IBC packet to be an envelope".to_string(),
-                        ));
-                    };
-
-                    if let Some(transaction) =
-                        extract_masp_tx_from_envelope(&envelope)
-                    {
-                        acc.push(transaction);
-
-                        Ok(acc)
-                    } else {
-                        Err(Error::Other(
-                            "Failed to retrieve MASP over IBC transaction"
-                                .to_string(),
-                        ))
-                    }
-                }
+            if let Some(transaction) = extract_masp_tx_from_envelope(&envelope)
+            {
+                Ok(transaction)
+            } else {
+                Err(Error::Other(
+                    "Failed to retrieve MASP over IBC transaction".to_string(),
+                ))
             }
-        })
+        }
+    }
 }
 
-// Retrieves all the indexes at the specified height which refer
-// to a valid masp transaction.
+// Retrieves all the masp events at the specified height.
 async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
-) -> Result<Vec<IndexedMaspData>, Error> {
+) -> Result<Vec<MaspEvent>, Error> {
     Ok(client
         .block_results(height.0)
         .await
@@ -128,10 +112,37 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
             events
                 .into_iter()
                 .filter_map(|event| {
-                    MaspDataRefsAttr::read_from_event_attributes(
+                    // FIXME: improve here
+                    let Ok(data) = MaspTxRef::read_from_event_attributes(
                         &event.attributes,
-                    )
-                    .ok()
+                    ) else {
+                        return None;
+                    };
+                    let Ok(tx_index) = IndexedTx::read_from_event_attributes(
+                        &event.attributes,
+                    ) else {
+                        return None;
+                    };
+                    let Ok(kind) =
+                        namada_events::EventType::from_str(&event.kind)
+                    else {
+                        return None;
+                    };
+                    let kind = if kind == namada_tx::event::masp_types::TRANSFER
+                    {
+                        MaspEventKind::Transfer
+                    } else if kind == namada_tx::event::masp_types::FEE_PAYMENT
+                    {
+                        MaspEventKind::FeePayment
+                    } else {
+                        return None;
+                    };
+
+                    Some(MaspEvent {
+                        tx_index,
+                        kind,
+                        data,
+                    })
                 })
                 .collect::<Vec<_>>()
         })

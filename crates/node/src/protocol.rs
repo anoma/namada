@@ -8,8 +8,7 @@ use eyre::{eyre, WrapErr};
 use namada_sdk::address::{Address, InternalAddress};
 use namada_sdk::booleans::BoolResultUnitExt;
 use namada_sdk::events::extend::{
-    ComposeEvent, Height as HeightAttr, MaspTxRef, MaspTxRefs,
-    TxHash as TxHashAttr, UserAccount,
+    ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr, UserAccount,
 };
 use namada_sdk::events::EventLevel;
 use namada_sdk::gas::{self, Gas, GasMetering, TxGasMeter, VpGasMeter};
@@ -28,7 +27,8 @@ use namada_sdk::tx::data::{
     BatchedTxResult, ExtendedTxResult, TxResult, VpStatusFlags, VpsResult,
     WrapperTx,
 };
-use namada_sdk::tx::{BatchedTxRef, Tx, TxCommitments};
+use namada_sdk::tx::event::{MaspTxRef, MaspTxRefs};
+use namada_sdk::tx::{BatchedTxRef, IndexedTx, Tx, TxCommitments};
 use namada_sdk::validation::{
     EthBridgeNutVp, EthBridgePoolVp, EthBridgeVp, GovernanceVp, IbcVp, MaspVp,
     MultitokenVp, NativeVpCtx, ParametersVp, PgfVp, PosVp,
@@ -168,6 +168,8 @@ pub enum DispatchArgs<'a, CA: 'static + WasmCacheAccess + Sync> {
     Raw {
         /// The tx index
         tx_index: TxIndex,
+        /// The block height
+        height: namada_sdk::chain::BlockHeight,
         /// Hash of the header of the wrapper tx containing
         /// this raw tx
         wrapper_hash: Option<&'a Hash>,
@@ -187,6 +189,8 @@ pub enum DispatchArgs<'a, CA: 'static + WasmCacheAccess + Sync> {
         tx_bytes: &'a [u8],
         /// The tx index
         tx_index: TxIndex,
+        /// The block height
+        height: namada_sdk::chain::BlockHeight,
         /// The block proposer
         block_proposer: &'a Address,
         /// Vp cache
@@ -214,6 +218,7 @@ where
     match dispatch_args {
         DispatchArgs::Raw {
             tx_index,
+            height,
             wrapper_hash,
             wrapper_tx_result,
             vp_wasm_cache,
@@ -236,6 +241,7 @@ where
                     wrapper_hash,
                     tx_result,
                     tx_index,
+                    height,
                     tx_gas_meter,
                     state,
                     vp_wasm_cache,
@@ -291,6 +297,7 @@ where
             wrapper,
             tx_bytes,
             tx_index,
+            height,
             block_proposer,
             vp_wasm_cache,
             tx_wasm_cache,
@@ -307,6 +314,7 @@ where
                 wrapper,
                 tx_bytes,
                 &tx_index,
+                height,
                 tx_gas_meter,
                 &mut shell_params,
                 Some(block_proposer),
@@ -318,12 +326,16 @@ where
 
 pub(crate) fn get_batch_txs_to_execute<'a>(
     tx: &'a Tx,
-    masp_tx_refs: &MaspTxRefs,
+    masp_tx_refs: &mut MaspTxRefs,
 ) -> impl Iterator<Item = &'a TxCommitments> {
     let mut batch_iter = tx.commitments().iter();
-    if !masp_tx_refs.0.is_empty() {
-        // If fees were paid via masp skip the first transaction of the batch
-        // which has already been executed
+    // Remove the masp ref of fee payment if any. We have already emitted the
+    // event for it
+    if masp_tx_refs.0.pop().is_some() {
+        // FIXME: look here if we change the masp events, we still need to skip
+        // the first tx of the batch! If fees were paid via masp skip
+        // the first transaction of the batch which has already been
+        // executed
         batch_iter.next();
     }
 
@@ -336,6 +348,7 @@ pub(crate) fn dispatch_inner_txs<'a, S, D, H, CA>(
     wrapper_hash: Option<&'a Hash>,
     mut extended_tx_result: ExtendedTxResult<Error>,
     tx_index: TxIndex,
+    height: namada_sdk::chain::BlockHeight,
     tx_gas_meter: &'a RefCell<TxGasMeter>,
     state: &'a mut S,
     vp_wasm_cache: &'a mut VpCache<CA>,
@@ -351,7 +364,9 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    for cmt in get_batch_txs_to_execute(tx, &extended_tx_result.masp_tx_refs) {
+    for cmt in
+        get_batch_txs_to_execute(tx, &mut extended_tx_result.masp_tx_refs)
+    {
         match apply_wasm_tx(
             wrapper_hash,
             &tx.batch_ref_tx(cmt),
@@ -382,6 +397,8 @@ where
                     Err(_) => None,
                 };
 
+                // FIXME: here we insert the inner tx result which also contains
+                // the events
                 extended_tx_result.tx_result.insert_inner_tx_result(
                     wrapper_hash,
                     either::Right(cmt),
@@ -397,7 +414,22 @@ where
                             cmt,
                             Either::Right(res),
                         )? {
-                            extended_tx_result.masp_tx_refs.0.push(masp_ref)
+                            // FIXME: here we should cache the event directly
+                            // into res (if it is ok)
+                            extended_tx_result.masp_tx_refs.0.push((
+                                IndexedTx {
+                                    block_height: height,
+                                    block_index: tx_index,
+                                    batch_index: tx
+                                        .header
+                                        .batch
+                                        .get_index_of(cmt)
+                                        .and_then(|idx| {
+                                            u32::try_from(idx).ok()
+                                        }),
+                                },
+                                masp_ref,
+                            ))
                         }
                         state.write_log_mut().commit_tx_to_batch();
                     }
@@ -433,11 +465,13 @@ pub struct MaspTxResult {
 ///  - replay protection
 ///  - fee payment
 ///  - gas accounting
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
     tx: &Tx,
     wrapper: &WrapperTx,
     tx_bytes: &[u8],
     tx_index: &TxIndex,
+    height: namada_sdk::chain::BlockHeight,
     tx_gas_meter: &RefCell<TxGasMeter>,
     shell_params: &mut ShellParams<'_, S, D, H, CA>,
     block_proposer: Option<&Address>,
@@ -477,6 +511,8 @@ where
         .write_log_mut()
         .commit_batch_and_current_tx();
 
+    // FIXME: here we should probably just push the event inside the events
+    // field of TxResult without the need for ExtendedTxResult
     let (batch_results, masp_section_refs) = payment_result.map_or_else(
         || (TxResult::default(), None),
         |masp_tx_result| {
@@ -490,7 +526,14 @@ where
             );
             (
                 batch,
-                Some(MaspTxRefs(vec![masp_tx_result.masp_section_ref])),
+                Some(MaspTxRefs(vec![(
+                    IndexedTx {
+                        block_height: height,
+                        block_index: tx_index.to_owned(),
+                        batch_index: Some(0),
+                    },
+                    masp_tx_result.masp_section_ref,
+                )])),
             )
         },
     );
@@ -999,6 +1042,7 @@ where
 
     let initialized_accounts = state.write_log().get_initialized_accounts();
     let changed_keys = state.write_log().get_keys();
+    // FIXME: seems like here we extract the events produced by the tx
     let events = state.write_log_mut().take_events();
 
     Ok(BatchedTxResult {

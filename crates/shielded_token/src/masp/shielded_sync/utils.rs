@@ -369,7 +369,6 @@ mod test_blocks_left_to_fetch {
                 (
                     IndexedTx {
                         block_height: height,
-                        masp_index: 0,
                         block_index: TxIndex(0),
                         batch_index: None,
                     },

@@ -33,6 +33,7 @@ where
     tx.validate_tx().into_storage_result()?;
 
     let gas_scale = parameters::get_gas_scale(&state)?;
+    let height = state.in_mem().get_last_block_height();
 
     // Wrapper dry run to allow estimating the entire gas cost of a transaction
     let (wrapper_hash, extended_tx_result, tx_gas_meter) =
@@ -55,6 +56,7 @@ where
                     &wrapper,
                     &request.data,
                     &TxIndex::default(),
+                    height,
                     &tx_gas_meter,
                     &mut shell_params,
                     None,
@@ -84,6 +86,7 @@ where
         wrapper_hash.as_ref(),
         extended_tx_result,
         TxIndex(0),
+        height,
         &tx_gas_meter,
         &mut state,
         &mut vp_wasm_cache,
@@ -104,7 +107,7 @@ where
         data: dry_run_result.serialize_to_vec(),
         proof: None,
         info: Default::default(),
-        height: state.in_mem().get_last_block_height(),
+        height,
     })
 }
 

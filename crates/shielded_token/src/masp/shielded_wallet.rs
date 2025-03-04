@@ -141,25 +141,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
         self.utils.save(self).await
     }
 
-    /// Update only the Merkle tree without updating anything else. Useful for
-    /// checking note commitment tree anchors with less overhead.
-    pub(crate) fn update_merkle_tree(
-        &mut self,
-        shielded: &Transaction,
-    ) -> Result<(), eyre::Error> {
-        for so in shielded
-            .sapling_bundle()
-            .map_or(&vec![], |x| &x.shielded_outputs)
-        {
-            // Create merkle tree leaf node from note commitment
-            let node = Node::new(so.cmu.to_repr());
-            self.tree.append(node).map_err(|()| {
-                eyre!("note commitment tree is full".to_string())
-            })?;
-        }
-        Ok(())
-    }
-
     /// Update the merkle tree of witnesses the first time we
     /// scan new MASP transactions.
     pub(crate) fn update_witness_map(
