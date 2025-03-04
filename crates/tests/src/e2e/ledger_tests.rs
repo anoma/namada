@@ -357,7 +357,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     ledger.exp_eof()?;
     drop(ledger);
 
-    // 8. Do a full reset the ledger's
+    // 8. Do a full reset of the ledger state
     let mut session = run_as!(
         test,
         Who::Validator(0),
