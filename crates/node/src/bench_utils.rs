@@ -27,9 +27,7 @@ use namada_sdk::borsh::{
 };
 use namada_sdk::chain::testing::get_dummy_header;
 use namada_sdk::chain::{BlockHeight, ChainId, Epoch};
-use namada_sdk::events::extend::{
-    ComposeEvent, IndexedMaspData, MaspDataRefs, MaspTxRef, MaspTxRefs,
-};
+use namada_sdk::events::extend::ComposeEvent;
 use namada_sdk::events::Event;
 use namada_sdk::gas::TxGasMeter;
 use namada_sdk::governance::storage::proposal::ProposalType;
@@ -90,9 +88,9 @@ use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::{self, Amount, DenominatedAmount, Transfer};
 use namada_sdk::tx::data::pos::Bond;
 use namada_sdk::tx::data::{BatchedTxResult, Fee, TxResult, VpsResult};
-use namada_sdk::tx::event::{new_tx_event, Batch};
+use namada_sdk::tx::event::{new_tx_event, Batch, MaspEvent, MaspTxRef};
 use namada_sdk::tx::{
-    Authorization, BatchedTx, BatchedTxRef, Code, Data, Section, Tx,
+    Authorization, BatchedTx, BatchedTxRef, Code, Data, IndexedTx, Section, Tx,
 };
 pub use namada_sdk::tx::{
     TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
@@ -1014,53 +1012,61 @@ impl Client for BenchShell {
         let end_block_events = if height.value()
             == shell.inner.state.in_mem().get_last_block_height().0
         {
-            Some(
-                shell
-                    .last_block_masp_txs
-                    .iter()
-                    .enumerate()
-                    .map(|(idx, (tx, changed_keys))| {
-                        let tx_result = {
-                            let mut batch_results = TxResult::new();
-                            batch_results.insert_inner_tx_result(
-                                tx.wrapper_hash().as_ref(),
-                                either::Right(tx.first_commitments().unwrap()),
-                                Ok(BatchedTxResult {
-                                    changed_keys: changed_keys.to_owned(),
-                                    vps_result: VpsResult::default(),
-                                    initialized_accounts: vec![],
-                                    events: BTreeSet::default(),
-                                }),
-                            );
-                            batch_results
-                        };
-                        let event: Event = new_tx_event(tx, height.value())
-                            .with(Batch(&tx_result))
-                            .with(MaspDataRefs(IndexedMaspData {
-                                tx_index: TxIndex::must_from_usize(idx),
-                                masp_refs: MaspTxRefs(vec![
-                                    tx.sections
-                                        .iter()
-                                        .find_map(|section| {
-                                            if let Section::MaspTx(
-                                                transaction,
-                                            ) = section
-                                            {
-                                                Some(MaspTxRef::MaspSection(
-                                                    transaction.txid().into(),
-                                                ))
-                                            } else {
-                                                None
-                                            }
-                                        })
-                                        .unwrap(),
-                                ]),
-                            }))
-                            .into();
-                        namada_sdk::tendermint::abci::Event::from(event)
-                    })
-                    .collect(),
-            )
+            let mut res = vec![];
+            for (idx, (tx, changed_keys)) in
+                shell.last_block_masp_txs.iter().enumerate()
+            {
+                let tx_result = {
+                    let mut batch_results = TxResult::new();
+                    batch_results.insert_inner_tx_result(
+                        tx.wrapper_hash().as_ref(),
+                        either::Right(tx.first_commitments().unwrap()),
+                        Ok(BatchedTxResult {
+                            changed_keys: changed_keys.to_owned(),
+                            vps_result: VpsResult::default(),
+                            initialized_accounts: vec![],
+                            events: BTreeSet::default(),
+                        }),
+                    );
+                    batch_results
+                };
+                let tx_event: Event = new_tx_event(tx, height.value())
+                    .with(Batch(&tx_result))
+                    .into();
+                let mut masp_ref = None;
+                for section in &tx.sections {
+                    if let Section::MaspTx(transaction) = section {
+                        masp_ref = Some(MaspTxRef::MaspSection(
+                            transaction.txid().into(),
+                        ));
+                        // Expect a single masp tx in the batch
+                        break;
+                    }
+                }
+
+                let masp_event = masp_ref.map(|data| {
+                    let masp_event: Event = MaspEvent {
+                        tx_index: IndexedTx {
+                            height: namada_sdk::chain::BlockHeight(u64::from(
+                                height,
+                            )),
+                            index: TxIndex::must_from_usize(idx),
+                            batch_index: Some(0),
+                        },
+                        kind: namada_sdk::tx::event::MaspEventKind::Transfer,
+                        data,
+                    }
+                    .into();
+                    masp_event
+                });
+
+                res.push(namada_sdk::tendermint::abci::Event::from(tx_event));
+
+                if let Some(event) = masp_event {
+                    res.push(namada_sdk::tendermint::abci::Event::from(event));
+                }
+            }
+            Some(res)
         } else {
             None
         };

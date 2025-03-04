@@ -23,7 +23,6 @@ use namada_core::borsh::{
 };
 use namada_core::hash::Hash;
 use namada_core::storage;
-use namada_events::extend::MaspTxRefs;
 use namada_events::Event;
 use namada_gas::WholeGas;
 use namada_macros::BorshDeserializer;
@@ -37,6 +36,7 @@ use sha2::{Digest, Sha256};
 pub use wrapper::*;
 
 use crate::data::protocol::ProtocolTx;
+use crate::event::MaspTxRefs;
 use crate::TxCommitments;
 
 /// The different result codes that the ledger may send back to a client
@@ -190,11 +190,15 @@ pub struct ExtendedTxResult<T> {
     pub tx_result: TxResult<T>,
     /// The optional references to masp data (either MASP sections or tx Data
     /// for shielded actions)
+    // FIXME: review this note
     // NOTE: it's paramount to enforce a single, ordered collection for all the
     // masp transactions to ensure that the exact view on the tx sequence is
     // preserved in the events. Also, it is possible for two refs to be exactly
     // the same, we must make sure to emit events for both so that the
     // client/indexer can properly construct their internal state
+    // FIXME: I don't think we need this anymore? We can just push the events
+    // to the events themselves and then commit them as usual when evaluating
+    // the tx results
     pub masp_tx_refs: MaspTxRefs,
 }
 

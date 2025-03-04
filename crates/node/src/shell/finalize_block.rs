@@ -3,9 +3,7 @@
 use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
-use namada_sdk::events::extend::{
-    ComposeEvent, Height, IndexedMaspData, Info, MaspDataRefs, TxHash,
-};
+use namada_sdk::events::extend::{ComposeEvent, Height, Info, TxHash};
 use namada_sdk::events::{EmitEvents, Event};
 use namada_sdk::gas::event::GasUsed;
 use namada_sdk::gas::GasMetering;
@@ -22,7 +20,7 @@ use namada_sdk::state::{
 use namada_sdk::storage::{BlockHeader, BlockResults, Epoch};
 use namada_sdk::tx::data::protocol::ProtocolTxType;
 use namada_sdk::tx::data::VpStatusFlags;
-use namada_sdk::tx::event::{Batch, Code};
+use namada_sdk::tx::event::{Batch, Code, MaspEvent, MaspEventKind};
 use namada_sdk::tx::new_tx_event;
 use namada_sdk::{ibc, proof_of_stake};
 use namada_vote_ext::ethereum_events::MultiSignedEthEvent;
@@ -349,9 +347,55 @@ where
         match extended_dispatch_result {
             Ok(extended_tx_result) => match tx_data.tx.header.tx_type {
                 TxType::Wrapper(_) => {
+                    // FIXME: wait what if the wrapper failed?? I think we
+                    // return an error in that case. But shouldn't we check the
+                    // result anyway? It seems like we always return Ok
+                    // Commit any changes brought in by the optional fee-paying
+                    // tx to ensure fee payment
                     self.state.write_log_mut().commit_batch_and_current_tx();
 
-                    // Return withouth emitting any events
+                    // FIXME: there's a problem with this solution, I can no
+                    // longer use the tx/applied events as separators for the tx
+                    // events because now we emit them immediately, so I need a
+                    // way to map every event to its tx Emit
+                    // the events of the fee-paying inner tx. This tx will be
+                    // committed even in case of a failing atomic batch so we
+                    // need to ensure the relative events are emitted
+                    // FIXME: review this
+                    let mut events = extended_tx_result
+                        .tx_result
+                        .0
+                        .first_key_value()
+                        .map_or_else(Default::default, |(_k, v)| {
+                            if let Ok(result) = v {
+                                result.events.clone()
+                            } else {
+                                Default::default()
+                            }
+                        });
+                    if let Some((indexed_tx, masp_ref)) =
+                        extended_tx_result.masp_tx_refs.0.first()
+                    {
+                        events.insert(
+                            MaspEvent {
+                                tx_index: indexed_tx.to_owned(),
+                                kind: MaspEventKind::FeePayment,
+                                data: masp_ref.to_owned(),
+                            }
+                            .into(),
+                        );
+                    }
+                    response.events.emit_many(
+                        events
+                            .into_iter()
+                            .map(|event| event.with(Height(tx_data.height))),
+                    );
+
+                    // FIXME: if we emit events here we don't need the
+                    // ExtendedTxResult here FIXME: actually
+                    // we still need to signal to the batch if we need to
+                    // execute the first tx or skip it
+                    // Return cached data for the execution of the batch
                     return Some(WrapperCache {
                         tx: tx_data.tx.to_owned(),
                         tx_index: tx_data.tx_index,
@@ -453,12 +497,12 @@ where
         let ValidityFlags {
             commit_batch_hash,
             is_any_tx_invalid,
-        } = temp_log.check_inner_results(
-            &extended_tx_result,
-            tx_data.tx_index,
-            tx_data.height,
-        );
+        } = temp_log.check_inner_results(&extended_tx_result, tx_data.height);
 
+        // FIXME: actually I don't think this condition is ever entered cause in
+        // case of failing atomic batches we return an error from the execution
+        // and this function is only called if the result is Ok. Exactly so we
+        // could remove this
         if tx_data.is_atomic_batch && is_any_tx_invalid {
             // Atomic batches need custom handling when even a single tx fails,
             // since we need to drop everything
@@ -470,8 +514,12 @@ where
                 )
                 .expect("Shouldn't underflow");
             temp_log.stats.set_failing_atomic_batch(unrun_txs);
+            // FIXME: here we drop events
             temp_log.commit_stats_only(tx_logs);
             self.state.write_log_mut().drop_batch();
+            // FIXME: this is a problem if the first tx correctly did masp fee
+            // payment! Cause the external tools imight ignore the tx! We need a
+            // solution for this!
             tx_logs.tx_event.extend(Code(ResultCode::WasmRuntimeError));
         } else {
             self.state.write_log_mut().commit_batch_and_current_tx();
@@ -521,11 +569,7 @@ where
         let ValidityFlags {
             commit_batch_hash,
             is_any_tx_invalid: _,
-        } = temp_log.check_inner_results(
-            &extended_tx_result,
-            tx_data.tx_index,
-            tx_data.height,
-        );
+        } = temp_log.check_inner_results(&extended_tx_result, tx_data.height);
 
         let unrun_txs = tx_data
             .commitments_len
@@ -537,6 +581,12 @@ where
 
         if tx_data.is_atomic_batch {
             tx_logs.stats.set_failing_atomic_batch(unrun_txs);
+            // FIXME: I believe here we drop the event for masp fee payment if
+            // present, which is wrong! Actually we drop all events for the
+            // first tx FIXME: but it it is correct to drop all the
+            // other events, so we need to do something specific just for the
+            // masp fee payment event (in general for all the events of the masp
+            // fee payment inner tx)
             temp_log.commit_stats_only(tx_logs);
             self.state.write_log_mut().drop_batch();
         } else {
@@ -704,6 +754,7 @@ where
                             wrapper,
                             tx_bytes: processed_tx.tx.as_ref(),
                             tx_index: TxIndex::must_from_usize(tx_index),
+                            height,
                             block_proposer: native_block_proposer_address,
                             vp_wasm_cache: &mut self.vp_wasm_cache,
                             tx_wasm_cache: &mut self.tx_wasm_cache,
@@ -849,6 +900,7 @@ where
                 DispatchArgs::Raw {
                     wrapper_hash: Some(&tx_hash),
                     tx_index: TxIndex::must_from_usize(tx_index),
+                    height,
                     wrapper_tx_result: Some(wrapper_tx_result),
                     vp_wasm_cache: &mut self.vp_wasm_cache,
                     tx_wasm_cache: &mut self.tx_wasm_cache,
@@ -960,6 +1012,7 @@ impl<'finalize> TempTxLogs {
         logs.tx_event.merge(self.tx_event);
         logs.stats.merge(self.stats);
         logs.changed_keys.extend(self.changed_keys);
+        // FIXME: use emit_many here?
         response.events.extend(self.response_events);
     }
 
@@ -974,7 +1027,6 @@ impl<'finalize> TempTxLogs {
         extended_tx_result: &namada_sdk::tx::data::ExtendedTxResult<
             protocol::Error,
         >,
-        tx_index: usize,
         height: BlockHeight,
     ) -> ValidityFlags {
         let mut flags = ValidityFlags::default();
@@ -996,6 +1048,16 @@ impl<'finalize> TempTxLogs {
                         flags.commit_batch_hash = true;
 
                         // events from other sources
+                        // FIXME: so what we can do is this, we pull masp events
+                        // out of tx/applied and we apply them the same logic we
+                        // apply here (we extract them end emit as separate
+                        // events). For masp fee payment we emit them
+                        // immediately when we commit the storage changes
+                        // together with any other possible event for that tx
+                        // (except for tx/applied which we defer to after the
+                        // exection of the batch). Also these masp event should
+                        // contain the tx iindex in the block and the tx index
+                        // in the batch so that we ease the task for the indexer
                         self.response_events.emit_many(
                             result.events.iter().map(|event| {
                                 event.clone().with(Height(height))
@@ -1042,12 +1104,16 @@ impl<'finalize> TempTxLogs {
 
         // If at least one of the inner transactions is a valid masp tx, update
         // the events
-        if !extended_tx_result.masp_tx_refs.0.is_empty() {
-            self.tx_event.extend(MaspDataRefs(IndexedMaspData {
-                tx_index: TxIndex::must_from_usize(tx_index),
-                masp_refs: extended_tx_result.masp_tx_refs.clone(),
-            }));
+        for (indexed_tx, masp_ref) in &extended_tx_result.masp_tx_refs.0 {
+            self.response_events.emit(MaspEvent {
+                tx_index: indexed_tx.to_owned(),
+                kind: MaspEventKind::Transfer,
+                // FIXME: avoid to_owned, take the data if possible
+                data: masp_ref.to_owned(),
+            })
         }
+        // FIXME: tests. Block with masp fee payemtn and normal masp txs check
+        // the order. Failing atomiic batch doing masp fee payment
 
         flags
     }
@@ -1133,6 +1199,7 @@ where
 {
     let vp_wasm_cache = &mut shell.vp_wasm_cache;
     let tx_wasm_cache = &mut shell.tx_wasm_cache;
+    let height = shell.state.get_block_height()?;
     governance::finalize_block::<
         _,
         token::Store<_>,
@@ -1150,6 +1217,7 @@ where
                 protocol::DispatchArgs::Raw {
                     wrapper_hash: None,
                     tx_index: TxIndex::default(),
+                    height,
                     wrapper_tx_result: None,
                     vp_wasm_cache,
                     tx_wasm_cache,
