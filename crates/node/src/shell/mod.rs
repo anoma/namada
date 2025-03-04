@@ -148,15 +148,21 @@ impl From<Error> for TxResult {
 
 pub type ShellResult<T> = std::result::Result<T, Error>;
 
-pub fn reset(config: config::Ledger) -> ShellResult<()> {
+pub fn reset(config: config::Config, full_reset: bool) -> ShellResult<()> {
     // simply nuke the DB files
-    let db_path = &config.db_dir();
+    let db_path = &config.ledger.db_dir();
     match std::fs::remove_dir_all(db_path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
         res => res.map_err(Error::RemoveDB)?,
     };
-    // reset Tendermint state
-    tendermint_node::reset(config.cometbft_dir()).map_err(Error::Tendermint)?;
+
+    if full_reset {
+        std::fs::remove_dir_all(config.ledger.chain_dir()).unwrap()
+    } else {
+        // reset Tendermint state
+        tendermint_node::reset(config.ledger.cometbft_dir())
+            .map_err(Error::Tendermint)?;
+    }
     Ok(())
 }
 
