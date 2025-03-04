@@ -382,7 +382,7 @@ where
         }
     }
 
-    // Search for the Transaction order usedby the protocol using trial and
+    // Search for the Transaction order used by the protocol using trial and
     // error.
     async fn transaction_order_search(
         &mut self,
@@ -391,8 +391,6 @@ where
         let mut ordered_txs = vec![];
         // Get the unordered Transactions with their indices
         let mut indexed_txs = self.cache.fetched.take().into_iter().peekable();
-        let needs_witness_map_update =
-            self.client.capabilities().needs_witness_map_update();
         while let Some(first_tx) = indexed_txs.next() {
             // Take only Transactions belonging to one block
             let mut block_txs = vec![first_tx];
@@ -402,9 +400,7 @@ where
                 block_txs.push(next_tx);
             }
             // Do not apply these Transactions if they have been applied before
-            if !needs_witness_map_update
-                || Some(&block_txs[0].0) <= last_witnessed_tx.as_ref()
-            {
+            if Some(&block_txs[0].0) <= last_witnessed_tx.as_ref() {
                 continue;
             }
             // Save the initial state of the ShieldedContext in case reversion
@@ -428,7 +424,7 @@ where
                 for (indexed_tx, stx_batch) in &subset {
                     tracing::debug!("Transaction Index: {:?}", indexed_tx);
                     fee_transfers.insert(indexed_tx);
-                    self.ctx.update_witness_map(*indexed_tx, stx_batch).await?;
+                    self.ctx.update_witness_map(*indexed_tx, stx_batch)?;
                 }
                 // Apply the second subsequence, which corresponds to the
                 // Transactions not used in the fees
@@ -437,9 +433,7 @@ where
                     // first
                     if !fee_transfers.contains(indexed_tx) {
                         tracing::debug!("Transaction Index: {:?}", indexed_tx);
-                        self.ctx
-                            .update_witness_map(*indexed_tx, stx_batch)
-                            .await?;
+                        self.ctx.update_witness_map(*indexed_tx, stx_batch)?;
                     }
                 }
                 // Compute what the note commitment tree root would look like
