@@ -18,6 +18,11 @@ RUN apt-get update && apt-get install -y \
     libudev-dev \
     && apt-get clean
 
+# Needed for rust-rocksdb 0.23 build
+RUN apt install -y llvm
+RUN ln -s /usr/lib/llvm-14/lib/libclang-14.so.1 /usr/lib/llvm-14/lib/libclang-14.so
+ENV LIBCLANG_PATH /usr/lib/llvm-14/lib
+
 COPY --from=planner /app/recipe.json recipe.json
 
 RUN cargo chef cook --release --recipe-path recipe.json
