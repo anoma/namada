@@ -857,9 +857,7 @@ pub mod testing {
     use governance::ProposalType;
     use masp_primitives::transaction::components::sapling::builder::StoredBuildParams;
     use namada_account::{InitAccount, UpdateAccount};
-    use namada_core::address::testing::{
-        arb_established_address, arb_non_internal_address,
-    };
+    use namada_core::address::testing::arb_non_internal_address;
     use namada_core::collections::{HashMap, HashSet};
     use namada_core::eth_bridge_pool::PendingTransfer;
     use namada_core::hash::testing::arb_hash;
@@ -1020,7 +1018,7 @@ pub mod testing {
         /// Generate an arbitrary fee
         pub fn arb_fee()(
             amount_per_gas_unit in arb_denominated_amount(),
-            token in arb_established_address().prop_map(Address::Established),
+            token in arb_non_internal_address(),
         ) -> Fee {
             Fee {
                 amount_per_gas_unit,
