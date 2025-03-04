@@ -1,23 +1,22 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 
 use data_encoding::HEXLOWER;
+use namada_sdk::address::testing::address_whitelist;
 use namada_sdk::signing::to_ledger_vector;
 use namada_sdk::testing::arb_signed_tx;
-use namada_sdk::wallet::fs::FsWalletUtils;
 use proptest::strategy::{Strategy, ValueTree};
 use proptest::test_runner::{Reason, TestRunner};
 
 #[tokio::main]
 async fn main() -> Result<(), Reason> {
     let mut runner = TestRunner::deterministic();
-    let wallet = FsWalletUtils::new(PathBuf::from("wallet.toml"));
+    let addr_whitelist = address_whitelist();
     let mut debug_vectors = vec![];
     let mut test_vectors = vec![];
     let mut serialized_txs = vec![];
     for i in 0..10000 {
         let (tx, tx_data) = arb_signed_tx().new_tree(&mut runner)?.current();
-        let mut ledger_vector = to_ledger_vector(&wallet, &tx)
+        let mut ledger_vector = to_ledger_vector(&addr_whitelist, &tx)
             .await
             .expect("unable to construct test vector");
         let sechashes = tx.sechashes();
