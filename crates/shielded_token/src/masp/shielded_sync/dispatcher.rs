@@ -490,8 +490,11 @@ where
 
         let needs_witness_map_update =
             self.client.capabilities().needs_witness_map_update();
-        let ordered_txs =
-            self.transaction_order_search(last_witnessed_tx).await?;
+        let ordered_txs = if needs_witness_map_update {
+            self.transaction_order_search(last_witnessed_tx).await?
+        } else {
+            self.cache.fetched.take().into_iter().collect()
+        };
 
         for (indexed_tx, stx_batch) in ordered_txs {
             self.ctx
