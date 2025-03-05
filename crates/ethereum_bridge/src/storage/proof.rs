@@ -10,7 +10,7 @@ use namada_core::keccak::KeccakHash;
 use namada_core::key::{common, secp256k1};
 use namada_core::{eth_abi, ethereum_structs};
 use namada_vote_ext::validator_set_update::{
-    valset_upd_toks_to_hashes, EthAddrBook, VotingPowersMap, VotingPowersMapExt,
+    EthAddrBook, VotingPowersMap, VotingPowersMapExt, valset_upd_toks_to_hashes,
 };
 
 /// Ethereum proofs contain the [`secp256k1`] signatures of validators

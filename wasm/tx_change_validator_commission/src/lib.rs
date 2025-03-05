@@ -21,18 +21,18 @@ mod tests {
     use std::cmp;
 
     use namada_tests::log::test;
-    use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
+    use namada_tests::native_vp::pos::init_pos;
     use namada_tests::tx::*;
     use namada_tests::validation::PosVp;
     use namada_tx_prelude::address::testing::arb_established_address;
     use namada_tx_prelude::chain::ChainId;
     use namada_tx_prelude::dec::{Dec, POS_DECIMAL_PRECISION};
     use namada_tx_prelude::gas::VpGasMeter;
-    use namada_tx_prelude::key::testing::arb_common_keypair;
     use namada_tx_prelude::key::RefTo;
-    use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
+    use namada_tx_prelude::key::testing::arb_common_keypair;
     use namada_tx_prelude::proof_of_stake::parameters::OwnedPosParams;
+    use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use namada_tx_prelude::proof_of_stake::storage::validator_commission_rate_handle;
     use namada_tx_prelude::proof_of_stake::types::GenesisValidator;
     use proptest::prelude::*;

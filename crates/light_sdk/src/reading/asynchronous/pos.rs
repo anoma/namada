@@ -3,11 +3,11 @@ use std::collections::BTreeSet;
 use namada_sdk::chain::{BlockHeight, Epoch};
 use namada_sdk::collections::{HashMap, HashSet};
 use namada_sdk::key::common;
+use namada_sdk::proof_of_stake::PosParams;
 use namada_sdk::proof_of_stake::types::{
     BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData,
     ValidatorStateInfo,
 };
-use namada_sdk::proof_of_stake::PosParams;
 use namada_sdk::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
 
 use super::*;

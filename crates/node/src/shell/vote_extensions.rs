@@ -11,7 +11,7 @@ use namada_sdk::eth_bridge::protocol::transactions::validator_set_update::sign_v
 pub use namada_sdk::eth_bridge::protocol::validation::VoteExtensionError;
 use namada_sdk::tx::Signed;
 use namada_vote_ext::{
-    bridge_pool_roots, ethereum_events, validator_set_update, VoteExtension,
+    VoteExtension, bridge_pool_roots, ethereum_events, validator_set_update,
 };
 
 use super::*;

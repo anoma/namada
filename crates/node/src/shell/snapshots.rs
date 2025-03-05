@@ -11,7 +11,7 @@ use crate::storage;
 use crate::storage::{DbSnapshot, DbSnapshotMeta};
 use crate::tendermint::abci::types::Snapshot;
 use crate::tendermint::abci::{
-    request as tm_request, response as tm_response, ApplySnapshotChunkResult,
+    ApplySnapshotChunkResult, request as tm_request, response as tm_response,
 };
 
 pub const MAX_SENDER_STRIKES: u64 = 5;

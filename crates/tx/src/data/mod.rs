@@ -23,8 +23,8 @@ use namada_core::borsh::{
 };
 use namada_core::hash::Hash;
 use namada_core::storage;
-use namada_events::extend::MaspTxRefs;
 use namada_events::Event;
+use namada_events::extend::MaspTxRefs;
 use namada_gas::WholeGas;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -36,8 +36,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub use wrapper::*;
 
-use crate::data::protocol::ProtocolTx;
 use crate::TxCommitments;
+use crate::data::protocol::ProtocolTx;
 
 /// The different result codes that the ledger may send back to a client
 /// indicating the status of their submitted tx.

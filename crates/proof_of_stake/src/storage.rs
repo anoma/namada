@@ -29,8 +29,8 @@ use crate::types::{
     ValidatorTotalUnbonded, WeightedValidator,
 };
 use crate::{
-    storage_key, LazyCollection, LazySet, MetadataError, OwnedPosParams,
-    PosParams, Result, StorageRead, StorageWrite,
+    LazyCollection, LazySet, MetadataError, OwnedPosParams, PosParams, Result,
+    StorageRead, StorageWrite, storage_key,
 };
 
 // ---- Storage handles ----

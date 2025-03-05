@@ -10,8 +10,8 @@ use namada_vote_ext::ethereum_tx_data_variants;
 use super::block_alloc::{BlockGas, BlockSpace};
 use super::*;
 use crate::shell::block_alloc::{AllocFailure, TxBin};
-use crate::shims::abcipp_shim_types::shim::response::ProcessProposal;
 use crate::shims::abcipp_shim_types::shim::TxBytes;
+use crate::shims::abcipp_shim_types::shim::response::ProcessProposal;
 use crate::tendermint_proto::abci::RequestProcessProposal;
 
 /// Validation metadata, to keep track of used resources or
@@ -602,12 +602,12 @@ mod test_process_proposal {
     use namada_replay_protection as replay_protection;
     use namada_sdk::address;
     use namada_sdk::eth_bridge::storage::eth_bridge_queries::{
-        is_bridge_comptime_enabled, EthBridgeQueries,
+        EthBridgeQueries, is_bridge_comptime_enabled,
     };
     use namada_sdk::key::*;
     use namada_sdk::state::StorageWrite;
     use namada_sdk::testing::{arb_tampered_wrapper_tx, arb_valid_signed_tx};
-    use namada_sdk::token::{read_denom, Amount, DenominatedAmount};
+    use namada_sdk::token::{Amount, DenominatedAmount, read_denom};
     use namada_sdk::tx::data::Fee;
     use namada_sdk::tx::{Code, Data, Signed};
     use namada_vote_ext::{
@@ -618,8 +618,8 @@ mod test_process_proposal {
 
     use super::*;
     use crate::shell::test_utils::{
-        deactivate_bridge, gen_keypair, get_bp_bytes_to_sign, ProcessProposal,
-        TestError, TestShell,
+        ProcessProposal, TestError, TestShell, deactivate_bridge, gen_keypair,
+        get_bp_bytes_to_sign,
     };
     use crate::shims::abcipp_shim_types::shim::request::ProcessedTx;
 

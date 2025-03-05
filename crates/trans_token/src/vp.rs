@@ -3,23 +3,23 @@
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
-use namada_core::address::{Address, InternalAddress, GOV, POS};
+use namada_core::address::{Address, GOV, InternalAddress, POS};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashMap;
 use namada_core::storage::{Key, KeySeg};
 use namada_core::token::Amount;
 use namada_systems::{governance, parameters};
+use namada_tx::BatchedTxRef;
 use namada_tx::action::{
     Action, Bond, ClaimRewards, GovAction, PosAction, Withdraw,
 };
-use namada_tx::BatchedTxRef;
 use namada_vp_env::{Error, Result, VpEnv};
 
+use crate::StorageRead;
 use crate::storage_key::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
     is_any_token_parameter_key, minter_key,
 };
-use crate::StorageRead;
 
 /// The owner of some balance change.
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -362,10 +362,10 @@ mod tests {
     use namada_tx::action::Write;
     use namada_tx::data::TxType;
     use namada_tx::{Authorization, BatchedTx, Code, Data, Section, Tx};
+    use namada_vm::WasmCacheRwAccess;
+    use namada_vm::wasm::VpCache;
     use namada_vm::wasm::compilation_cache::common::testing::vp_cache;
     use namada_vm::wasm::run::VpEvalWasm;
-    use namada_vm::wasm::VpCache;
-    use namada_vm::WasmCacheRwAccess;
     use namada_vp::native_vp::{self, CtxPreStorageRead};
 
     use super::*;

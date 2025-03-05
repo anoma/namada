@@ -111,18 +111,18 @@ where
 #[cfg(test)]
 mod test_vote_extensions {
     use namada_apps_lib::wallet;
+    use namada_sdk::eth_bridge::EthBridgeQueries;
     use namada_sdk::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
     use namada_sdk::eth_bridge::test_utils::GovStore;
-    use namada_sdk::eth_bridge::EthBridgeQueries;
     use namada_sdk::governance;
     use namada_sdk::key::RefTo;
+    use namada_sdk::proof_of_stake::Epoch;
     use namada_sdk::proof_of_stake::queries::get_consensus_validator_from_protocol_pk;
     use namada_sdk::proof_of_stake::storage::{
         consensus_validator_set_handle,
         read_consensus_validator_set_addresses_with_stake, read_pos_params,
     };
     use namada_sdk::proof_of_stake::types::WeightedValidator;
-    use namada_sdk::proof_of_stake::Epoch;
     use namada_sdk::state::collections::lazy_map::{NestedSubKey, SubKey};
     use namada_sdk::tendermint::abci::types::VoteInfo;
     use namada_vote_ext::validator_set_update;

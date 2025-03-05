@@ -13,7 +13,7 @@ pub use namada_ethereum_bridge::storage::eth_bridge_queries::*;
 pub use namada_ethereum_bridge::storage::parameters::*;
 pub use namada_ethereum_bridge::storage::wrapped_erc20s;
 pub use namada_ethereum_bridge::{ADDRESS, *};
-use namada_io::{display_line, edisplay_line, Io};
+use namada_io::{Io, display_line, edisplay_line};
 use num256::Uint256;
 
 use crate::control_flow::time::{

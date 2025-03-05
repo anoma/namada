@@ -9,6 +9,7 @@ use ibc::core::client::context::ClientExecutionContext;
 use ibc::core::client::types::Height;
 use ibc::core::connection::types::ConnectionEnd;
 use ibc::core::handler::types::events::IbcEvent;
+use ibc::core::host::ExecutionContext;
 use ibc::core::host::types::error::HostError;
 use ibc::core::host::types::identifiers::{ClientId, ConnectionId, Sequence};
 use ibc::core::host::types::path::{
@@ -16,13 +17,12 @@ use ibc::core::host::types::path::{
     ClientStatePath, CommitmentPath, ConnectionPath, ReceiptPath, SeqAckPath,
     SeqRecvPath, SeqSendPath,
 };
-use ibc::core::host::ExecutionContext;
 use ibc::primitives::Timestamp;
 use namada_systems::parameters;
 
+use super::IbcContext;
 use super::client::AnyClientState;
 use super::common::IbcCommonContext;
-use super::IbcContext;
 use crate::storage;
 
 impl<C, Params> ClientExecutionContext for IbcContext<C, Params>

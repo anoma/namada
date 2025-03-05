@@ -21,7 +21,7 @@ pub use rev_order::ReverseOrdTokenAmount;
 use serde::{Deserialize, Serialize};
 
 use crate::lazy_map::NestedMap;
-use crate::parameters::{PosParams, MAX_VALIDATOR_METADATA_LEN};
+use crate::parameters::{MAX_VALIDATOR_METADATA_LEN, PosParams};
 use crate::{Epoch, KeySeg, LazyMap, LazySet, LazyVec, ValidatorMetaDataError};
 
 /// Stored positions of validators in validator sets
@@ -813,19 +813,4 @@ pub fn into_tm_voting_power(votes_per_token: Dec, tokens: Amount) -> i64 {
         .expect("Must be able to convert tokens to TM votes");
     let res = i128::try_from(prod.change()).expect("Failed conversion to i128");
     i64::try_from(res).expect("Invalid validator voting power (i64)")
-}
-
-#[cfg(test)]
-pub mod tests {
-
-    use std::ops::Range;
-
-    use proptest::prelude::*;
-
-    use super::*;
-
-    /// Generate arbitrary epoch in given range
-    pub fn arb_epoch(range: Range<u64>) -> impl Strategy<Value = Epoch> {
-        range.prop_map(Epoch)
-    }
 }

@@ -6,11 +6,11 @@ use masp_primitives::zip32;
 use namada_core::key::SchemeType;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
+use tiny_hderive::Error as HDeriveError;
 use tiny_hderive::bip44::{
     DerivationPath as HDeriveDerivationPath,
     IntoDerivationPath as IntoHDeriveDerivationPath,
 };
-use tiny_hderive::Error as HDeriveError;
 
 const BIP44_PURPOSE: u32 = 44;
 const ZIP32_PURPOSE: u32 = 32;

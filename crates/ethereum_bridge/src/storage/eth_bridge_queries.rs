@@ -20,7 +20,7 @@ use namada_proof_of_stake::storage::{
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
     validator_eth_cold_key_handle, validator_eth_hot_key_handle,
 };
-use namada_state::{DBIter, StorageHasher, StoreType, WlState, DB};
+use namada_state::{DB, DBIter, StorageHasher, StoreType, WlState};
 use namada_storage::StorageRead;
 use namada_systems::governance;
 use namada_vote_ext::validator_set_update::{
@@ -150,13 +150,13 @@ pub struct EthBridgeQueriesHook<'db, S> {
     state: &'db S,
 }
 
-impl<'db, S> Clone for EthBridgeQueriesHook<'db, S> {
+impl<S> Clone for EthBridgeQueriesHook<'_, S> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'s, S> Copy for EthBridgeQueriesHook<'s, S> {}
+impl<S> Copy for EthBridgeQueriesHook<'_, S> {}
 
 impl<'db, D, H> EthBridgeQueriesHook<'db, WlState<D, H>>
 where

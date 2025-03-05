@@ -17,9 +17,9 @@ pub use namada_sdk::tx::*;
 use namada_sdk::{account, token};
 use namada_tx_prelude::transaction::TxSentinel;
 use namada_tx_prelude::{BorshSerializeExt, Ctx};
+use namada_vm::WasmCacheRwAccess;
 use namada_vm::wasm::run::Error;
 use namada_vm::wasm::{self, TxCache, VpCache};
-use namada_vm::WasmCacheRwAccess;
 use namada_vp_prelude::key::common;
 use tempfile::TempDir;
 

@@ -22,7 +22,7 @@ use namada_trans_token::{self as token, read_balance};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 use proptest_state_machine::{
-    prop_state_machine, ReferenceStateMachine, StateMachineTest,
+    ReferenceStateMachine, StateMachineTest, prop_state_machine,
 };
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
 // `tracing` logs from tests
@@ -32,8 +32,8 @@ use yansi::Paint;
 use super::helpers::advance_epoch;
 use super::utils::DbgPrintDiff;
 use crate::lazy_map::{NestedSubKey, SubKey};
-use crate::parameters::testing::arb_rate;
 use crate::parameters::PosParams;
+use crate::parameters::testing::arb_rate;
 use crate::slashing::find_slashes_in_range;
 use crate::storage::{
     enqueued_slashes_handle, read_all_validator_addresses,
@@ -44,20 +44,19 @@ use crate::storage::{
 use crate::tests::helpers::arb_params_and_genesis_validators;
 use crate::tests::utils::pause_for_enter;
 use crate::tests::{
-    become_validator, bond_tokens, find_delegations, process_slashes,
+    GovStore, become_validator, bond_tokens, find_delegations, process_slashes,
     read_below_threshold_validator_set_addresses, read_pos_params,
     redelegate_tokens, slash, unbond_tokens, unjail_validator, withdraw_tokens,
-    GovStore,
 };
 use crate::types::{
     BondId, GenesisValidator, ReverseOrdTokenAmount, Slash, SlashType,
     ValidatorState, WeightedValidator,
 };
 use crate::{
-    below_capacity_validator_set_handle, bond_handle,
-    consensus_validator_set_handle, delegator_redelegated_bonds_handle,
-    validator_deltas_handle, validator_slashes_handle, validator_state_handle,
-    RedelegationError, StorageRead,
+    RedelegationError, StorageRead, below_capacity_validator_set_handle,
+    bond_handle, consensus_validator_set_handle,
+    delegator_redelegated_bonds_handle, validator_deltas_handle,
+    validator_slashes_handle, validator_state_handle,
 };
 
 prop_state_machine! {

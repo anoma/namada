@@ -32,7 +32,7 @@ pub struct EventTrace<'a> {
     column: u32,
 }
 
-impl<'a> FromStr for EventTrace<'a> {
+impl FromStr for EventTrace<'_> {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
