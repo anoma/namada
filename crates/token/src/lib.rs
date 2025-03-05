@@ -75,6 +75,11 @@ pub mod storage_key {
         shielded::masp_max_reward_rate_key::<TransToken>(token_addr)
     }
 
+    /// The shielded rewards precision key for the given token
+    pub fn masp_reward_precision_key(token_addr: &Address) -> storage::Key {
+        shielded::masp_reward_precision_key::<TransToken>(token_addr)
+    }
+
     /// Obtain the locked target amount key for the given token
     pub fn masp_locked_amount_target_key(token_addr: &Address) -> storage::Key {
         shielded::masp_locked_amount_target_key::<TransToken>(token_addr)
