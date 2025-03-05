@@ -12,6 +12,8 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Once, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
+use masp_primitives::merkle_tree::CommitmentTree;
+use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::sapling::builder::RngBuildParams;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
@@ -84,6 +86,7 @@ use namada_sdk::masp::{
 use namada_sdk::queries::{
     EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
+use namada_sdk::state::write_log::StorageModification;
 use namada_sdk::state::StorageRead;
 use namada_sdk::storage::{Key, KeySeg, TxIndex};
 use namada_sdk::time::DateTimeUtc;
@@ -462,6 +465,25 @@ impl BenchShellInner {
     // Update the block height in state to guarantee a valid response to the
     // client queries
     pub fn commit_block(&mut self) {
+        // Update the MASP commitment tree anchor if the tree was updated
+        let tree_key = token::storage_key::masp_commitment_tree_key();
+        if let Some(StorageModification::Write { value }) = self
+            .state
+            .write_log()
+            .read(&tree_key)
+            .expect("Must be able to read masp commitment tree")
+            .0
+        {
+            let updated_tree =
+                CommitmentTree::<Node>::try_from_slice(value).unwrap();
+            let anchor_key = token::storage_key::masp_commitment_anchor_key(
+                updated_tree.root(),
+            );
+            self.state
+                .db_write(&anchor_key, ().serialize_to_vec())
+                .unwrap();
+        }
+
         let last_height = self.inner.state.in_mem().get_last_block_height();
         self.inner
             .state
