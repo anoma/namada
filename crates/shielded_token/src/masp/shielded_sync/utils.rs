@@ -348,8 +348,9 @@ mod test_blocks_left_to_fetch {
             .map(|height| {
                 (
                     IndexedTx {
-                        height,
-                        index: TxIndex(0),
+                        block_height: height,
+                        masp_index: 0,
+                        block_index: TxIndex(0),
                         batch_index: None,
                     },
                     masp_tx.clone(),

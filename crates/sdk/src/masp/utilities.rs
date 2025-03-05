@@ -111,6 +111,7 @@ impl<C: Client + Send + Sync> LedgerMaspClient<C> {
                     .data
             };
 
+            let mut masp_index = 0;
             for IndexedMaspData {
                 tx_index,
                 masp_refs,
@@ -126,6 +127,7 @@ impl<C: Client + Send + Sync> LedgerMaspClient<C> {
                     &mut txs,
                     extracted_masp_txs,
                     height.into(),
+                    &mut masp_index,
                     tx_index,
                 )?;
             }
@@ -517,17 +519,23 @@ impl MaspClient for IndexerMaspClient {
             }
         }
 
-        let mut stream_of_fetches = stream::iter(fetches)
-            .buffer_unordered(self.shared.max_concurrent_fetches);
+        let mut stream_of_fetches =
+            stream::iter(fetches).buffered(self.shared.max_concurrent_fetches);
         let mut txs = vec![];
 
         while let Some(result) = stream_of_fetches.next().await {
+            let mut prev_block_height = None;
+            let mut masp_index = 0;
             for Transaction {
                 batch,
                 block_index,
                 block_height,
             } in result?
             {
+                if Some(block_height) != prev_block_height {
+                    masp_index = 0;
+                    prev_block_height = Some(block_height);
+                }
                 let mut extracted_masp_txs = Vec::with_capacity(batch.len());
 
                 for TransactionSlot { bytes } in batch {
@@ -546,6 +554,7 @@ impl MaspClient for IndexerMaspClient {
                     &mut txs,
                     extracted_masp_txs,
                     block_height.into(),
+                    &mut masp_index,
                     block_index.into(),
                 )?;
             }
@@ -657,17 +666,22 @@ impl MaspClient for IndexerMaspClient {
         Ok(payload
             .notes_index
             .into_iter()
+            .enumerate()
             .map(
-                |Note {
-                     block_index,
-                     batch_index,
-                     block_height,
-                     note_position,
-                 }| {
+                |(
+                    masp_index,
+                    Note {
+                        block_index,
+                        batch_index,
+                        block_height,
+                        note_position,
+                    },
+                )| {
                     (
                         IndexedTx {
-                            index: TxIndex(block_index),
-                            height: BlockHeight(block_height),
+                            block_index: TxIndex(block_index),
+                            masp_index: masp_index as u32,
+                            block_height: BlockHeight(block_height),
                             batch_index: Some(batch_index),
                         },
                         note_position,
@@ -754,7 +768,8 @@ fn index_txs(
     txs: &mut Vec<(IndexedTx, MaspTx)>,
     extracted_masp_txs: impl IntoIterator<Item = MaspTx>,
     height: BlockHeight,
-    index: TxIndex,
+    masp_index: &mut u32,
+    block_index: TxIndex,
 ) -> Result<(), Error> {
     // Note that the index of the extracted MASP transaction does
     // not necessarely match the index of the inner tx in the batch,
@@ -764,8 +779,9 @@ fn index_txs(
     {
         txs.push((
             IndexedTx {
-                height,
-                index,
+                block_height: height,
+                masp_index: *masp_index,
+                block_index,
                 batch_index: Some(
                     u32::try_from(batch_index)
                         .map_err(|e| Error::Other(e.to_string()))?,
@@ -773,6 +789,7 @@ fn index_txs(
             },
             transaction,
         ));
+        *masp_index += 1;
     }
 
     Ok(())

@@ -394,9 +394,9 @@ where
         while let Some(first_tx) = indexed_txs.next() {
             // Take only Transactions belonging to one block
             let mut block_txs = vec![first_tx];
-            while let Some(next_tx) = indexed_txs
-                .next_if(|next_tx| next_tx.0.height == block_txs[0].0.height)
-            {
+            while let Some(next_tx) = indexed_txs.next_if(|next_tx| {
+                next_tx.0.block_height == block_txs[0].0.block_height
+            }) {
                 block_txs.push(next_tx);
             }
             // Do not apply these Transactions if they have been applied before
@@ -462,7 +462,7 @@ where
             if !anchor_exists {
                 return Err(eyre!(
                     "Unable to find anchor for block {}",
-                    block_txs[0].0.height,
+                    block_txs[0].0.block_height,
                 ));
             }
         }
@@ -532,7 +532,8 @@ where
             .iter_mut()
             // NB: skip keys that are synced past the last input height
             .filter(|(_vk, h)| {
-                h.as_ref().map(|itx| &itx.height) < Some(last_query_height)
+                h.as_ref().map(|itx| &itx.block_height)
+                    < Some(last_query_height)
             })
         {
             // NB: the entire block is synced
@@ -1001,8 +1002,9 @@ mod dispatcher_tests {
                 // fill up the dispatcher's cache
                 for h in 0u64..10 {
                     let itx = IndexedTx {
-                        height: h.into(),
-                        index: Default::default(),
+                        block_height: h.into(),
+                        masp_index: 0,
+                        block_index: Default::default(),
                         batch_index: None,
                     };
                     dispatcher.cache.fetched.insert((itx, arbitrary_masp_tx()));
@@ -1208,8 +1210,9 @@ mod dispatcher_tests {
 
         // let's bump the vk height
         *shielded_ctx.vk_heights.get_mut(&vk).unwrap() = Some(IndexedTx {
-            height: 6.into(),
-            index: TxIndex(0),
+            block_height: 6.into(),
+            masp_index: 0,
+            block_index: TxIndex(0),
             batch_index: None,
         });
 
@@ -1288,8 +1291,9 @@ mod dispatcher_tests {
                 masp_tx_sender
                     .send(Some((
                         IndexedTx {
-                            height: 1.into(),
-                            index: TxIndex(1),
+                            block_height: 1.into(),
+                            masp_index: 1,
+                            block_index: TxIndex(1),
                             batch_index: None,
                         },
                         masp_tx.clone(),
@@ -1298,8 +1302,9 @@ mod dispatcher_tests {
                 masp_tx_sender
                     .send(Some((
                         IndexedTx {
-                            height: 1.into(),
-                            index: TxIndex(2),
+                            block_height: 1.into(),
+                            masp_index: 2,
+                            block_index: TxIndex(2),
                             batch_index: None,
                         },
                         masp_tx.clone(),
@@ -1317,13 +1322,15 @@ mod dispatcher_tests {
                     ctx.note_index.keys().cloned().collect::<BTreeSet<_>>();
                 let expected = BTreeSet::from([
                     IndexedTx {
-                        height: 1.into(),
-                        index: TxIndex(1),
+                        block_height: 1.into(),
+                        masp_index: 1,
+                        block_index: TxIndex(1),
                         batch_index: None,
                     },
                     IndexedTx {
-                        height: 1.into(),
-                        index: TxIndex(2),
+                        block_height: 1.into(),
+                        masp_index: 2,
+                        block_index: TxIndex(2),
                         batch_index: None,
                     },
                 ]);
@@ -1368,8 +1375,9 @@ mod dispatcher_tests {
                 masp_tx_sender
                     .send(Some((
                         IndexedTx {
-                            height: 1.into(),
-                            index: TxIndex(1),
+                            block_height: 1.into(),
+                            masp_index: 1,
+                            block_index: TxIndex(1),
                             batch_index: None,
                         },
                         masp_tx.clone(),
@@ -1378,8 +1386,9 @@ mod dispatcher_tests {
                 masp_tx_sender
                     .send(Some((
                         IndexedTx {
-                            height: 1.into(),
-                            index: TxIndex(2),
+                            block_height: 1.into(),
+                            masp_index: 2,
+                            block_index: TxIndex(2),
                             batch_index: None,
                         },
                         masp_tx.clone(),
@@ -1400,16 +1409,18 @@ mod dispatcher_tests {
                 let expected = BTreeMap::from([
                     (
                         IndexedTx {
-                            height: 1.into(),
-                            index: TxIndex(1),
+                            block_height: 1.into(),
+                            masp_index: 1,
+                            block_index: TxIndex(1),
                             batch_index: None,
                         },
                         masp_tx.clone(),
                     ),
                     (
                         IndexedTx {
-                            height: 1.into(),
-                            index: TxIndex(2),
+                            block_height: 1.into(),
+                            masp_index: 2,
+                            block_index: TxIndex(2),
                             batch_index: None,
                         },
                         masp_tx.clone(),
@@ -1450,8 +1461,9 @@ mod dispatcher_tests {
                 masp_tx_sender
                     .send(Some((
                         IndexedTx {
-                            height: 1.into(),
-                            index: TxIndex(1),
+                            block_height: 1.into(),
+                            masp_index: 1,
+                            block_index: TxIndex(1),
                             batch_index: None,
                         },
                         masp_tx.clone(),
@@ -1497,8 +1509,9 @@ mod dispatcher_tests {
         masp_tx_sender
             .send(Some((
                 IndexedTx {
-                    height: 1.into(),
-                    index: TxIndex(1),
+                    block_height: 1.into(),
+                    masp_index: 1,
+                    block_index: TxIndex(1),
                     batch_index: None,
                 },
                 masp_tx.clone(),
@@ -1544,8 +1557,9 @@ mod dispatcher_tests {
         masp_tx_sender
             .send(Some((
                 IndexedTx {
-                    height: 1.into(),
-                    index: TxIndex(1),
+                    block_height: 1.into(),
+                    masp_index: 1,
+                    block_index: TxIndex(1),
                     batch_index: None,
                 },
                 masp_tx.clone(),

@@ -218,7 +218,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
             ));
         };
         Ok(maybe_least_synced_vk_height
-            .map_or_else(BlockHeight::first, |itx| itx.height))
+            .map_or_else(BlockHeight::first, |itx| itx.block_height))
     }
 
     #[allow(missing_docs)]
