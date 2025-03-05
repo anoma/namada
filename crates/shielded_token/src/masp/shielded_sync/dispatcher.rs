@@ -405,36 +405,27 @@ where
             }
             // Save the initial state of the ShieldedContext in case reversion
             // to initial state is necessary
-            let initial_note_index = self.ctx.note_index.clone();
-            let initial_witness_map = self.ctx.witness_map.clone();
             let initial_tree = self.ctx.tree.clone();
             let mut anchor_exists = false;
             // Valid Transaction orderings are always the concatenation of two
             // subsequences of the ordered events. Let's iterate through
             // possible values of the first subsequence
             for subset in block_txs.iter().powerset() {
-                // First make sure that we start with a clean state uncorrupted
-                // by previous trials
-                self.ctx.note_index = initial_note_index.clone();
-                self.ctx.witness_map = initial_witness_map.clone();
-                self.ctx.tree = initial_tree.clone();
                 let mut fee_transfers = BTreeSet::new();
                 // Apply the first subsequence, which corresponds to the
                 // Transactions that were first applied for the fees
                 for (indexed_tx, stx_batch) in &subset {
                     tracing::debug!("Transaction Index: {:?}", indexed_tx);
                     fee_transfers.insert(indexed_tx);
-                    self.ctx.update_witness_map(*indexed_tx, stx_batch)?;
+                    self.ctx.update_merkle_tree(stx_batch)?;
                 }
                 // Apply the second subsequence, which corresponds to the
                 // Transactions not used in the fees
-                for (indexed_tx, stx_batch) in &block_txs {
-                    // The second subsequence consists of elements not in the
-                    // first
-                    if !fee_transfers.contains(indexed_tx) {
-                        tracing::debug!("Transaction Index: {:?}", indexed_tx);
-                        self.ctx.update_witness_map(*indexed_tx, stx_batch)?;
-                    }
+                for (indexed_tx, stx_batch) in
+                    block_txs.iter().filter(|tx| !fee_transfers.contains(&tx.0))
+                {
+                    tracing::debug!("Transaction Index: {:?}", indexed_tx);
+                    self.ctx.update_merkle_tree(stx_batch)?;
                 }
                 // Compute what the note commitment tree root would look like
                 // after applying the above order and check if it's recognized
@@ -444,15 +435,21 @@ where
                     self.client.commitment_anchor_exists(&root).await?;
                 tracing::debug!("Commitment Anchor: {:?}", root);
                 tracing::debug!("Commitment Anchor Exists: {}", anchor_exists);
+                // Make sure that we restore the tree to a clean state
+                // uncorrupted by the preceding trials
+                self.ctx.tree = initial_tree.clone();
+                // If this ordering is recognized by the protocol, then record
+                // it in state and ordered_txs
                 if anchor_exists {
-                    // If this ordering is recognized by the protocol, then
-                    // record it
-                    ordered_txs.extend(subset.into_iter().cloned());
-                    let complement = block_txs
+                    let complement_txs = block_txs
                         .iter()
-                        .filter(|tx| !fee_transfers.contains(&tx.0))
-                        .cloned();
-                    ordered_txs.extend(complement);
+                        .filter(|tx| !fee_transfers.contains(&tx.0));
+                    let ordered_block_txs =
+                        subset.into_iter().chain(complement_txs).cloned();
+                    for (indexed_tx, stx_batch) in ordered_block_txs {
+                        self.ctx.update_witness_map(indexed_tx, &stx_batch)?;
+                        ordered_txs.push((indexed_tx, stx_batch));
+                    }
                     break;
                 }
             }
