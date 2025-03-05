@@ -172,7 +172,6 @@ pub struct MaspEvent {
     /// A flag signaling the type of the masp transaction
     pub kind: MaspEventKind,
     /// The reference to the masp data
-    // FIXME: rename this field?
     pub data: MaspTxRef,
 }
 
@@ -193,7 +192,6 @@ impl EventAttributeEntry<'static> for MaspTxRef {
     type Value = MaspTxRef;
     type ValueOwned = Self::Value;
 
-    // FIXME: rename this?
     const KEY: &'static str = "section";
 
     fn into_value(self) -> Self::Value {

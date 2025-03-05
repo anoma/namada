@@ -37,7 +37,6 @@ use sha2::{Digest, Sha256};
 pub use wrapper::*;
 
 use crate::data::protocol::ProtocolTx;
-use crate::event::MaspTxRefs;
 use crate::TxCommitments;
 
 /// The different result codes that the ledger may send back to a client
@@ -216,34 +215,6 @@ impl InnerTxId<'_> {
     }
 }
 
-/// The extended transaction result, containing the references to masp
-/// sections (if any)
-pub struct ExtendedTxResult<T> {
-    /// The transaction result
-    pub tx_result: TxResult<T>,
-    /// The optional references to masp data (either MASP sections or tx Data
-    /// for shielded actions)
-    // FIXME: review this note
-    // NOTE: it's paramount to enforce a single, ordered collection for all the
-    // masp transactions to ensure that the exact view on the tx sequence is
-    // preserved in the events. Also, it is possible for two refs to be exactly
-    // the same, we must make sure to emit events for both so that the
-    // client/indexer can properly construct their internal state
-    // FIXME: I don't think we need this anymore? We can just push the events
-    // to the events themselves and then commit them as usual when evaluating
-    // the tx results
-    pub masp_tx_refs: MaspTxRefs,
-}
-
-impl<T> Default for ExtendedTxResult<T> {
-    fn default() -> Self {
-        Self {
-            tx_result: Default::default(),
-            masp_tx_refs: Default::default(),
-        }
-    }
-}
-
 #[derive(Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 /// The result of a dry run, included the actual transaction result and the gas
 /// used
@@ -341,17 +312,6 @@ impl<T: Display> TxResult<T> {
         }
 
         TxResult(batch_results)
-    }
-
-    /// Converts this result to [`ExtendedTxResult`]
-    pub fn to_extended_result(
-        self,
-        masp_tx_refs: Option<MaspTxRefs>,
-    ) -> ExtendedTxResult<T> {
-        ExtendedTxResult {
-            tx_result: self,
-            masp_tx_refs: masp_tx_refs.unwrap_or_default(),
-        }
     }
 }
 

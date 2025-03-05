@@ -20,7 +20,7 @@ use namada_sdk::state::{
 use namada_sdk::storage::{BlockHeader, BlockResults, Epoch};
 use namada_sdk::tx::data::protocol::ProtocolTxType;
 use namada_sdk::tx::data::VpStatusFlags;
-use namada_sdk::tx::event::{Batch, Code, MaspEvent, MaspEventKind};
+use namada_sdk::tx::event::{Batch, Code};
 use namada_sdk::tx::new_tx_event;
 use namada_sdk::{ibc, proof_of_stake};
 use namada_vote_ext::ethereum_events::MultiSignedEthEvent;
@@ -338,75 +338,50 @@ where
         &mut self,
         response: &mut shim::response::FinalizeBlock,
         extended_dispatch_result: std::result::Result<
-            namada_sdk::tx::data::ExtendedTxResult<protocol::Error>,
+            namada_sdk::tx::data::TxResult<protocol::Error>,
             DispatchError,
         >,
         tx_data: TxData<'_>,
         mut tx_logs: TxLogs<'_>,
     ) -> Option<WrapperCache> {
         match extended_dispatch_result {
-            Ok(extended_tx_result) => match tx_data.tx.header.tx_type {
+            Ok(tx_result) => match tx_data.tx.header.tx_type {
                 TxType::Wrapper(_) => {
-                    // FIXME: wait what if the wrapper failed?? I think we
-                    // return an error in that case. But shouldn't we check the
-                    // result anyway? It seems like we always return Ok
                     // Commit any changes brought in by the optional fee-paying
                     // tx to ensure fee payment
                     self.state.write_log_mut().commit_batch_and_current_tx();
 
-                    // FIXME: there's a problem with this solution, I can no
-                    // longer use the tx/applied events as separators for the tx
-                    // events because now we emit them immediately, so I need a
-                    // way to map every event to its tx Emit
-                    // the events of the fee-paying inner tx. This tx will be
-                    // committed even in case of a failing atomic batch so we
-                    // need to ensure the relative events are emitted
-                    // FIXME: review this
-                    let mut events = extended_tx_result
-                        .tx_result
-                        .0
-                        .first_key_value()
-                        .map_or_else(Default::default, |(_k, v)| {
+                    // Emit the events of the fee-paying inner tx. This tx has
+                    // just been committed so we need to ensure the relative
+                    // events are emitted
+                    let events = tx_result.0.first_key_value().map_or_else(
+                        Default::default,
+                        |(_k, v)| {
                             if let Ok(result) = v {
                                 result.events.clone()
                             } else {
                                 Default::default()
                             }
-                        });
-                    if let Some((indexed_tx, masp_ref)) =
-                        extended_tx_result.masp_tx_refs.0.first()
-                    {
-                        events.insert(
-                            MaspEvent {
-                                tx_index: indexed_tx.to_owned(),
-                                kind: MaspEventKind::FeePayment,
-                                data: masp_ref.to_owned(),
-                            }
-                            .into(),
-                        );
-                    }
+                        },
+                    );
                     response.events.emit_many(
                         events
                             .into_iter()
                             .map(|event| event.with(Height(tx_data.height))),
                     );
 
-                    // FIXME: if we emit events here we don't need the
-                    // ExtendedTxResult here FIXME: actually
-                    // we still need to signal to the batch if we need to
-                    // execute the first tx or skip it
                     // Return cached data for the execution of the batch
                     return Some(WrapperCache {
                         tx: tx_data.tx.to_owned(),
                         tx_index: tx_data.tx_index,
                         gas_meter: tx_data.tx_gas_meter,
                         event: tx_logs.tx_event,
-                        extended_tx_result,
+                        tx_result,
                     });
                 }
                 _ => self.handle_inner_tx_results(
                     response,
-                    extended_tx_result,
+                    tx_result,
                     tx_data,
                     &mut tx_logs,
                 ),
@@ -486,9 +461,7 @@ where
     fn handle_inner_tx_results(
         &mut self,
         response: &mut shim::response::FinalizeBlock,
-        extended_tx_result: namada_sdk::tx::data::ExtendedTxResult<
-            protocol::Error,
-        >,
+        tx_result: namada_sdk::tx::data::TxResult<protocol::Error>,
         tx_data: TxData<'_>,
         tx_logs: &mut TxLogs<'_>,
     ) {
@@ -497,29 +470,21 @@ where
         let ValidityFlags {
             commit_batch_hash,
             is_any_tx_invalid,
-        } = temp_log.check_inner_results(&extended_tx_result, tx_data.height);
+        } = temp_log.check_inner_results(&tx_result, tx_data.height);
 
-        // FIXME: actually I don't think this condition is ever entered cause in
-        // case of failing atomic batches we return an error from the execution
-        // and this function is only called if the result is Ok. Exactly so we
-        // could remove this
         if tx_data.is_atomic_batch && is_any_tx_invalid {
             // Atomic batches need custom handling when even a single tx fails,
             // since we need to drop everything
             let unrun_txs = tx_data
                 .commitments_len
                 .checked_sub(
-                    u64::try_from(extended_tx_result.tx_result.len())
+                    u64::try_from(tx_result.len())
                         .expect("Should be able to convert to u64"),
                 )
                 .expect("Shouldn't underflow");
             temp_log.stats.set_failing_atomic_batch(unrun_txs);
-            // FIXME: here we drop events
             temp_log.commit_stats_only(tx_logs);
             self.state.write_log_mut().drop_batch();
-            // FIXME: this is a problem if the first tx correctly did masp fee
-            // payment! Cause the external tools imight ignore the tx! We need a
-            // solution for this!
             tx_logs.tx_event.extend(Code(ResultCode::WasmRuntimeError));
         } else {
             self.state.write_log_mut().commit_batch_and_current_tx();
@@ -551,16 +516,14 @@ where
             .tx_event
             .extend(GasUsed(scaled_gas))
             .extend(Info("Check batch for result.".to_string()))
-            .extend(Batch(&extended_tx_result.tx_result.to_result_string()));
+            .extend(Batch(&tx_result.to_result_string()));
     }
 
     fn handle_batch_error(
         &mut self,
         response: &mut shim::response::FinalizeBlock,
         msg: &Error,
-        extended_tx_result: namada_sdk::tx::data::ExtendedTxResult<
-            protocol::Error,
-        >,
+        tx_result: namada_sdk::tx::data::TxResult<protocol::Error>,
         tx_data: TxData<'_>,
         tx_logs: &mut TxLogs<'_>,
     ) {
@@ -569,24 +532,18 @@ where
         let ValidityFlags {
             commit_batch_hash,
             is_any_tx_invalid: _,
-        } = temp_log.check_inner_results(&extended_tx_result, tx_data.height);
+        } = temp_log.check_inner_results(&tx_result, tx_data.height);
 
         let unrun_txs = tx_data
             .commitments_len
             .checked_sub(
-                u64::try_from(extended_tx_result.tx_result.len())
+                u64::try_from(tx_result.len())
                     .expect("Should be able to convert to u64"),
             )
             .expect("Shouldn't underflow");
 
         if tx_data.is_atomic_batch {
             tx_logs.stats.set_failing_atomic_batch(unrun_txs);
-            // FIXME: I believe here we drop the event for masp fee payment if
-            // present, which is wrong! Actually we drop all events for the
-            // first tx FIXME: but it it is correct to drop all the
-            // other events, so we need to do something specific just for the
-            // masp fee payment event (in general for all the events of the masp
-            // fee payment inner tx)
             temp_log.commit_stats_only(tx_logs);
             self.state.write_log_mut().drop_batch();
         } else {
@@ -616,7 +573,7 @@ where
 
         tx_logs
             .tx_event
-            .extend(Batch(&extended_tx_result.tx_result.to_result_string()));
+            .extend(Batch(&tx_result.to_result_string()));
     }
 
     fn handle_batch_error_reprot(&mut self, err: &Error, tx_data: TxData<'_>) {
@@ -881,7 +838,7 @@ where
             tx_index,
             gas_meter: tx_gas_meter,
             event: tx_event,
-            extended_tx_result: wrapper_tx_result,
+            tx_result: wrapper_tx_result,
         } in successful_wrappers
         {
             let tx_hash = tx.header_hash();
@@ -950,7 +907,7 @@ struct WrapperCache {
     tx_index: usize,
     gas_meter: TxGasMeter,
     event: Event,
-    extended_tx_result: namada_sdk::tx::data::ExtendedTxResult<protocol::Error>,
+    tx_result: namada_sdk::tx::data::TxResult<protocol::Error>,
 }
 
 struct TxData<'tx> {
@@ -1012,7 +969,6 @@ impl<'finalize> TempTxLogs {
         logs.tx_event.merge(self.tx_event);
         logs.stats.merge(self.stats);
         logs.changed_keys.extend(self.changed_keys);
-        // FIXME: use emit_many here?
         response.events.extend(self.response_events);
     }
 
@@ -1024,14 +980,12 @@ impl<'finalize> TempTxLogs {
 
     fn check_inner_results(
         &mut self,
-        extended_tx_result: &namada_sdk::tx::data::ExtendedTxResult<
-            protocol::Error,
-        >,
+        tx_result: &namada_sdk::tx::data::TxResult<protocol::Error>,
         height: BlockHeight,
     ) -> ValidityFlags {
         let mut flags = ValidityFlags::default();
 
-        for (cmt_hash, batched_result) in extended_tx_result.tx_result.iter() {
+        for (cmt_hash, batched_result) in tx_result.iter() {
             match batched_result {
                 Ok(result) => {
                     if result.is_accepted() {
@@ -1048,16 +1002,6 @@ impl<'finalize> TempTxLogs {
                         flags.commit_batch_hash = true;
 
                         // events from other sources
-                        // FIXME: so what we can do is this, we pull masp events
-                        // out of tx/applied and we apply them the same logic we
-                        // apply here (we extract them end emit as separate
-                        // events). For masp fee payment we emit them
-                        // immediately when we commit the storage changes
-                        // together with any other possible event for that tx
-                        // (except for tx/applied which we defer to after the
-                        // exection of the batch). Also these masp event should
-                        // contain the tx iindex in the block and the tx index
-                        // in the batch so that we ease the task for the indexer
                         self.response_events.emit_many(
                             result.events.iter().map(|event| {
                                 event.clone().with(Height(height))
@@ -1101,19 +1045,6 @@ impl<'finalize> TempTxLogs {
                 }
             }
         }
-
-        // If at least one of the inner transactions is a valid masp tx, update
-        // the events
-        for (indexed_tx, masp_ref) in &extended_tx_result.masp_tx_refs.0 {
-            self.response_events.emit(MaspEvent {
-                tx_index: indexed_tx.to_owned(),
-                kind: MaspEventKind::Transfer,
-                // FIXME: avoid to_owned, take the data if possible
-                data: masp_ref.to_owned(),
-            })
-        }
-        // FIXME: tests. Block with masp fee payemtn and normal masp txs check
-        // the order. Failing atomiic batch doing masp fee payment
 
         flags
     }
@@ -1229,8 +1160,7 @@ where
             // Governance must construct the tx with data and code commitments
             let cmt = tx.first_commitments().unwrap().to_owned();
             match dispatch_result {
-                Ok(extended_tx_result) => match extended_tx_result
-                    .tx_result
+                Ok(tx_result) => match tx_result
                     .get_inner_tx_result(None, either::Right(&cmt))
                     .expect("Proposal tx must have a result")
                 {

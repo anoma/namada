@@ -112,17 +112,7 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
             events
                 .into_iter()
                 .filter_map(|event| {
-                    // FIXME: improve here
-                    let Ok(data) = MaspTxRef::read_from_event_attributes(
-                        &event.attributes,
-                    ) else {
-                        return None;
-                    };
-                    let Ok(tx_index) = IndexedTx::read_from_event_attributes(
-                        &event.attributes,
-                    ) else {
-                        return None;
-                    };
+                    // Check if the event is a Masp one
                     let Ok(kind) =
                         namada_events::EventType::from_str(&event.kind)
                     else {
@@ -135,6 +125,18 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
                     {
                         MaspEventKind::FeePayment
                     } else {
+                        return None;
+                    };
+
+                    // Extract the data from the event's attributes
+                    let Ok(data) = MaspTxRef::read_from_event_attributes(
+                        &event.attributes,
+                    ) else {
+                        return None;
+                    };
+                    let Ok(tx_index) = IndexedTx::read_from_event_attributes(
+                        &event.attributes,
+                    ) else {
                         return None;
                     };
 
