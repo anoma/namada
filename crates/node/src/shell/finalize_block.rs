@@ -3,9 +3,7 @@
 use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
-use namada_sdk::events::extend::{
-    ComposeEvent, Height, IndexedMaspData, Info, MaspDataRefs, TxHash,
-};
+use namada_sdk::events::extend::{ComposeEvent, Height, Info, TxHash};
 use namada_sdk::events::{EmitEvents, Event};
 use namada_sdk::gas::event::GasUsed;
 use namada_sdk::gas::GasMetering;
@@ -340,29 +338,50 @@ where
         &mut self,
         response: &mut shim::response::FinalizeBlock,
         extended_dispatch_result: std::result::Result<
-            namada_sdk::tx::data::ExtendedTxResult<protocol::Error>,
+            namada_sdk::tx::data::TxResult<protocol::Error>,
             DispatchError,
         >,
         tx_data: TxData<'_>,
         mut tx_logs: TxLogs<'_>,
     ) -> Option<WrapperCache> {
         match extended_dispatch_result {
-            Ok(extended_tx_result) => match tx_data.tx.header.tx_type {
+            Ok(tx_result) => match tx_data.tx.header.tx_type {
                 TxType::Wrapper(_) => {
+                    // Commit any changes brought in by the optional fee-paying
+                    // tx to ensure fee payment
                     self.state.write_log_mut().commit_batch_and_current_tx();
 
-                    // Return withouth emitting any events
+                    // Emit the events of the fee-paying inner tx. This tx has
+                    // just been committed so we need to ensure the relative
+                    // events are emitted
+                    let events = tx_result.0.first_key_value().map_or_else(
+                        Default::default,
+                        |(_k, v)| {
+                            if let Ok(result) = v {
+                                result.events.clone()
+                            } else {
+                                Default::default()
+                            }
+                        },
+                    );
+                    response.events.emit_many(
+                        events
+                            .into_iter()
+                            .map(|event| event.with(Height(tx_data.height))),
+                    );
+
+                    // Return cached data for the execution of the batch
                     return Some(WrapperCache {
                         tx: tx_data.tx.to_owned(),
                         tx_index: tx_data.tx_index,
                         gas_meter: tx_data.tx_gas_meter,
                         event: tx_logs.tx_event,
-                        extended_tx_result,
+                        tx_result,
                     });
                 }
                 _ => self.handle_inner_tx_results(
                     response,
-                    extended_tx_result,
+                    tx_result,
                     tx_data,
                     &mut tx_logs,
                 ),
@@ -442,9 +461,7 @@ where
     fn handle_inner_tx_results(
         &mut self,
         response: &mut shim::response::FinalizeBlock,
-        extended_tx_result: namada_sdk::tx::data::ExtendedTxResult<
-            protocol::Error,
-        >,
+        tx_result: namada_sdk::tx::data::TxResult<protocol::Error>,
         tx_data: TxData<'_>,
         tx_logs: &mut TxLogs<'_>,
     ) {
@@ -453,11 +470,7 @@ where
         let ValidityFlags {
             commit_batch_hash,
             is_any_tx_invalid,
-        } = temp_log.check_inner_results(
-            &extended_tx_result,
-            tx_data.tx_index,
-            tx_data.height,
-        );
+        } = temp_log.check_inner_results(&tx_result, tx_data.height);
 
         if tx_data.is_atomic_batch && is_any_tx_invalid {
             // Atomic batches need custom handling when even a single tx fails,
@@ -465,7 +478,7 @@ where
             let unrun_txs = tx_data
                 .commitments_len
                 .checked_sub(
-                    u64::try_from(extended_tx_result.tx_result.len())
+                    u64::try_from(tx_result.len())
                         .expect("Should be able to convert to u64"),
                 )
                 .expect("Shouldn't underflow");
@@ -503,16 +516,14 @@ where
             .tx_event
             .extend(GasUsed(scaled_gas))
             .extend(Info("Check batch for result.".to_string()))
-            .extend(Batch(&extended_tx_result.tx_result.to_result_string()));
+            .extend(Batch(&tx_result.to_result_string()));
     }
 
     fn handle_batch_error(
         &mut self,
         response: &mut shim::response::FinalizeBlock,
         msg: &Error,
-        extended_tx_result: namada_sdk::tx::data::ExtendedTxResult<
-            protocol::Error,
-        >,
+        tx_result: namada_sdk::tx::data::TxResult<protocol::Error>,
         tx_data: TxData<'_>,
         tx_logs: &mut TxLogs<'_>,
     ) {
@@ -521,16 +532,12 @@ where
         let ValidityFlags {
             commit_batch_hash,
             is_any_tx_invalid: _,
-        } = temp_log.check_inner_results(
-            &extended_tx_result,
-            tx_data.tx_index,
-            tx_data.height,
-        );
+        } = temp_log.check_inner_results(&tx_result, tx_data.height);
 
         let unrun_txs = tx_data
             .commitments_len
             .checked_sub(
-                u64::try_from(extended_tx_result.tx_result.len())
+                u64::try_from(tx_result.len())
                     .expect("Should be able to convert to u64"),
             )
             .expect("Shouldn't underflow");
@@ -566,7 +573,7 @@ where
 
         tx_logs
             .tx_event
-            .extend(Batch(&extended_tx_result.tx_result.to_result_string()));
+            .extend(Batch(&tx_result.to_result_string()));
     }
 
     fn handle_batch_error_reprot(&mut self, err: &Error, tx_data: TxData<'_>) {
@@ -704,6 +711,7 @@ where
                             wrapper,
                             tx_bytes: processed_tx.tx.as_ref(),
                             tx_index: TxIndex::must_from_usize(tx_index),
+                            height,
                             block_proposer: native_block_proposer_address,
                             vp_wasm_cache: &mut self.vp_wasm_cache,
                             tx_wasm_cache: &mut self.tx_wasm_cache,
@@ -830,7 +838,7 @@ where
             tx_index,
             gas_meter: tx_gas_meter,
             event: tx_event,
-            extended_tx_result: wrapper_tx_result,
+            tx_result: wrapper_tx_result,
         } in successful_wrappers
         {
             let tx_hash = tx.header_hash();
@@ -849,6 +857,7 @@ where
                 DispatchArgs::Raw {
                     wrapper_hash: Some(&tx_hash),
                     tx_index: TxIndex::must_from_usize(tx_index),
+                    height,
                     wrapper_tx_result: Some(wrapper_tx_result),
                     vp_wasm_cache: &mut self.vp_wasm_cache,
                     tx_wasm_cache: &mut self.tx_wasm_cache,
@@ -898,7 +907,7 @@ struct WrapperCache {
     tx_index: usize,
     gas_meter: TxGasMeter,
     event: Event,
-    extended_tx_result: namada_sdk::tx::data::ExtendedTxResult<protocol::Error>,
+    tx_result: namada_sdk::tx::data::TxResult<protocol::Error>,
 }
 
 struct TxData<'tx> {
@@ -971,15 +980,12 @@ impl<'finalize> TempTxLogs {
 
     fn check_inner_results(
         &mut self,
-        extended_tx_result: &namada_sdk::tx::data::ExtendedTxResult<
-            protocol::Error,
-        >,
-        tx_index: usize,
+        tx_result: &namada_sdk::tx::data::TxResult<protocol::Error>,
         height: BlockHeight,
     ) -> ValidityFlags {
         let mut flags = ValidityFlags::default();
 
-        for (cmt_hash, batched_result) in extended_tx_result.tx_result.iter() {
+        for (cmt_hash, batched_result) in tx_result.iter() {
             match batched_result {
                 Ok(result) => {
                     if result.is_accepted() {
@@ -1038,15 +1044,6 @@ impl<'finalize> TempTxLogs {
                     flags.is_any_tx_invalid = true;
                 }
             }
-        }
-
-        // If at least one of the inner transactions is a valid masp tx, update
-        // the events
-        if !extended_tx_result.masp_tx_refs.0.is_empty() {
-            self.tx_event.extend(MaspDataRefs(IndexedMaspData {
-                tx_index: TxIndex::must_from_usize(tx_index),
-                masp_refs: extended_tx_result.masp_tx_refs.clone(),
-            }));
         }
 
         flags
@@ -1133,6 +1130,7 @@ where
 {
     let vp_wasm_cache = &mut shell.vp_wasm_cache;
     let tx_wasm_cache = &mut shell.tx_wasm_cache;
+    let height = shell.state.get_block_height()?;
     governance::finalize_block::<
         _,
         token::Store<_>,
@@ -1150,6 +1148,7 @@ where
                 protocol::DispatchArgs::Raw {
                     wrapper_hash: None,
                     tx_index: TxIndex::default(),
+                    height,
                     wrapper_tx_result: None,
                     vp_wasm_cache,
                     tx_wasm_cache,
@@ -1161,8 +1160,7 @@ where
             // Governance must construct the tx with data and code commitments
             let cmt = tx.first_commitments().unwrap().to_owned();
             match dispatch_result {
-                Ok(extended_tx_result) => match extended_tx_result
-                    .tx_result
+                Ok(tx_result) => match tx_result
                     .get_inner_tx_result(None, either::Right(&cmt))
                     .expect("Proposal tx must have a result")
                 {
