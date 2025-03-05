@@ -105,19 +105,28 @@ impl<C: Client + Send + Sync> LedgerMaspClient<C> {
                     .data
             };
 
+            // Cache the last tx seen to avoid multiple deserializations
+            let mut last_tx: Option<(Tx, TxIndex)> = None;
+
             for MaspEvent {
                 tx_index,
                 kind: _,
                 data,
             } in txs_results
             {
-                let tx = Tx::try_from_bytes(
-                    block[tx_index.index.0 as usize].as_ref(),
-                )
-                .map_err(|e| Error::Other(e.to_string()))?;
-                // FIXME: need to iterate on all the inner txs of this tx
-                // without deserializing the tx more than once
-                let extracted_masp_tx = extract_masp_tx(&tx, &data)
+                let tx = match &last_tx {
+                    Some((tx, idx)) if idx == &tx_index.index => tx,
+                    _ => {
+                        let tx = Tx::try_from_bytes(
+                            block[tx_index.index.0 as usize].as_ref(),
+                        )
+                        .map_err(|e| Error::Other(e.to_string()))?;
+                        last_tx = Some((tx, tx_index.index));
+
+                        &last_tx.as_ref().unwrap().0
+                    }
+                };
+                let extracted_masp_tx = extract_masp_tx(tx, &data)
                     .map_err(|e| Error::Other(e.to_string()))?;
 
                 txs.push((tx_index, extracted_masp_tx));
