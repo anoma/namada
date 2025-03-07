@@ -8,16 +8,40 @@ use masp_primitives::sapling::{Node, Note, PaymentAddress, ViewingKey};
 use masp_primitives::transaction::Transaction;
 use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
+use namada_tx::event::MaspEventKind;
 use namada_tx::{IndexedTx, IndexedTxRange};
+use serde::{Deserialize, Serialize};
+
+/// An indexed masp tx carrying information on wether it was a fee paying tx or
+/// a normal transfer
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialOrd,
+    PartialEq,
+    Eq,
+    Ord,
+    Serialize,
+    Deserialize,
+)]
+pub struct MaspIndexedTx {
+    /// The masp tx kind, fee-payment or transfer
+    pub kind: MaspEventKind,
+    /// The pointer to the inner tx carrying this masp tx
+    pub indexed_tx: IndexedTx,
+}
 
 /// Type alias for convenience and profit
-pub type IndexedNoteData = BTreeMap<IndexedTx, Transaction>;
+pub type IndexedNoteData = BTreeMap<MaspIndexedTx, Transaction>;
 
 /// Type alias for the entries of [`IndexedNoteData`] iterators
-pub type IndexedNoteEntry = (IndexedTx, Transaction);
+pub type IndexedNoteEntry = (MaspIndexedTx, Transaction);
 
 /// Borrowed version of an [`IndexedNoteEntry`]
-pub type IndexedNoteEntryRefs<'a> = (&'a IndexedTx, &'a Transaction);
+pub type IndexedNoteEntryRefs<'a> = (&'a MaspIndexedTx, &'a Transaction);
 
 /// Type alias for a successful note decryption.
 pub type DecryptedData = (Note, PaymentAddress, MemoBytes);
@@ -144,6 +168,11 @@ impl Fetched {
     /// block height.
     pub fn contains_height(&self, height: BlockHeight) -> bool {
         self.txs
+            .iter()
+            .map(|(masp_indexed_tx, transaction)| {
+                (masp_indexed_tx.indexed_tx, transaction)
+            })
+            .collect::<BTreeMap<_, _>>()
             .range(IndexedTxRange::with_height(height))
             .next()
             .is_some()
@@ -367,10 +396,13 @@ mod test_blocks_left_to_fetch {
             .into_iter()
             .map(|height| {
                 (
-                    IndexedTx {
-                        block_height: height,
-                        block_index: TxIndex(0),
-                        batch_index: None,
+                    MaspIndexedTx {
+                        indexed_tx: IndexedTx {
+                            block_height: height,
+                            block_index: TxIndex(0),
+                            batch_index: None,
+                        },
+                        kind: MaspEventKind::Transfer,
                     },
                     masp_tx.clone(),
                 )

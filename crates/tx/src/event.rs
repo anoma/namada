@@ -115,10 +115,24 @@ pub mod masp_types {
 }
 
 /// MASP event kind
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialOrd,
+    PartialEq,
+    Eq,
+    Ord,
+    Serialize,
+    Deserialize,
+)]
 pub enum MaspEventKind {
     /// A MASP transaction used for fee payment
     FeePayment,
     /// A general MASP transfer
+    #[default]
     Transfer,
 }
 
