@@ -755,6 +755,13 @@ where
                 for (itx, txs) in &tx_batch {
                     self.spawn_trial_decryptions(*itx, txs);
                 }
+                let mut keys = BTreeSet::new();
+                for (k, _v) in &tx_batch {
+                    if keys.contains(&k.clone()) {
+                        panic!("oh no duplicate");
+                    }
+                    keys.insert(k.clone());
+                }
                 self.cache.fetched.extend(tx_batch);
 
                 self.config.fetched_tracker.increment_by(to.0 - from.0 + 1);
