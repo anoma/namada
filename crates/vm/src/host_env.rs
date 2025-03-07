@@ -33,7 +33,8 @@ use namada_token::storage_key::{
     is_any_token_parameter_key,
 };
 use namada_token::MaspTransaction;
-use namada_tx::data::TxSentinel;
+use namada_tx::data::{compute_inner_tx_hash, TxSentinel};
+use namada_tx::either::Either;
 use namada_tx::{BatchedTx, BatchedTxRef, Tx, TxCommitments};
 use namada_vp::vp_host_fns;
 use thiserror::Error;
@@ -1055,9 +1056,17 @@ where
     let event: Event = BorshDeserialize::try_from_slice(&event)
         .map_err(TxRuntimeError::EncodingError)?;
     let mut state = env.state();
+    let tx = unsafe { env.ctx.tx.get() };
+    let cmt = unsafe { env.ctx.cmt.get() };
     let gas = state
         .write_log_mut()
-        .emit_event(event)
+        .emit_event_with_inner_hash(
+            event,
+            Some(&compute_inner_tx_hash(
+                Some(&tx.header_hash()),
+                Either::Right(cmt),
+            )),
+        )
         .ok_or(TxRuntimeError::GasOverflow)?;
     consume_tx_gas::<MEM, D, H, CA>(env, gas)
 }
