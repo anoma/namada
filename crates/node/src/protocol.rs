@@ -7,6 +7,7 @@ use either::Either;
 use eyre::{eyre, WrapErr};
 use namada_sdk::address::{Address, InternalAddress};
 use namada_sdk::booleans::BoolResultUnitExt;
+use namada_sdk::chain::BlockHeight;
 use namada_sdk::collections::HashSet;
 use namada_sdk::events::extend::{
     ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr, UserAccount,
@@ -170,7 +171,7 @@ pub enum DispatchArgs<'a, CA: 'static + WasmCacheAccess + Sync> {
         /// The tx index
         tx_index: TxIndex,
         /// The block height
-        height: namada_sdk::chain::BlockHeight,
+        height: BlockHeight,
         /// Hash of the header of the wrapper tx containing
         /// this raw tx
         wrapper_hash: Option<&'a Hash>,
@@ -191,7 +192,7 @@ pub enum DispatchArgs<'a, CA: 'static + WasmCacheAccess + Sync> {
         /// The tx index
         tx_index: TxIndex,
         /// The block height
-        height: namada_sdk::chain::BlockHeight,
+        height: BlockHeight,
         /// The block proposer
         block_proposer: &'a Address,
         /// Vp cache
@@ -328,7 +329,7 @@ pub(crate) fn dispatch_inner_txs<'a, S, D, H, CA>(
     wrapper_hash: Option<&'a Hash>,
     mut tx_result: TxResult<Error>,
     tx_index: TxIndex,
-    height: namada_sdk::chain::BlockHeight,
+    height: BlockHeight,
     tx_gas_meter: &'a RefCell<TxGasMeter>,
     state: &'a mut S,
     vp_wasm_cache: &'a mut VpCache<CA>,
@@ -462,7 +463,7 @@ pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
     wrapper: &WrapperTx,
     tx_bytes: &[u8],
     tx_index: &TxIndex,
-    height: namada_sdk::chain::BlockHeight,
+    height: BlockHeight,
     tx_gas_meter: &RefCell<TxGasMeter>,
     shell_params: &mut ShellParams<'_, S, D, H, CA>,
     block_proposer: Option<&Address>,
