@@ -1057,7 +1057,7 @@ where
     let mut state = env.state();
     let gas = state
         .write_log_mut()
-        .emit_event(event)
+        .emit_event_with_inner_hash(event, Some(&compute_inner_tx_hash()))
         .ok_or(TxRuntimeError::GasOverflow)?;
     consume_tx_gas::<MEM, D, H, CA>(env, gas)
 }
