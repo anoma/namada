@@ -15,7 +15,7 @@ use namada_core::control_flow::time::{
 use namada_core::storage::TxIndex;
 use namada_io::Client;
 use namada_token::masp::utils::{
-    IndexedNoteEntry, MaspClient, MaspClientCapabilities,
+    IndexedNoteEntry, MaspClient, MaspClientCapabilities, MaspIndexedTx,
 };
 use namada_tx::event::MaspEvent;
 use namada_tx::{IndexedTx, Tx};
@@ -110,7 +110,7 @@ impl<C: Client + Send + Sync> LedgerMaspClient<C> {
 
             for MaspEvent {
                 tx_index,
-                kind: _,
+                kind,
                 data,
             } in txs_results
             {
@@ -129,7 +129,13 @@ impl<C: Client + Send + Sync> LedgerMaspClient<C> {
                 let extracted_masp_tx = extract_masp_tx(tx, &data)
                     .map_err(|e| Error::Other(e.to_string()))?;
 
-                txs.push((tx_index, extracted_masp_tx));
+                txs.push((
+                    MaspIndexedTx {
+                        indexed_tx: tx_index,
+                        kind,
+                    },
+                    extracted_masp_tx,
+                ));
             }
         }
 
@@ -393,7 +399,7 @@ impl MaspClient for IndexerMaspClient {
 
         #[derive(Deserialize)]
         struct Transaction {
-            tx_index: IndexedTx,
+            masp_indexed_tx: MaspIndexedTx,
             transaction: TransactionSlot,
         }
 
@@ -515,7 +521,7 @@ impl MaspClient for IndexerMaspClient {
 
         while let Some(result) = stream_of_fetches.next().await {
             for Transaction {
-                tx_index,
+                masp_indexed_tx,
                 transaction,
             } in result?
             {
@@ -527,11 +533,13 @@ impl MaspClient for IndexerMaspClient {
                         "Could not deserialize the masp txs borsh data at \
                          height {}, block index {} and batch index: {:#?}: \
                          {err}",
-                        tx_index.height, tx_index.index, tx_index.batch_index
+                        masp_indexed_tx.indexed_tx.height,
+                        masp_indexed_tx.indexed_tx.index,
+                        masp_indexed_tx.indexed_tx.batch_index
                     ))
                 })?;
 
-                txs.push((tx_index, extracted_masp_tx));
+                txs.push((masp_indexed_tx, extracted_masp_tx));
             }
         }
 

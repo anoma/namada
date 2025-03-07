@@ -318,7 +318,7 @@ pub type WitnessMap = HashMap<usize, IncrementalWitness<Node>>;
 pub enum ContextSyncStatus {
     /// The context contains data that has been confirmed by the protocol
     Confirmed,
-    /// The context possibly contains that that has not yet been confirmed by
+    /// The context possibly contains data that has not yet been confirmed by
     /// the protocol and could be incomplete or invalid
     Speculative,
 }
