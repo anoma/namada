@@ -7,6 +7,7 @@ use either::Either;
 use eyre::{eyre, WrapErr};
 use namada_sdk::address::{Address, InternalAddress};
 use namada_sdk::booleans::BoolResultUnitExt;
+use namada_sdk::collections::HashSet;
 use namada_sdk::events::extend::{
     ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr, UserAccount,
 };
@@ -24,7 +25,8 @@ use namada_sdk::token::Amount;
 use namada_sdk::tx::action::{self, Read};
 use namada_sdk::tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_sdk::tx::data::{
-    BatchedTxResult, TxResult, VpStatusFlags, VpsResult, WrapperTx,
+    compute_inner_tx_hash, BatchedTxResult, TxResult, VpStatusFlags, VpsResult,
+    WrapperTx,
 };
 use namada_sdk::tx::event::{MaspEvent, MaspEventKind, MaspTxRef};
 use namada_sdk::tx::{BatchedTxRef, IndexedTx, Tx, TxCommitments};
@@ -320,20 +322,6 @@ where
     }
 }
 
-pub(crate) fn get_batch_txs_to_execute(
-    tx: &Tx,
-    ran_masp_fee_payment: bool,
-) -> impl Iterator<Item = &TxCommitments> {
-    let mut batch_iter = tx.commitments().iter();
-    if ran_masp_fee_payment {
-        // If fees were paid via masp skip the first transaction of the batch
-        // which has already been executed
-        batch_iter.next();
-    }
-
-    batch_iter
-}
-
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn dispatch_inner_txs<'a, S, D, H, CA>(
     tx: &Tx,
@@ -356,8 +344,20 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let ran_masp_fee_payment = !tx_result.is_empty();
-    for cmt in get_batch_txs_to_execute(tx, ran_masp_fee_payment) {
+    // Extract the inner transactions of the batch that need to be executed,
+    // excluding those that already ran during the handling of the wrapper tx.
+    let inner_txs = tx
+        .commitments()
+        .iter()
+        .filter(|cmt| {
+            let inner_tx_hash =
+                compute_inner_tx_hash(wrapper_hash, Either::Right(cmt));
+            !tx_result.0.contains_key(&inner_tx_hash)
+        })
+        .collect::<HashSet<_>>()
+        .into_iter();
+
+    for cmt in inner_txs {
         match apply_wasm_tx(
             &tx.batch_ref_tx(cmt),
             &tx_index,

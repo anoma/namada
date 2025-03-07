@@ -1,6 +1,7 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
 use data_encoding::HEXUPPER;
+use either::Either;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use namada_sdk::events::extend::{ComposeEvent, Height, Info, TxHash};
@@ -19,7 +20,7 @@ use namada_sdk::state::{
 };
 use namada_sdk::storage::{BlockHeader, BlockResults, Epoch};
 use namada_sdk::tx::data::protocol::ProtocolTxType;
-use namada_sdk::tx::data::VpStatusFlags;
+use namada_sdk::tx::data::{compute_inner_tx_hash, VpStatusFlags};
 use namada_sdk::tx::event::{Batch, Code};
 use namada_sdk::tx::new_tx_event;
 use namada_sdk::{ibc, proof_of_stake};
@@ -347,28 +348,37 @@ where
         match extended_dispatch_result {
             Ok(tx_result) => match tx_data.tx.header.tx_type {
                 TxType::Wrapper(_) => {
-                    // Commit any changes brought in by the optional fee-paying
-                    // tx to ensure fee payment
+                    // Commit any changes brought in by the inner txs executed
+                    // when handling the wrapper. For now it should be at most
+                    // one, the first tx of the batch that runs to pay fees via
+                    // the masp, this way we can commit the fee payment itself
                     self.state.write_log_mut().commit_batch_and_current_tx();
 
-                    // Emit the events of the fee-paying inner tx. This tx has
-                    // just been committed so we need to ensure the relative
-                    // events are emitted
-                    let events = tx_result.0.first_key_value().map_or_else(
-                        Default::default,
-                        |(_k, v)| {
-                            if let Ok(result) = v {
-                                result.events.clone()
-                            } else {
-                                Default::default()
+                    // Emit the events of all the inner txs that have been
+                    // successfully executed when handling the wrapper. These
+                    // txs have just been committed so we need to ensure the
+                    // relative events are emitted for consistency
+                    for cmt in tx_data.tx.commitments() {
+                        let inner_tx_hash = compute_inner_tx_hash(
+                            tx_data.tx.wrapper_hash().as_ref(),
+                            Either::Right(cmt),
+                        );
+                        if let Some(Ok(batched_result)) =
+                            tx_result.0.get(&inner_tx_hash)
+                        {
+                            if batched_result.is_accepted() {
+                                response.events.emit_many(
+                                    batched_result
+                                        .events
+                                        .clone()
+                                        .into_iter()
+                                        .map(|event| {
+                                            event.with(Height(tx_data.height))
+                                        }),
+                                );
                             }
-                        },
-                    );
-                    response.events.emit_many(
-                        events
-                            .into_iter()
-                            .map(|event| event.with(Height(tx_data.height))),
-                    );
+                        }
+                    }
 
                     // Return cached data for the execution of the batch
                     return Some(WrapperCache {
