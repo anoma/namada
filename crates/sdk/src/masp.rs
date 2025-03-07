@@ -62,7 +62,7 @@ fn extract_masp_tx(
         }
         MaspTxRef::IbcData(hash) => {
             // Dereference the masp ref to the first instance that
-            // matches is, even if it is not the exact one that produced
+            // matches it, even if it is not the exact one that produced
             // the event, the data we extract will be exactly the same
             let masp_ibc_tx = tx
                 .commitments()
