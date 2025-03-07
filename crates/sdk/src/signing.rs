@@ -50,7 +50,6 @@ use crate::error::{EncodingError, Error, TxSubmitError};
 use crate::eth_bridge_pool::PendingTransfer;
 use crate::governance::storage::proposal::{AddRemove, PGFAction, PGFTarget};
 use crate::rpc::validate_amount;
-use crate::token::Account;
 use crate::tx::{
     Commitment, TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
     TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
@@ -822,19 +821,6 @@ fn format_outputs(output: &mut Vec<String>) {
     }
 }
 
-/// Convert a map with key pairs into a nested structure
-fn nest_map<V>(
-    map: BTreeMap<Account, V>,
-) -> BTreeMap<Address, BTreeMap<Address, V>> {
-    let mut nested = BTreeMap::new();
-    for (account, v) in map {
-        let inner: &mut BTreeMap<_, _> =
-            nested.entry(account.owner).or_default();
-        inner.insert(account.token, v);
-    }
-    nested
-}
-
 /// Adds a Ledger output for the senders and destinations for transparent and
 /// MASP transactions
 async fn make_ledger_token_transfer_endpoints(
@@ -844,15 +830,17 @@ async fn make_ledger_token_transfer_endpoints(
     builder: Option<&MaspBuilder>,
     assets: &HashMap<AssetType, AssetData>,
 ) -> Result<(), Error> {
-    for (owner, changes) in nest_map(transfer.sources.clone()) {
+    for (owner, amount) in transfer.sources.clone() {
         // MASP inputs will be printed below
-        if owner != MASP {
-            output.push(format!("Sender : {}", owner));
-            for (token, amount) in changes {
-                make_ledger_amount_addr(
-                    tokens, output, amount, &token, "Sending ",
-                );
-            }
+        if owner.owner != MASP {
+            output.push(format!("Sender : {}", owner.owner));
+            make_ledger_amount_addr(
+                tokens,
+                output,
+                amount,
+                &owner.token,
+                "Sending ",
+            );
         }
     }
     if let Some(builder) = builder {
@@ -870,19 +858,17 @@ async fn make_ledger_token_transfer_endpoints(
             .await;
         }
     }
-    for (owner, changes) in nest_map(transfer.targets.clone()) {
+    for (owner, amount) in transfer.targets.clone() {
         // MASP outputs will be printed below
-        if owner != MASP {
-            output.push(format!("Destination : {}", owner));
-            for (token, amount) in changes {
-                make_ledger_amount_addr(
-                    tokens,
-                    output,
-                    amount,
-                    &token,
-                    "Receiving ",
-                );
-            }
+        if owner.owner != MASP {
+            output.push(format!("Destination : {}", owner.owner));
+            make_ledger_amount_addr(
+                tokens,
+                output,
+                amount,
+                &owner.token,
+                "Receiving ",
+            );
         }
     }
     if let Some(builder) = builder {
@@ -2262,6 +2248,7 @@ mod test_signing {
     use crate::args::InputAmount;
     use crate::masp::fs::FsShieldedUtils;
     use crate::masp::{ShieldedContext, WalletMap};
+    use crate::token::Account;
 
     fn arbitrary_args() -> args::Tx {
         args::Tx {
