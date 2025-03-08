@@ -663,20 +663,25 @@ impl MaspClient for IndexerMaspClient {
             ))
         })?;
 
+        let mut masp_index = 0;
+        let mut prev_block_height = None;
+
         Ok(payload
             .notes_index
             .into_iter()
-            .enumerate()
             .map(
-                |(
-                    masp_index,
-                    Note {
-                        block_index,
-                        batch_index,
-                        block_height,
-                        note_position,
-                    },
-                )| {
+                |Note {
+                     block_index,
+                     batch_index,
+                     block_height,
+                     note_position,
+                 }| {
+                    if Some(block_height) != prev_block_height {
+                        masp_index = 0;
+                        prev_block_height = Some(block_height);
+                    } else {
+                        masp_index += 1;
+                    }
                     (
                         IndexedTx {
                             block_index: TxIndex(block_index),
