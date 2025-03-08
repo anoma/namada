@@ -103,52 +103,40 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
 ) -> Result<Vec<MaspEvent>, Error> {
-    Ok(client
+    let maybe_masp_events: Result<Vec<_>, Error> = client
         .block_results(height.0)
         .await
         .map_err(|e| Error::from(QueryError::General(e.to_string())))?
         .end_block_events
-        .map(|events| {
-            events
-                .into_iter()
-                .filter_map(|event| {
-                    // Check if the event is a Masp one
-                    let Ok(kind) =
-                        namada_events::EventType::from_str(&event.kind)
-                    else {
-                        return None;
-                    };
-                    let kind = if kind == namada_tx::event::masp_types::TRANSFER
-                    {
-                        MaspEventKind::Transfer
-                    } else if kind == namada_tx::event::masp_types::FEE_PAYMENT
-                    {
-                        MaspEventKind::FeePayment
-                    } else {
-                        return None;
-                    };
+        .unwrap_or_default()
+        .into_iter()
+        .map(|event| {
+            // Check if the event is a Masp one
+            let kind = namada_events::EventType::from_str(&event.kind)?;
+            let kind = if kind == namada_tx::event::masp_types::TRANSFER {
+                MaspEventKind::Transfer
+            } else if kind == namada_tx::event::masp_types::FEE_PAYMENT {
+                MaspEventKind::FeePayment
+            } else {
+                return Ok(None);
+            };
 
-                    // Extract the data from the event's attributes
-                    let Ok(data) = MaspTxRef::read_from_event_attributes(
-                        &event.attributes,
-                    ) else {
-                        return None;
-                    };
-                    let Ok(tx_index) = IndexedTx::read_from_event_attributes(
-                        &event.attributes,
-                    ) else {
-                        return None;
-                    };
+            // Extract the data from the event's attributes, propagate errors if
+            // the masp event does not follow the expected format
+            let data =
+                MaspTxRef::read_from_event_attributes(&event.attributes)?;
+            let tx_index =
+                IndexedTx::read_from_event_attributes(&event.attributes)?;
 
-                    Some(MaspEvent {
-                        tx_index,
-                        kind,
-                        data,
-                    })
-                })
-                .collect::<Vec<_>>()
+            Ok(Some(MaspEvent {
+                tx_index,
+                kind,
+                data,
+            }))
         })
-        .unwrap_or_default())
+        .collect();
+
+    Ok(maybe_masp_events?.into_iter().flatten().collect())
 }
 
 /// An implementation of a shielded wallet
