@@ -50,7 +50,6 @@ use crate::error::{EncodingError, Error, TxSubmitError};
 use crate::eth_bridge_pool::PendingTransfer;
 use crate::governance::storage::proposal::{AddRemove, PGFAction, PGFTarget};
 use crate::rpc::validate_amount;
-use crate::token::Account;
 use crate::tx::{
     Commitment, TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
     TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
@@ -707,7 +706,7 @@ pub struct LedgerVector {
 
 /// Adds a Ledger output line describing a given transaction amount and address
 fn make_ledger_amount_addr(
-    tokens: &HashMap<Address, String>,
+    tokens: &HashMap<Address, &str>,
     output: &mut Vec<String>,
     amount: DenominatedAmount,
     token: &Address,
@@ -717,7 +716,7 @@ fn make_ledger_amount_addr(
         output.push(format!(
             "{}Amount : {} {}",
             prefix,
-            token.to_uppercase(),
+            token,
             to_ledger_decimal_variable_token(amount),
         ));
     } else {
@@ -735,7 +734,7 @@ fn make_ledger_amount_addr(
 /// Adds a Ledger output line describing a given transaction amount and asset
 /// type
 async fn make_ledger_amount_asset(
-    tokens: &HashMap<Address, String>,
+    tokens: &HashMap<Address, &str>,
     output: &mut Vec<String>,
     amount: u64,
     token: &AssetType,
@@ -752,7 +751,7 @@ async fn make_ledger_amount_asset(
             output.push(format!(
                 "{}Amount : {} {}",
                 prefix,
-                token.to_uppercase(),
+                token,
                 to_ledger_decimal_variable_token(amount),
             ));
         } else {
@@ -822,37 +821,26 @@ fn format_outputs(output: &mut Vec<String>) {
     }
 }
 
-/// Convert a map with key pairs into a nested structure
-fn nest_map<V>(
-    map: BTreeMap<Account, V>,
-) -> BTreeMap<Address, BTreeMap<Address, V>> {
-    let mut nested = BTreeMap::new();
-    for (account, v) in map {
-        let inner: &mut BTreeMap<_, _> =
-            nested.entry(account.owner).or_default();
-        inner.insert(account.token, v);
-    }
-    nested
-}
-
 /// Adds a Ledger output for the senders and destinations for transparent and
 /// MASP transactions
 async fn make_ledger_token_transfer_endpoints(
-    tokens: &HashMap<Address, String>,
+    tokens: &HashMap<Address, &str>,
     output: &mut Vec<String>,
     transfer: &token::Transfer,
     builder: Option<&MaspBuilder>,
     assets: &HashMap<AssetType, AssetData>,
 ) -> Result<(), Error> {
-    for (owner, changes) in nest_map(transfer.sources.clone()) {
+    for (owner, amount) in transfer.sources.clone() {
         // MASP inputs will be printed below
-        if owner != MASP {
-            output.push(format!("Sender : {}", owner));
-            for (token, amount) in changes {
-                make_ledger_amount_addr(
-                    tokens, output, amount, &token, "Sending ",
-                );
-            }
+        if owner.owner != MASP {
+            output.push(format!("Sender : {}", owner.owner));
+            make_ledger_amount_addr(
+                tokens,
+                output,
+                amount,
+                &owner.token,
+                "Sending ",
+            );
         }
     }
     if let Some(builder) = builder {
@@ -870,19 +858,17 @@ async fn make_ledger_token_transfer_endpoints(
             .await;
         }
     }
-    for (owner, changes) in nest_map(transfer.targets.clone()) {
+    for (owner, amount) in transfer.targets.clone() {
         // MASP outputs will be printed below
-        if owner != MASP {
-            output.push(format!("Destination : {}", owner));
-            for (token, amount) in changes {
-                make_ledger_amount_addr(
-                    tokens,
-                    output,
-                    amount,
-                    &token,
-                    "Receiving ",
-                );
-            }
+        if owner.owner != MASP {
+            output.push(format!("Destination : {}", owner.owner));
+            make_ledger_amount_addr(
+                tokens,
+                output,
+                amount,
+                &owner.token,
+                "Receiving ",
+            );
         }
     }
     if let Some(builder) = builder {
@@ -1156,16 +1142,9 @@ fn format_timeout_height(height: &TimeoutHeight) -> String {
 /// Converts the given transaction to the form that is displayed on the Ledger
 /// device
 pub async fn to_ledger_vector(
-    wallet: &Wallet<impl WalletIo>,
+    tokens: &HashMap<Address, &str>,
     tx: &Tx,
 ) -> Result<LedgerVector, Error> {
-    // To facilitate lookups of human-readable token names
-    let tokens: HashMap<Address, String> = wallet
-        .get_addresses()
-        .into_iter()
-        .map(|(alias, addr)| (addr, alias))
-        .collect();
-
     let mut tv = LedgerVector {
         blob: HEXLOWER.encode(&tx.serialize_to_vec()),
         index: 0,
@@ -1498,7 +1477,7 @@ pub async fn to_ledger_vector(
             )
             .map_err(|_| Error::Other("Invalid Data".to_string()))?;
             make_ledger_token_transfer_endpoints(
-                &tokens,
+                tokens,
                 &mut tv.output,
                 &transfer,
                 builder,
@@ -1506,7 +1485,7 @@ pub async fn to_ledger_vector(
             )
             .await?;
             make_ledger_token_transfer_endpoints(
-                &tokens,
+                tokens,
                 &mut tv.output_expert,
                 &transfer,
                 builder,
@@ -1596,7 +1575,7 @@ pub async fn to_ledger_vector(
                     )
                     .map_err(|_| Error::Other("Invalid Data".to_string()))?;
                     make_ledger_token_transfer_endpoints(
-                        &tokens,
+                        tokens,
                         &mut tv.output,
                         &transfer,
                         builder,
@@ -1604,7 +1583,7 @@ pub async fn to_ledger_vector(
                     )
                     .await?;
                     make_ledger_token_transfer_endpoints(
-                        &tokens,
+                        tokens,
                         &mut tv.output_expert,
                         &transfer,
                         builder,
@@ -1765,7 +1744,7 @@ pub async fn to_ledger_vector(
                     )
                     .map_err(|_| Error::Other("Invalid Data".to_string()))?;
                     make_ledger_token_transfer_endpoints(
-                        &tokens,
+                        tokens,
                         &mut tv.output,
                         &transfer,
                         builder,
@@ -1773,7 +1752,7 @@ pub async fn to_ledger_vector(
                     )
                     .await?;
                     make_ledger_token_transfer_endpoints(
-                        &tokens,
+                        tokens,
                         &mut tv.output_expert,
                         &transfer,
                         builder,
@@ -2218,15 +2197,10 @@ pub async fn to_ledger_vector(
                 format!("Gas limit : {}", u64::from(wrapper.gas_limit)),
             ]);
             if let Some(token) = tokens.get(&wrapper.fee.token) {
-                tv.output.push(format!(
-                    "Fee : {} {}",
-                    token.to_uppercase(),
-                    fee_limit
-                ));
+                tv.output.push(format!("Fee : {} {}", token, fee_limit));
                 tv.output_expert.push(format!(
                     "Fees/gas unit : {} {}",
-                    token.to_uppercase(),
-                    fee_amount_per_gas_unit,
+                    token, fee_amount_per_gas_unit,
                 ));
             } else {
                 tv.output.extend(vec![
@@ -2274,6 +2248,7 @@ mod test_signing {
     use crate::args::InputAmount;
     use crate::masp::fs::FsShieldedUtils;
     use crate::masp::{ShieldedContext, WalletMap};
+    use crate::token::Account;
 
     fn arbitrary_args() -> args::Tx {
         args::Tx {
@@ -2688,14 +2663,8 @@ mod test_signing {
             shielded_section_hash: None,
         };
         let tokens = HashMap::from([
-            (
-                Address::Internal(InternalAddress::Governance),
-                "SuperMoney".to_string(),
-            ),
-            (
-                Address::Internal(InternalAddress::Pgf),
-                "BloodMoney".to_string(),
-            ),
+            (Address::Internal(InternalAddress::Governance), "SuperMoney"),
+            (Address::Internal(InternalAddress::Pgf), "BloodMoney"),
         ]);
 
         let mut output = vec![];
@@ -2714,12 +2683,12 @@ mod test_signing {
                 "Sender : {}",
                 Address::Internal(InternalAddress::Governance)
             ),
-            "Sending Amount : SUPERMONEY 1".to_string(),
+            "Sending Amount : SuperMoney 1".to_string(),
             format!(
                 "Destination : {}",
                 Address::Internal(InternalAddress::Pgf)
             ),
-            "Receiving Amount : BLOODMONEY 2".to_string(),
+            "Receiving Amount : BloodMoney 2".to_string(),
         ];
         assert_eq!(output, expected);
         output.clear();
@@ -2761,8 +2730,7 @@ mod test_signing {
     /// extracts and validates the presence of a code section
     #[tokio::test]
     async fn test_to_ledger_vector_code_sections() {
-        let wallet =
-            Wallet::<TestWalletUtils>::new(TestWalletUtils, Default::default());
+        let wallet = HashMap::new();
         let mut tx = Tx::new(ChainId::default(), None);
         // an empty tx should work correctly
         to_ledger_vector(&wallet, &tx).await.expect("Test failed");

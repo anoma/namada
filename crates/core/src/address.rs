@@ -811,6 +811,7 @@ pub mod testing {
         prop_oneof![
             arb_established_address().prop_map(Address::Established),
             arb_implicit_address().prop_map(Address::Implicit),
+            arb_whitelisted_address(),
         ]
     }
 
@@ -820,7 +821,43 @@ pub mod testing {
             arb_established_address().prop_map(Address::Established),
             arb_implicit_address().prop_map(Address::Implicit),
             arb_internal_address().prop_map(Address::Internal),
+            arb_whitelisted_address(),
         ]
+    }
+
+    /// A list of tokens whitelisted on hardware wallets
+    pub fn address_whitelist() -> HashMap<Address, &'static str> {
+        const EXPECT: &str = "The token address decoding shouldn't fail";
+        let nam =
+            Address::decode("tnam1q9gr66cvu4hrzm0sd5kmlnjje82gs3xlfg3v6nu7");
+        let osmo =
+            Address::decode("tnam1p5z8ruwyu7ha8urhq2l0dhpk2f5dv3ts7uyf2n75");
+        let atom =
+            Address::decode("tnam1pkg30gnt4q0zn7j00r6hms4ajrxn6f5ysyyl7w9m");
+        let tia =
+            Address::decode("tnam1pklj3kwp0cpsdvv56584rsajty974527qsp8n0nm");
+        let st_osmo =
+            Address::decode("tnam1p4px8sw3am4qvetj7eu77gftm4fz4hcw2ulpldc7");
+        let st_atom =
+            Address::decode("tnam1p5z5538v3kdk3wdx7r2hpqm4uq9926dz3ughcp7n");
+        let st_tia =
+            Address::decode("tnam1ph6xhf0defk65hm7l5ursscwqdj8ehrcdv300u4g");
+        let mut whitelist = HashMap::new();
+        whitelist.insert(nam.expect(EXPECT), "NAM");
+        whitelist.insert(osmo.expect(EXPECT), "uOSMO");
+        whitelist.insert(atom.expect(EXPECT), "uATOM");
+        whitelist.insert(tia.expect(EXPECT), "uTIA");
+        whitelist.insert(st_osmo.expect(EXPECT), "ustOSMO");
+        whitelist.insert(st_atom.expect(EXPECT), "ustATOM");
+        whitelist.insert(st_tia.expect(EXPECT), "ustTIA");
+        whitelist
+    }
+
+    /// Generate an arbitrary whitelisted address
+    pub fn arb_whitelisted_address() -> impl Strategy<Value = Address> {
+        any::<prop::sample::Selector>().prop_map(|selector| {
+            selector.select(address_whitelist().keys().cloned())
+        })
     }
 
     /// Generate an arbitrary [`EstablishedAddress`].
