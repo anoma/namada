@@ -107,11 +107,11 @@ where
         storage.read(&reward_precision_key)?.map_or_else(
             || -> Result<u128> {
                 // Since reading reward precision has failed, choose a
-                // thousandth of the given token
+                // thousandth of the given token. But clamp the precision above
+                // by 10^38, the maximum power of 10 that can be contained by a
+                // u128.
                 let precision_denom =
-                    std::cmp::max(u32::from(denomination.0), 3)
-                        .checked_sub(3)
-                        .expect("Cannot underflow");
+                    u32::from(denomination.0).saturating_sub(3).clamp(0, 38);
                 let reward_precision = checked!(10u128 ^ precision_denom)?;
                 // Record the precision that is now being used so that it does
                 // not have to be recomputed each time, and to
