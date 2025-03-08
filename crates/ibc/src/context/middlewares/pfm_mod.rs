@@ -81,30 +81,6 @@ where
     fn next_middleware_mut(&mut self) -> &mut Self::NextMiddleware {
         &mut self.transfer_module
     }
-
-    fn middleware_on_recv_packet_execute(
-        &mut self,
-        packet: &Packet,
-        relayer: &Signer,
-    ) -> (ModuleExtras, Option<Acknowledgement>) {
-        let Ok(packet_data) =
-            serde_json::from_slice::<PacketData>(&packet.data)
-        else {
-            return self
-                .transfer_module
-                .on_recv_packet_execute(packet, relayer);
-        };
-
-        if crate::is_packet_forward(&packet_data) {
-            self.transfer_module.ctx.enable_parse_addr_as_governance();
-            let ret =
-                self.transfer_module.on_recv_packet_execute(packet, relayer);
-            self.transfer_module.ctx.disable_parse_addr_as_governance();
-            ret
-        } else {
-            self.transfer_module.on_recv_packet_execute(packet, relayer)
-        }
-    }
 }
 
 impl<C, Params> PfmContext for PfmTransferModule<C, Params>

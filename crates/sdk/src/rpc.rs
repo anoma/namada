@@ -1875,6 +1875,7 @@ pub async fn query_osmosis_pool_routes(
             ("tokenIn", coin.as_str()),
             ("tokenOutDenom", output_denom),
             ("humanDenoms", "false"),
+            ("singleRoute", "true"),
         ])
         .send()
         .await
