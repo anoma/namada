@@ -112,7 +112,11 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
         .into_iter()
         .map(|event| {
             // Check if the event is a Masp one
-            let kind = namada_events::EventType::from_str(&event.kind)?;
+            let Ok(kind) = namada_events::EventType::from_str(&event.kind)
+            else {
+                return Ok(None);
+            };
+
             let kind = if kind == namada_tx::event::masp_types::TRANSFER {
                 MaspEventKind::Transfer
             } else if kind == namada_tx::event::masp_types::FEE_PAYMENT {
