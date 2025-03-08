@@ -399,28 +399,35 @@ where
             self.ctx.note_index = nm;
         }
 
-        for (indexed_tx, stx_batch) in self.cache.fetched.take() {
+        for (masp_indexed_tx, stx_batch) in self.cache.fetched.take() {
             let needs_witness_map_update =
                 self.client.capabilities().needs_witness_map_update();
             self.ctx
                 .save_shielded_spends(&stx_batch, needs_witness_map_update);
             if needs_witness_map_update
-                && Some(&indexed_tx) > last_witnessed_tx.as_ref()
+                && Some(&masp_indexed_tx.indexed_tx)
+                    > last_witnessed_tx.as_ref()
             {
-                self.ctx.update_witness_map(indexed_tx, &stx_batch)?;
+                self.ctx.update_witness_map(
+                    masp_indexed_tx.indexed_tx,
+                    &stx_batch,
+                )?;
             }
-            let first_note_pos = self.ctx.note_index[&indexed_tx];
+            let first_note_pos =
+                self.ctx.note_index[&masp_indexed_tx.indexed_tx];
             let mut vk_heights = BTreeMap::new();
             std::mem::swap(&mut vk_heights, &mut self.ctx.vk_heights);
             for (vk, _) in vk_heights
                 .iter()
                 // NB: skip keys that are synced past the given `indexed_tx`
-                .filter(|(_vk, h)| h.as_ref() < Some(&indexed_tx))
+                .filter(|(_vk, h)| {
+                    h.as_ref() < Some(&masp_indexed_tx.indexed_tx)
+                })
             {
                 for (note_pos_offset, (note, pa, memo)) in self
                     .cache
                     .trial_decrypted
-                    .take(&indexed_tx, vk)
+                    .take(&masp_indexed_tx.indexed_tx, vk)
                     .unwrap_or_default()
                 {
                     self.ctx.save_decrypted_shielded_outputs(
@@ -621,7 +628,7 @@ where
             .set_upper_limit(number_of_fetches);
 
         for (itx, tx) in self.cache.fetched.iter() {
-            self.spawn_trial_decryptions(*itx, tx);
+            self.spawn_trial_decryptions(itx.indexed_tx, tx);
         }
     }
 
@@ -665,7 +672,7 @@ where
             }
             Message::FetchTxs(Ok((from, to, tx_batch))) => {
                 for (itx, txs) in &tx_batch {
-                    self.spawn_trial_decryptions(*itx, txs);
+                    self.spawn_trial_decryptions(itx.indexed_tx, txs);
                 }
                 self.cache.fetched.extend(tx_batch);
 
@@ -875,6 +882,7 @@ mod dispatcher_tests {
     use namada_core::storage::TxIndex;
     use namada_core::task_env::TaskEnvironment;
     use namada_io::DevNullProgressBar;
+    use namada_tx::event::MaspEventKind;
     use namada_tx::IndexedTx;
     use namada_wallet::StoredKeypair;
     use tempfile::tempdir;
@@ -885,6 +893,7 @@ mod dispatcher_tests {
         arbitrary_masp_tx, arbitrary_masp_tx_with_fee_unshielding,
         arbitrary_vk, dated_arbitrary_vk, TestingMaspClient,
     };
+    use crate::masp::utils::MaspIndexedTx;
     use crate::masp::{MaspLocalTaskEnv, ShieldedSyncConfig};
 
     #[tokio::test]
@@ -915,7 +924,13 @@ mod dispatcher_tests {
                         index: Default::default(),
                         batch_index: None,
                     };
-                    dispatcher.cache.fetched.insert((itx, arbitrary_masp_tx()));
+                    dispatcher.cache.fetched.insert((
+                        MaspIndexedTx {
+                            indexed_tx: itx,
+                            kind: MaspEventKind::Transfer,
+                        },
+                        arbitrary_masp_tx(),
+                    ));
                     dispatcher.ctx.note_index.insert(itx, h as usize);
                     dispatcher.cache.trial_decrypted.insert(
                         itx,
@@ -1196,20 +1211,26 @@ mod dispatcher_tests {
                 masp_tx_sender.send(None).expect("Test failed");
                 masp_tx_sender
                     .send(Some((
-                        IndexedTx {
-                            height: 1.into(),
-                            index: TxIndex(1),
-                            batch_index: None,
+                        MaspIndexedTx {
+                            indexed_tx: IndexedTx {
+                                height: 1.into(),
+                                index: TxIndex(1),
+                                batch_index: None,
+                            },
+                            kind: MaspEventKind::Transfer,
                         },
                         masp_tx.clone(),
                     )))
                     .expect("Test failed");
                 masp_tx_sender
                     .send(Some((
-                        IndexedTx {
-                            height: 1.into(),
-                            index: TxIndex(2),
-                            batch_index: None,
+                        MaspIndexedTx {
+                            indexed_tx: IndexedTx {
+                                height: 1.into(),
+                                index: TxIndex(2),
+                                batch_index: None,
+                            },
+                            kind: MaspEventKind::Transfer,
                         },
                         masp_tx.clone(),
                     )))
@@ -1276,20 +1297,26 @@ mod dispatcher_tests {
                 let masp_tx = arbitrary_masp_tx();
                 masp_tx_sender
                     .send(Some((
-                        IndexedTx {
-                            height: 1.into(),
-                            index: TxIndex(1),
-                            batch_index: None,
+                        MaspIndexedTx {
+                            indexed_tx: IndexedTx {
+                                height: 1.into(),
+                                index: TxIndex(1),
+                                batch_index: None,
+                            },
+                            kind: MaspEventKind::Transfer,
                         },
                         masp_tx.clone(),
                     )))
                     .expect("Test failed");
                 masp_tx_sender
                     .send(Some((
-                        IndexedTx {
-                            height: 1.into(),
-                            index: TxIndex(2),
-                            batch_index: None,
+                        MaspIndexedTx {
+                            indexed_tx: IndexedTx {
+                                height: 1.into(),
+                                index: TxIndex(2),
+                                batch_index: None,
+                            },
+                            kind: MaspEventKind::Transfer,
                         },
                         masp_tx.clone(),
                     )))
@@ -1308,18 +1335,24 @@ mod dispatcher_tests {
                 let cache = utils.cache_load().await.expect("Test failed");
                 let expected = BTreeMap::from([
                     (
-                        IndexedTx {
-                            height: 1.into(),
-                            index: TxIndex(1),
-                            batch_index: None,
+                        MaspIndexedTx {
+                            indexed_tx: IndexedTx {
+                                height: 1.into(),
+                                index: TxIndex(1),
+                                batch_index: None,
+                            },
+                            kind: MaspEventKind::Transfer,
                         },
                         masp_tx.clone(),
                     ),
                     (
-                        IndexedTx {
-                            height: 1.into(),
-                            index: TxIndex(2),
-                            batch_index: None,
+                        MaspIndexedTx {
+                            indexed_tx: IndexedTx {
+                                height: 1.into(),
+                                index: TxIndex(2),
+                                batch_index: None,
+                            },
+                            kind: MaspEventKind::Transfer,
                         },
                         masp_tx.clone(),
                     ),
@@ -1358,10 +1391,13 @@ mod dispatcher_tests {
                 let masp_tx = arbitrary_masp_tx();
                 masp_tx_sender
                     .send(Some((
-                        IndexedTx {
-                            height: 1.into(),
-                            index: TxIndex(1),
-                            batch_index: None,
+                        MaspIndexedTx {
+                            indexed_tx: IndexedTx {
+                                height: 1.into(),
+                                index: TxIndex(1),
+                                batch_index: None,
+                            },
+                            kind: MaspEventKind::Transfer,
                         },
                         masp_tx.clone(),
                     )))
@@ -1405,10 +1441,13 @@ mod dispatcher_tests {
         let masp_tx = arbitrary_masp_tx();
         masp_tx_sender
             .send(Some((
-                IndexedTx {
-                    height: 1.into(),
-                    index: TxIndex(1),
-                    batch_index: None,
+                MaspIndexedTx {
+                    indexed_tx: IndexedTx {
+                        height: 1.into(),
+                        index: TxIndex(1),
+                        batch_index: None,
+                    },
+                    kind: MaspEventKind::Transfer,
                 },
                 masp_tx.clone(),
             )))
@@ -1452,10 +1491,13 @@ mod dispatcher_tests {
         sk.birthday = 60.into();
         masp_tx_sender
             .send(Some((
-                IndexedTx {
-                    height: 1.into(),
-                    index: TxIndex(1),
-                    batch_index: None,
+                MaspIndexedTx {
+                    indexed_tx: IndexedTx {
+                        height: 1.into(),
+                        index: TxIndex(1),
+                        batch_index: None,
+                    },
+                    kind: MaspEventKind::Transfer,
                 },
                 masp_tx.clone(),
             )))
