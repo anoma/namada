@@ -39,6 +39,26 @@ impl TrialDecrypted {
             .sum::<usize>()
     }
 
+    /// Update the transaction indices according to the given map. If a key is
+    /// not found, then return it.
+    pub fn reindex(
+        &mut self,
+        key_map: &BTreeMap<IndexedTx, IndexedTx>,
+    ) -> Option<IndexedTx> {
+        let mut value_map = HashMap::new();
+        // First grab all the values we need to make sure that we do not
+        // accidentally overwrite
+        for (old, new) in key_map {
+            if let Some(value) = self.inner.swap_remove(old) {
+                value_map.insert(*new, value);
+            } else {
+                return Some(*old);
+            }
+        }
+        self.inner.extend(value_map);
+        None
+    }
+
     /// Get cached notes decrypted with `vk`, indexed at `itx`.
     pub fn get(
         &self,
