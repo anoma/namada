@@ -446,10 +446,22 @@ where
                         .filter(|tx| !fee_transfers.contains(&tx.0));
                     let ordered_block_txs =
                         subset.into_iter().chain(complement_txs).cloned();
-                    for (indexed_tx, stx_batch) in ordered_block_txs {
+                    // Track how the tx indicies get reordered/changed
+                    let mut index_map = BTreeMap::new();
+                    for (masp_index, (old_indexed_tx, stx_batch)) in
+                        ordered_block_txs.enumerate()
+                    {
+                        // Reindex tx now that we know its correct MASP position
+                        let indexed_tx = IndexedTx {
+                            masp_index: masp_index as u32,
+                            ..old_indexed_tx
+                        };
+                        index_map.insert(old_indexed_tx, indexed_tx);
                         self.ctx.update_witness_map(indexed_tx, &stx_batch)?;
                         ordered_txs.push((indexed_tx, stx_batch));
                     }
+                    // Update the indices in the trial decrypted map
+                    self.cache.trial_decrypted.reindex(&index_map);
                     break;
                 }
             }
@@ -1320,13 +1332,13 @@ mod dispatcher_tests {
                 let expected = BTreeSet::from([
                     IndexedTx {
                         block_height: 1.into(),
-                        masp_index: 1,
+                        masp_index: 0,
                         block_index: TxIndex(1),
                         batch_index: None,
                     },
                     IndexedTx {
                         block_height: 1.into(),
-                        masp_index: 2,
+                        masp_index: 1,
                         block_index: TxIndex(2),
                         batch_index: None,
                     },
