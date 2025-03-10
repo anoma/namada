@@ -10,6 +10,7 @@ pub mod protocol;
 /// wrapper txs
 pub mod wrapper;
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Display};
 use std::marker::PhantomData;
@@ -181,6 +182,25 @@ pub fn compute_inner_tx_hash(
     );
 
     Hash(state.finalize_reset().into())
+}
+
+/// Identifier of an inner transaction in a batch.
+pub struct InnerTxId<'tx> {
+    /// Hash of the wrapper transaction, if any.
+    pub wrapper_hash: Option<Cow<'tx, Hash>>,
+    /// Hash of the inner transaction's commitments.
+    pub commitments_hash: Cow<'tx, Hash>,
+}
+
+impl InnerTxId<'_> {
+    /// Compute the hash of the inner transaction.
+    #[inline]
+    pub fn hash(&self) -> Hash {
+        compute_inner_tx_hash(
+            self.wrapper_hash.as_ref().map(|hash| hash.as_ref()),
+            Either::Left(&self.commitments_hash),
+        )
+    }
 }
 
 /// The extended transaction result, containing the references to masp
