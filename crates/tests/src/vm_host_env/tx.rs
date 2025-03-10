@@ -229,6 +229,7 @@ impl TestTxEnv {
         wasm::run::tx(
             &mut self.state,
             &self.gas_meter,
+            None,
             &self.tx_index,
             &self.batched_tx.tx,
             &self.batched_tx.cmt,
