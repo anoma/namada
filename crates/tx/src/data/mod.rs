@@ -193,9 +193,22 @@ pub struct InnerTxId<'tx> {
 }
 
 impl InnerTxId<'_> {
+    /// Compute the hash of the wrapper transaction.
+    ///
+    /// The zero hash is returned in case no wrapper is
+    /// present.
+    #[inline]
+    pub fn wrapper_hash(&self) -> Hash {
+        self.wrapper_hash
+            .as_ref()
+            .map_or_else(Hash::zero, |wrapper_hash| {
+                wrapper_hash.clone().into_owned()
+            })
+    }
+
     /// Compute the hash of the inner transaction.
     #[inline]
-    pub fn hash(&self) -> Hash {
+    pub fn inner_hash(&self) -> Hash {
         compute_inner_tx_hash(
             self.wrapper_hash.as_ref().map(|hash| hash.as_ref()),
             Either::Left(&self.commitments_hash),
