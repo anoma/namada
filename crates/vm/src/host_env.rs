@@ -117,6 +117,9 @@ where
     pub gas_meter: HostRef<RoAccess, RefCell<TxGasMeter>>,
     /// Transaction sentinel. In  `RefCell` to charge gas in read-only fns.
     pub sentinel: HostRef<RoAccess, RefCell<TxSentinel>>,
+    /// Hash of the wrapper transaction associated with
+    /// the current inner tx.
+    pub wrapper_hash: HostRef<RoAccess, Hash>,
     /// The transaction code is used for signature verification
     pub tx: HostRef<RoAccess, Tx>,
     /// The commitments inside the transaction
@@ -164,6 +167,7 @@ where
         iterators: &mut PrefixIterators<'static, D>,
         gas_meter: &RefCell<TxGasMeter>,
         sentinel: &RefCell<TxSentinel>,
+        wrapper_hash: &Hash,
         tx: &Tx,
         cmt: &TxCommitments,
         tx_index: &TxIndex,
@@ -179,6 +183,7 @@ where
         let iterators = unsafe { RwHostRef::new(iterators) };
         let gas_meter = unsafe { RoHostRef::new(gas_meter) };
         let sentinel = unsafe { RoHostRef::new(sentinel) };
+        let wrapper_hash = unsafe { RoHostRef::new(wrapper_hash) };
         let tx = unsafe { RoHostRef::new(tx) };
         let cmt = unsafe { RoHostRef::new(cmt) };
         let tx_index = unsafe { RoHostRef::new(tx_index) };
@@ -196,6 +201,7 @@ where
             iterators,
             gas_meter,
             sentinel,
+            wrapper_hash,
             tx,
             cmt,
             tx_index,
@@ -280,6 +286,7 @@ where
             iterators: self.iterators,
             gas_meter: self.gas_meter,
             sentinel: self.sentinel,
+            wrapper_hash: self.wrapper_hash,
             tx: self.tx,
             cmt: self.cmt,
             tx_index: self.tx_index,
@@ -1056,14 +1063,14 @@ where
     let event: Event = BorshDeserialize::try_from_slice(&event)
         .map_err(TxRuntimeError::EncodingError)?;
     let mut state = env.state();
-    let tx = unsafe { env.ctx.tx.get() };
+    let wrapper_hash = unsafe { env.ctx.wrapper_hash.get() };
     let cmt = unsafe { env.ctx.cmt.get() };
     let gas = state
         .write_log_mut()
         .emit_event_with_inner_hash(
             event,
             Some(&compute_inner_tx_hash(
-                Some(&tx.header_hash()),
+                Some(wrapper_hash),
                 Either::Right(cmt),
             )),
         )
@@ -2374,6 +2381,7 @@ pub mod testing {
             iterators,
             gas_meter,
             sentinel,
+            &Hash::zero(),
             tx,
             cmt,
             tx_index,
@@ -2423,6 +2431,7 @@ pub mod testing {
             iterators,
             gas_meter,
             sentinel,
+            &Hash::zero(),
             tx,
             cmt,
             tx_index,
