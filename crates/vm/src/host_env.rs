@@ -1,6 +1,7 @@
 //! Virtual machine's host environment exposes functions that may be called from
 //! within a virtual machine.
 
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
@@ -33,8 +34,7 @@ use namada_token::storage_key::{
     is_any_token_parameter_key,
 };
 use namada_token::MaspTransaction;
-use namada_tx::data::{compute_inner_tx_hash, TxSentinel};
-use namada_tx::either::Either;
+use namada_tx::data::{InnerTxId, TxSentinel};
 use namada_tx::{BatchedTx, BatchedTxRef, Tx, TxCommitments};
 use namada_vp::vp_host_fns;
 use thiserror::Error;
@@ -1067,12 +1067,12 @@ where
     let cmt = unsafe { env.ctx.cmt.get() };
     let gas = state
         .write_log_mut()
-        .emit_event_with_inner_hash(
+        .emit_event_with_tx_hashes(
             event,
-            Some(&compute_inner_tx_hash(
-                Some(wrapper_hash),
-                Either::Right(cmt),
-            )),
+            Some(InnerTxId {
+                wrapper_hash: Some(Cow::Borrowed(wrapper_hash)),
+                commitments_hash: Cow::Owned(cmt.get_hash()),
+            }),
         )
         .ok_or(TxRuntimeError::GasOverflow)?;
     consume_tx_gas::<MEM, D, H, CA>(env, gas)
