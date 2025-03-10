@@ -59,8 +59,8 @@ pub use namada_core::{control_flow, task_env};
 use namada_io::{Client, Io, NamadaIo};
 pub use namada_io::{MaybeSend, MaybeSync};
 pub use namada_token::masp::{ShieldedUtils, ShieldedWallet};
-use namada_tx::data::wrapper::GasLimit;
 use namada_tx::Tx;
+use namada_tx::data::wrapper::GasLimit;
 use rpc::{denominate_amount, format_denominated_amount, query_native_token};
 use signing::SigningTxData;
 use token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
@@ -869,11 +869,11 @@ pub mod testing {
     use namada_governance::{InitProposalData, VoteProposalData};
     use namada_ibc::testing::{arb_ibc_msg_nft_transfer, arb_ibc_msg_transfer};
     use namada_ibc::{MsgNftTransfer, MsgTransfer};
+    use namada_token::Transfer;
     use namada_token::masp::ShieldedTransfer;
     use namada_token::testing::{
         arb_denominated_amount, arb_shielded_transfer,
     };
-    use namada_token::Transfer;
     use namada_tx::data::pgf::UpdateStewardCommission;
     use namada_tx::data::pos::{
         BecomeValidator, Bond, CommissionChange, ConsensusKeyChange,

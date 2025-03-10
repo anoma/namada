@@ -71,7 +71,7 @@ pub mod mock_web3_client {
     use namada_sdk::ethereum_structs::BlockHeight;
     use num256::Uint256;
     use tokio::sync::mpsc::{
-        unbounded_channel, UnboundedReceiver, UnboundedSender,
+        UnboundedReceiver, UnboundedSender, unbounded_channel,
     };
     use tokio::sync::oneshot::Sender;
 

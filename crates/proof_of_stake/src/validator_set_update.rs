@@ -17,9 +17,9 @@ use crate::storage::{
     validator_set_positions_handle, validator_state_handle,
 };
 use crate::types::{
-    into_tm_voting_power, BelowCapacityValidatorSet, ConsensusValidator,
-    ConsensusValidatorSet, Position, ReverseOrdTokenAmount,
-    ValidatorPositionAddresses, ValidatorSetUpdate, ValidatorState,
+    BelowCapacityValidatorSet, ConsensusValidator, ConsensusValidatorSet,
+    Position, ReverseOrdTokenAmount, ValidatorPositionAddresses,
+    ValidatorSetUpdate, ValidatorState, into_tm_voting_power,
 };
 use crate::{PosParams, Result, StorageRead, StorageWrite};
 

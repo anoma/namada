@@ -87,7 +87,7 @@ impl<'de> Deserialize<'de> for GenesisAddress {
     {
         struct FieldVisitor;
 
-        impl<'de> serde::de::Visitor<'de> for FieldVisitor {
+        impl serde::de::Visitor<'_> for FieldVisitor {
             type Value = GenesisAddress;
 
             fn expecting(
@@ -197,7 +197,7 @@ impl<'de> Deserialize<'de> for AddrOrPk {
     {
         struct FieldVisitor;
 
-        impl<'de> serde::de::Visitor<'de> for FieldVisitor {
+        impl serde::de::Visitor<'_> for FieldVisitor {
             type Value = AddrOrPk;
 
             fn expecting(
@@ -441,7 +441,7 @@ pub fn make_dev_genesis(
     use namada_sdk::wallet::alias::Alias;
 
     use crate::config::genesis::chain::{
-        finalize, DeriveEstablishedAddress, FinalizedEstablishedAccountTx,
+        DeriveEstablishedAddress, FinalizedEstablishedAccountTx, finalize,
     };
     use crate::wallet::defaults;
 

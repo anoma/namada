@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 pub mod types {
     //! Ethereum bridge event types.
 
-    use namada_events::{event_type, EventType};
+    use namada_events::{EventType, event_type};
 
     use super::EthBridgeEvent;
 

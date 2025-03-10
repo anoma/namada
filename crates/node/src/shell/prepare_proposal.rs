@@ -7,12 +7,12 @@ use namada_sdk::gas::TxGasMeter;
 use namada_sdk::key::tm_raw_hash_to_string;
 use namada_sdk::parameters::get_gas_scale;
 use namada_sdk::proof_of_stake::storage::find_validator_by_raw_hash;
-use namada_sdk::state::{DBIter, StorageHasher, TempWlState, TxIndex, DB};
+use namada_sdk::state::{DB, DBIter, StorageHasher, TempWlState, TxIndex};
 use namada_sdk::token::{Amount, DenominatedAmount};
-use namada_sdk::tx::data::WrapperTx;
 use namada_sdk::tx::Tx;
-use namada_vm::wasm::{TxCache, VpCache};
+use namada_sdk::tx::data::WrapperTx;
 use namada_vm::WasmCacheAccess;
+use namada_vm::wasm::{TxCache, VpCache};
 
 use super::super::*;
 use super::block_alloc::states::{
@@ -23,7 +23,7 @@ use super::block_alloc::{AllocFailure, BlockAllocator, BlockResources};
 use crate::config::ValidatorLocalConfig;
 use crate::protocol::{self, ShellParams};
 use crate::shell::ShellMode;
-use crate::shims::abcipp_shim_types::shim::{response, TxBytes};
+use crate::shims::abcipp_shim_types::shim::{TxBytes, response};
 use crate::tendermint_proto::abci::RequestPrepareProposal;
 use crate::tendermint_proto::google::protobuf::Timestamp;
 
@@ -426,12 +426,12 @@ mod test_prepare_proposal {
     use namada_replay_protection as replay_protection;
     use namada_sdk::ethereum_events::EthereumEvent;
     use namada_sdk::key::RefTo;
+    use namada_sdk::proof_of_stake::Epoch;
     use namada_sdk::proof_of_stake::storage::{
         consensus_validator_set_handle,
         read_consensus_validator_set_addresses_with_stake, read_pos_params,
     };
     use namada_sdk::proof_of_stake::types::WeightedValidator;
-    use namada_sdk::proof_of_stake::Epoch;
     use namada_sdk::state::collections::lazy_map::{NestedSubKey, SubKey};
     use namada_sdk::storage::{
         BlockHeight, InnerEthEventsQueue, StorageRead, StorageWrite,
@@ -443,10 +443,10 @@ mod test_prepare_proposal {
     use namada_vote_ext::{ethereum_events, ethereum_tx_data_variants};
 
     use super::*;
-    use crate::shell::test_utils::{
-        self, gen_keypair, get_pkh_from_address, TestShell,
-    };
     use crate::shell::EthereumTxData;
+    use crate::shell::test_utils::{
+        self, TestShell, gen_keypair, get_pkh_from_address,
+    };
     use crate::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
     /// Check if we are filtering out an invalid vote extension `vext`

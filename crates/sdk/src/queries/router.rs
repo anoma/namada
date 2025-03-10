@@ -858,7 +858,7 @@ macro_rules! router {
 mod test_rpc_handlers {
     use namada_core::chain::Epoch;
     use namada_core::token;
-    use namada_state::{DBIter, StorageHasher, DB};
+    use namada_state::{DB, DBIter, StorageHasher};
 
     use crate::borsh::BorshSerializeExt;
     use crate::queries::{

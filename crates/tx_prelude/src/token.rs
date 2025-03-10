@@ -1,12 +1,12 @@
 //! Shielded and transparent tokens related functions
 
 use namada_core::collections::HashSet;
+use namada_token::TransparentTransfersRef;
 #[cfg(any(test, feature = "testing"))]
 pub use namada_token::testing;
 pub use namada_token::tx::apply_shielded_transfer;
-use namada_token::TransparentTransfersRef;
 pub use namada_token::{
-    storage_key, utils, Amount, DenominatedAmount, Store, Transfer,
+    Amount, DenominatedAmount, Store, Transfer, storage_key, utils,
 };
 use namada_tx::BatchedTx;
 use namada_tx_env::Address;

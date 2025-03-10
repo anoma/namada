@@ -17,8 +17,8 @@ use namada_core::storage::Key;
 use namada_proof_of_stake::parameters::OwnedPosParams;
 use namada_proof_of_stake::types::GenesisValidator;
 use namada_proof_of_stake::{
-    become_validator, bond_tokens, compute_and_store_total_consensus_stake,
-    staking_token_address, BecomeValidator,
+    BecomeValidator, become_validator, bond_tokens,
+    compute_and_store_total_consensus_stake, staking_token_address,
 };
 use namada_state::testing::TestState;
 use namada_storage::{StorageRead, StorageWrite};

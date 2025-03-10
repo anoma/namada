@@ -2,10 +2,10 @@
 
 use namada_core::ethereum_events::Uint;
 use namada_storage::{StorageRead, StorageWrite};
-use namada_trans_token::storage_key::balance_key;
 use namada_trans_token::Amount;
+use namada_trans_token::storage_key::balance_key;
 
-use crate::storage::bridge_pool::{get_nonce_key, BRIDGE_POOL_ADDRESS};
+use crate::storage::bridge_pool::{BRIDGE_POOL_ADDRESS, get_nonce_key};
 
 /// Initialize the storage owned by the Bridge Pool VP.
 ///

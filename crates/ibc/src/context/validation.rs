@@ -13,6 +13,7 @@ use ibc::core::client::types::Height;
 use ibc::core::commitment_types::commitment::CommitmentPrefix;
 use ibc::core::commitment_types::specs::ProofSpecs;
 use ibc::core::connection::types::ConnectionEnd;
+use ibc::core::host::ValidationContext;
 use ibc::core::host::types::error::HostError;
 use ibc::core::host::types::identifiers::{
     ChainId, ClientId, ConnectionId, Sequence,
@@ -21,7 +22,6 @@ use ibc::core::host::types::path::{
     AckPath, ChannelEndPath, ClientConsensusStatePath, CommitmentPath,
     ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
-use ibc::core::host::ValidationContext;
 use ibc::cosmos_host::ValidateSelfClientContext;
 use ibc::primitives::{Signer, Timestamp};
 #[cfg(any(test, feature = "testing"))]
@@ -29,9 +29,9 @@ use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientState;
 use namada_state::StorageRead;
 use namada_systems::parameters;
 
+use super::IbcContext;
 use super::client::{AnyClientState, AnyConsensusState};
 use super::common::IbcCommonContext;
-use super::IbcContext;
 use crate::storage;
 
 impl<C, Params> ExtClientValidationContext for IbcContext<C, Params>

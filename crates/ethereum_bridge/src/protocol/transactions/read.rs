@@ -1,10 +1,10 @@
 //! Helpers for reading from storage
 use borsh::BorshDeserialize;
-use eyre::{eyre, Result};
+use eyre::{Result, eyre};
 use namada_core::storage;
 #[cfg(test)]
 use namada_core::token::Amount;
-use namada_state::{DBIter, StorageHasher, WlState, DB};
+use namada_state::{DB, DBIter, StorageHasher, WlState};
 use namada_storage::StorageRead;
 
 /// Returns the stored Amount, or 0 if not stored

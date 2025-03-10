@@ -10,7 +10,7 @@ mod tests {
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     use proptest_state_machine::{
-        prop_state_machine, ReferenceStateMachine, StateMachineTest,
+        ReferenceStateMachine, StateMachineTest, prop_state_machine,
     };
     use test_log::test;
 

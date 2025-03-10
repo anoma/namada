@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_macros::BorshDeserializer;
+use namada_migrations::REGISTER_DESERIALIZERS;
 use namada_sdk::address::Address;
 use namada_sdk::masp_primitives::asset_type::AssetType;
 use namada_sdk::masp_primitives::merkle_tree::FrozenCommitmentTree;
@@ -9,8 +10,8 @@ use namada_sdk::masp_primitives::sapling;
 use namada_sdk::migrations;
 use namada_sdk::storage::DbColFam;
 use namada_shielded_token::{ConversionLeaf, ConversionState};
-use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 use namada_trans_token::Amount;
+use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 
 pub const OLD_CONVERSION_STATE_TYPE_HASH: &str =
     "05E2FD0BEBD54A05AAE349BBDE61F90893F09A72850EFD4F69060821EC5DE65F";

@@ -10,9 +10,9 @@ use tendermint_rpc::query::Query;
 use tendermint_rpc::{Error as RpcError, Order};
 use thiserror::Error;
 
+use crate::MaybeSend;
 use crate::tendermint::abci::response::Info;
 use crate::tendermint::block::Height;
-use crate::MaybeSend;
 
 const HEIGHT_CAST_ERR: &str = "Failed to cast block height";
 

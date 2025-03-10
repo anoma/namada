@@ -4,9 +4,9 @@ use namada_sdk::error::{EncodingError, Error, TxSubmitError};
 use namada_sdk::io::Client;
 use namada_sdk::tx::Tx;
 use tendermint_config::net::Address as TendermintAddress;
+use tendermint_rpc::HttpClient;
 use tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use tendermint_rpc::error::Error as RpcError;
-use tendermint_rpc::HttpClient;
 
 /// Broadcast a transaction to be included in the blockchain. This
 ///

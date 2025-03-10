@@ -5,8 +5,8 @@ mod utilities;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
-use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::Transaction;
+use masp_primitives::transaction::components::I128Sum;
 use namada_core::address::Address;
 use namada_core::chain::BlockHeight;
 use namada_core::masp::MaspEpoch;
@@ -16,7 +16,7 @@ use namada_events::extend::{
     IndexedMaspData, MaspDataRefs as MaspDataRefsAttr, MaspTxRef, MaspTxRefs,
     ReadFromEventAttributes,
 };
-use namada_ibc::{decode_message, extract_masp_tx_from_envelope, IbcMessage};
+use namada_ibc::{IbcMessage, decode_message, extract_masp_tx_from_envelope};
 use namada_io::client::Client;
 use namada_token::masp::shielded_wallet::ShieldedQueries;
 pub use namada_token::masp::{utils, *};
@@ -28,7 +28,7 @@ use crate::rpc::{
     query_block, query_conversion, query_denom, query_masp_epoch,
     query_max_block_time_estimate, query_native_token,
 };
-use crate::{token, MaybeSend, MaybeSync};
+use crate::{MaybeSend, MaybeSync, token};
 
 /// Extract the relevant shield portions from a [`Tx`] MASP section or an IBC
 /// message, if any.
