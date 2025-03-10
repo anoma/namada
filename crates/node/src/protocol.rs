@@ -247,6 +247,7 @@ where
                 let cmt =
                     tx.first_commitments().ok_or(Error::MissingInnerTxs)?;
                 let batched_tx_result = apply_wasm_tx(
+                    wrapper_hash,
                     &tx.batch_ref_tx(cmt),
                     &tx_index,
                     ShellParams {
@@ -352,6 +353,7 @@ where
 {
     for cmt in get_batch_txs_to_execute(tx, &extended_tx_result.masp_tx_refs) {
         match apply_wasm_tx(
+            wrapper_hash,
             &tx.batch_ref_tx(cmt),
             &tx_index,
             ShellParams {
@@ -708,6 +710,7 @@ impl From<Error> for MaspFeeError {
         Self(value)
     }
 }
+
 fn try_masp_fee_payment<S, D, H, CA>(
     ShellParams {
         tx_gas_meter,
@@ -756,6 +759,7 @@ where
             .batch_ref_first_tx()
             .ok_or_else(|| Error::MissingInnerTxs)?;
         match apply_wasm_tx(
+            Some(&tx.header_hash()),
             &first_tx,
             tx_index,
             ShellParams {
@@ -956,6 +960,7 @@ where
 // Apply a transaction going via the wasm environment. Gas will be metered and
 // validity predicates will be triggered in the normal way.
 fn apply_wasm_tx<S, D, H, CA>(
+    wrapper_hash: Option<&Hash>,
     batched_tx: &BatchedTxRef<'_>,
     tx_index: &TxIndex,
     shell_params: ShellParams<'_, S, D, H, CA>,
@@ -974,6 +979,7 @@ where
     } = shell_params;
 
     let verifiers = execute_tx(
+        wrapper_hash,
         batched_tx,
         tx_index,
         state,
@@ -1090,6 +1096,7 @@ where
 /// Execute a transaction code. Returns verifiers requested by the transaction.
 #[allow(clippy::too_many_arguments)]
 fn execute_tx<S, D, H, CA>(
+    wrapper_hash: Option<&Hash>,
     batched_tx: &BatchedTxRef<'_>,
     tx_index: &TxIndex,
     state: &mut S,
@@ -1106,6 +1113,7 @@ where
     wasm::run::tx(
         state,
         tx_gas_meter,
+        wrapper_hash,
         tx_index,
         batched_tx.tx,
         batched_tx.cmt,

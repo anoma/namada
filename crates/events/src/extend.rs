@@ -460,6 +460,20 @@ impl EventAttributeEntry<'static> for TxHash {
     }
 }
 
+/// Extend an [`Event`] with inner transaction hash information.
+pub struct InnerTxHash(pub Hash);
+
+impl EventAttributeEntry<'static> for InnerTxHash {
+    type Value = Hash;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "inner-tx-hash";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
 /// Extend an [`Event`] with log data.
 pub struct Log(pub String);
 
