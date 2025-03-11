@@ -33,57 +33,59 @@ where
     tx.validate_tx().into_storage_result()?;
 
     let gas_scale = parameters::get_gas_scale(&state)?;
+    let height = state.in_mem().get_last_block_height();
 
     // Wrapper dry run to allow estimating the entire gas cost of a transaction
-    let (wrapper_hash, extended_tx_result, tx_gas_meter) =
-        match tx.header().tx_type {
-            TxType::Wrapper(wrapper) => {
-                let gas_limit = wrapper
-                    .gas_limit
-                    .as_scaled_gas(gas_scale)
-                    .into_storage_result()?;
-                let tx_gas_meter =
-                    RefCell::new(TxGasMeter::new(gas_limit, gas_scale));
-                let mut shell_params = ShellParams::new(
-                    &tx_gas_meter,
-                    &mut state,
-                    &mut vp_wasm_cache,
-                    &mut tx_wasm_cache,
-                );
-                let tx_result = protocol::apply_wrapper_tx(
-                    &tx,
-                    &wrapper,
-                    &request.data,
-                    &TxIndex::default(),
-                    &tx_gas_meter,
-                    &mut shell_params,
-                    None,
-                )
+    let (wrapper_hash, tx_result, tx_gas_meter) = match tx.header().tx_type {
+        TxType::Wrapper(wrapper) => {
+            let gas_limit = wrapper
+                .gas_limit
+                .as_scaled_gas(gas_scale)
                 .into_storage_result()?;
+            let tx_gas_meter =
+                RefCell::new(TxGasMeter::new(gas_limit, gas_scale));
+            let mut shell_params = ShellParams::new(
+                &tx_gas_meter,
+                &mut state,
+                &mut vp_wasm_cache,
+                &mut tx_wasm_cache,
+            );
+            let tx_result = protocol::apply_wrapper_tx(
+                &tx,
+                &wrapper,
+                &request.data,
+                &TxIndex::default(),
+                height,
+                &tx_gas_meter,
+                &mut shell_params,
+                None,
+            )
+            .into_storage_result()?;
 
-                state.write_log_mut().commit_tx_to_batch();
-                (Some(tx.header_hash()), tx_result, tx_gas_meter)
-            }
-            _ => {
-                // When dry running only the inner tx(s), use the max block gas
-                // as the gas limit
-                let max_block_gas = parameters::get_max_block_gas(&state)?;
-                let gas_limit = GasLimit::from(max_block_gas)
-                    .as_scaled_gas(gas_scale)
-                    .into_storage_result()?;
-                (
-                    None,
-                    TxResult::default().to_extended_result(None),
-                    RefCell::new(TxGasMeter::new(gas_limit, gas_scale)),
-                )
-            }
-        };
+            state.write_log_mut().commit_tx_to_batch();
+            (Some(tx.header_hash()), tx_result, tx_gas_meter)
+        }
+        _ => {
+            // When dry running only the inner tx(s), use the max block gas
+            // as the gas limit
+            let max_block_gas = parameters::get_max_block_gas(&state)?;
+            let gas_limit = GasLimit::from(max_block_gas)
+                .as_scaled_gas(gas_scale)
+                .into_storage_result()?;
+            (
+                None,
+                TxResult::default(),
+                RefCell::new(TxGasMeter::new(gas_limit, gas_scale)),
+            )
+        }
+    };
 
-    let extended_tx_result = protocol::dispatch_inner_txs(
+    let tx_result = protocol::dispatch_inner_txs(
         &tx,
         wrapper_hash.as_ref(),
-        extended_tx_result,
+        tx_result,
         TxIndex(0),
+        height,
         &tx_gas_meter,
         &mut state,
         &mut vp_wasm_cache,
@@ -91,7 +93,7 @@ where
     )
     .map_err(|err| err.error)
     .into_storage_result()?;
-    let tx_result_string = extended_tx_result.tx_result.to_result_string();
+    let tx_result_string = tx_result.to_result_string();
     let dry_run_result = DryRunResult(
         tx_result_string,
         tx_gas_meter
@@ -104,7 +106,7 @@ where
         data: dry_run_result.serialize_to_vec(),
         proof: None,
         info: Default::default(),
-        height: state.in_mem().get_last_block_height(),
+        height,
     })
 }
 

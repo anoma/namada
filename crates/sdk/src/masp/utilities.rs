@@ -13,11 +13,12 @@ use namada_core::control_flow::time::{
     Duration, LinearBackoff, Sleep, SleepStrategy,
 };
 use namada_core::storage::TxIndex;
-use namada_events::extend::IndexedMaspData;
 use namada_io::Client;
 use namada_token::masp::utils::{
-    IndexedNoteEntry, MaspClient, MaspClientCapabilities,
+    IndexedNoteEntry, MaspClient, MaspClientCapabilities, MaspIndexedTx,
+    MaspTxKind,
 };
+use namada_tx::event::MaspEvent;
 use namada_tx::{IndexedTx, Tx};
 use tokio::sync::Semaphore;
 
@@ -94,12 +95,6 @@ impl<C: Client + Send + Sync> LedgerMaspClient<C> {
             };
 
             let block = {
-                // Query the actual block to get the txs bytes. If we only need
-                // one tx it might be slightly better to query
-                // the /tx endpoint to reduce the amount of data
-                // sent over the network, but this is a
-                // minimal improvement and it's even hard to tell how many times
-                // we'd need a single masp tx to make this worth it
                 self.inner
                     .client
                     .block(height as u32)
@@ -111,23 +106,37 @@ impl<C: Client + Send + Sync> LedgerMaspClient<C> {
                     .data
             };
 
-            for IndexedMaspData {
+            // Cache the last tx seen to avoid multiple deserializations
+            let mut last_tx: Option<(Tx, TxIndex)> = None;
+
+            for MaspEvent {
                 tx_index,
-                masp_refs,
+                kind,
+                data,
             } in txs_results
             {
-                let tx =
-                    Tx::try_from_bytes(block[tx_index.0 as usize].as_ref())
+                let tx = match &last_tx {
+                    Some((tx, idx)) if idx == &tx_index.index => tx,
+                    _ => {
+                        let tx = Tx::try_from_bytes(
+                            block[tx_index.index.0 as usize].as_ref(),
+                        )
                         .map_err(|e| Error::Other(e.to_string()))?;
-                let extracted_masp_txs = extract_masp_tx(&tx, &masp_refs)
+                        last_tx = Some((tx, tx_index.index));
+
+                        &last_tx.as_ref().unwrap().0
+                    }
+                };
+                let extracted_masp_tx = extract_masp_tx(tx, &data)
                     .map_err(|e| Error::Other(e.to_string()))?;
 
-                index_txs(
-                    &mut txs,
-                    extracted_masp_txs,
-                    height.into(),
-                    tx_index,
-                )?;
+                txs.push((
+                    MaspIndexedTx {
+                        indexed_tx: tx_index,
+                        kind: kind.into(),
+                    },
+                    extracted_masp_tx,
+                ));
             }
         }
 
@@ -189,7 +198,7 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
     async fn fetch_note_index(
         &self,
         _: BlockHeight,
-    ) -> Result<BTreeMap<IndexedTx, usize>, Error> {
+    ) -> Result<BTreeMap<MaspIndexedTx, usize>, Error> {
         Err(Error::Other(
             "Transaction notes map fetching is not implemented by this client"
                 .to_string(),
@@ -386,14 +395,16 @@ impl MaspClient for IndexerMaspClient {
 
         #[derive(Deserialize)]
         struct TransactionSlot {
+            masp_tx_index: u64,
+            is_masp_fee_payment: bool,
             bytes: Vec<u8>,
         }
 
         #[derive(Deserialize)]
         struct Transaction {
-            batch: Vec<TransactionSlot>,
-            block_index: u32,
             block_height: u64,
+            block_index: u64,
+            batch: Vec<TransactionSlot>,
         }
 
         #[derive(Deserialize)]
@@ -514,31 +525,39 @@ impl MaspClient for IndexerMaspClient {
 
         while let Some(result) = stream_of_fetches.next().await {
             for Transaction {
-                batch,
-                block_index,
                 block_height,
+                block_index,
+                batch: transactions,
             } in result?
             {
-                let mut extracted_masp_txs = Vec::with_capacity(batch.len());
-
-                for TransactionSlot { bytes } in batch {
-                    extracted_masp_txs.push(
-                        MaspTx::try_from_slice(&bytes).map_err(|err| {
+                for slot in transactions {
+                    let extracted_masp_tx = MaspTx::try_from_slice(&slot.bytes)
+                        .map_err(|err| {
                             Error::Other(format!(
                                 "Could not deserialize the masp txs borsh \
-                                 data at height {block_height} and index \
-                                 {block_index}: {err}"
+                                 data at height {}, block index {} and batch \
+                                 index: {:#?}: {err}",
+                                block_height, block_index, slot.masp_tx_index
                             ))
-                        })?,
-                    );
-                }
+                        })?;
 
-                index_txs(
-                    &mut txs,
-                    extracted_masp_txs,
-                    block_height.into(),
-                    block_index.into(),
-                )?;
+                    let kind = if slot.is_masp_fee_payment {
+                        MaspTxKind::FeePayment
+                    } else {
+                        MaspTxKind::Transfer
+                    };
+                    let masp_indexed_tx = MaspIndexedTx {
+                        kind,
+                        indexed_tx: IndexedTx {
+                            height: block_height.into(),
+                            index: TxIndex::must_from_usize(
+                                block_index as usize,
+                            ),
+                            batch_index: Some(slot.masp_tx_index as u32),
+                        },
+                    };
+                    txs.push((masp_indexed_tx, extracted_masp_tx));
+                }
             }
         }
 
@@ -601,7 +620,7 @@ impl MaspClient for IndexerMaspClient {
     async fn fetch_note_index(
         &self,
         BlockHeight(height): BlockHeight,
-    ) -> Result<BTreeMap<IndexedTx, usize>, Error> {
+    ) -> Result<BTreeMap<MaspIndexedTx, usize>, Error> {
         use serde::Deserialize;
 
         #[derive(Deserialize)]
@@ -611,6 +630,7 @@ impl MaspClient for IndexerMaspClient {
             batch_index: u32,
             block_index: u32,
             block_height: u64,
+            is_masp_fee_payment: bool,
         }
 
         #[derive(Deserialize)]
@@ -654,12 +674,20 @@ impl MaspClient for IndexerMaspClient {
                      batch_index,
                      block_height,
                      note_position,
+                     is_masp_fee_payment,
                  }| {
                     (
-                        IndexedTx {
-                            index: TxIndex(block_index),
-                            height: BlockHeight(block_height),
-                            batch_index: Some(batch_index),
+                        MaspIndexedTx {
+                            indexed_tx: IndexedTx {
+                                index: TxIndex(block_index),
+                                height: BlockHeight(block_height),
+                                batch_index: Some(batch_index),
+                            },
+                            kind: if is_masp_fee_payment {
+                                MaspTxKind::FeePayment
+                            } else {
+                                MaspTxKind::Transfer
+                            },
                         },
                         note_position,
                     )
@@ -728,35 +756,6 @@ impl MaspClient for IndexerMaspClient {
             },
         )
     }
-}
-
-#[allow(clippy::result_large_err)]
-fn index_txs(
-    txs: &mut Vec<(IndexedTx, MaspTx)>,
-    extracted_masp_txs: impl IntoIterator<Item = MaspTx>,
-    height: BlockHeight,
-    index: TxIndex,
-) -> Result<(), Error> {
-    // Note that the index of the extracted MASP transaction does
-    // not necessarely match the index of the inner tx in the batch,
-    // we are only interested in giving a sequential ordering to the
-    // data
-    for (batch_index, transaction) in extracted_masp_txs.into_iter().enumerate()
-    {
-        txs.push((
-            IndexedTx {
-                height,
-                index,
-                batch_index: Some(
-                    u32::try_from(batch_index)
-                        .map_err(|e| Error::Other(e.to_string()))?,
-                ),
-            },
-            transaction,
-        ));
-    }
-
-    Ok(())
 }
 
 #[derive(Copy, Clone)]

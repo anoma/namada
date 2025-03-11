@@ -1,8 +1,10 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::fmt::Display;
 use std::hash::Hash;
 use std::io;
 use std::ops::{Bound, RangeBounds};
+use std::str::FromStr;
 
 use masp_primitives::transaction::Transaction;
 use namada_account::AccountPublicKeysMap;
@@ -903,13 +905,15 @@ impl<'tx> Tx {
     Ord,
     PartialOrd,
     Hash,
+    Serialize,
+    Deserialize,
 )]
 pub struct IndexedTx {
     /// The block height of the indexed tx
     pub height: BlockHeight,
     /// The index in the block of the tx
     pub index: TxIndex,
-    /// The optional index of an inner tx within this batc
+    /// The optional index of an inner tx within this batch
     pub batch_index: Option<u32>,
 }
 
@@ -932,6 +936,20 @@ impl Default for IndexedTx {
             index: TxIndex(0),
             batch_index: None,
         }
+    }
+}
+
+impl Display for IndexedTx {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", serde_json::to_string(self).unwrap())
+    }
+}
+
+impl FromStr for IndexedTx {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
     }
 }
 
