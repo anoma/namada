@@ -119,6 +119,7 @@ pub mod masp_types {
     Debug,
     Default,
     Clone,
+    Copy,
     BorshSerialize,
     BorshDeserialize,
     PartialOrd,
@@ -127,6 +128,7 @@ pub mod masp_types {
     Ord,
     Serialize,
     Deserialize,
+    Hash,
 )]
 pub enum MaspEventKind {
     /// A MASP transaction used for fee payment
