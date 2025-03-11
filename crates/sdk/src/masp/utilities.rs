@@ -17,7 +17,7 @@ use namada_io::Client;
 use namada_token::masp::utils::{
     IndexedNoteEntry, MaspClient, MaspClientCapabilities, MaspIndexedTx,
 };
-use namada_tx::event::MaspEvent;
+use namada_tx::event::{MaspEvent, MaspEventKind};
 use namada_tx::{IndexedTx, Tx};
 use tokio::sync::Semaphore;
 
@@ -197,7 +197,7 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
     async fn fetch_note_index(
         &self,
         _: BlockHeight,
-    ) -> Result<BTreeMap<IndexedTx, usize>, Error> {
+    ) -> Result<BTreeMap<MaspIndexedTx, usize>, Error> {
         Err(Error::Other(
             "Transaction notes map fetching is not implemented by this client"
                 .to_string(),
@@ -394,13 +394,16 @@ impl MaspClient for IndexerMaspClient {
 
         #[derive(Deserialize)]
         struct TransactionSlot {
+            masp_tx_index: u64,
+            is_masp_fee_payment: bool,
             bytes: Vec<u8>,
         }
 
         #[derive(Deserialize)]
         struct Transaction {
-            masp_indexed_tx: MaspIndexedTx,
-            transaction: TransactionSlot,
+            block_height: u64,
+            block_index: u64,
+            batch: Vec<TransactionSlot>,
         }
 
         #[derive(Deserialize)]
@@ -521,25 +524,39 @@ impl MaspClient for IndexerMaspClient {
 
         while let Some(result) = stream_of_fetches.next().await {
             for Transaction {
-                masp_indexed_tx,
-                transaction,
+                block_height,
+                block_index,
+                batch: transactions,
             } in result?
             {
-                let extracted_masp_tx = MaspTx::try_from_slice(
-                    &transaction.bytes,
-                )
-                .map_err(|err| {
-                    Error::Other(format!(
-                        "Could not deserialize the masp txs borsh data at \
-                         height {}, block index {} and batch index: {:#?}: \
-                         {err}",
-                        masp_indexed_tx.indexed_tx.height,
-                        masp_indexed_tx.indexed_tx.index,
-                        masp_indexed_tx.indexed_tx.batch_index
-                    ))
-                })?;
+                for slot in transactions {
+                    let extracted_masp_tx = MaspTx::try_from_slice(&slot.bytes)
+                        .map_err(|err| {
+                            Error::Other(format!(
+                                "Could not deserialize the masp txs borsh \
+                                 data at height {}, block index {} and batch \
+                                 index: {:#?}: {err}",
+                                block_height, block_index, slot.masp_tx_index
+                            ))
+                        })?;
 
-                txs.push((masp_indexed_tx, extracted_masp_tx));
+                    let kind = if slot.is_masp_fee_payment {
+                        MaspEventKind::FeePayment
+                    } else {
+                        MaspEventKind::Transfer
+                    };
+                    let masp_indexed_tx = MaspIndexedTx {
+                        kind,
+                        indexed_tx: IndexedTx {
+                            height: block_height.into(),
+                            index: TxIndex::must_from_usize(
+                                block_index as usize,
+                            ),
+                            batch_index: Some(slot.masp_tx_index as u32),
+                        },
+                    };
+                    txs.push((masp_indexed_tx, extracted_masp_tx));
+                }
             }
         }
 
@@ -602,7 +619,7 @@ impl MaspClient for IndexerMaspClient {
     async fn fetch_note_index(
         &self,
         BlockHeight(height): BlockHeight,
-    ) -> Result<BTreeMap<IndexedTx, usize>, Error> {
+    ) -> Result<BTreeMap<MaspIndexedTx, usize>, Error> {
         use serde::Deserialize;
 
         #[derive(Deserialize)]
@@ -612,6 +629,7 @@ impl MaspClient for IndexerMaspClient {
             batch_index: u32,
             block_index: u32,
             block_height: u64,
+            is_masp_fee_payment: bool,
         }
 
         #[derive(Deserialize)]
@@ -655,12 +673,20 @@ impl MaspClient for IndexerMaspClient {
                      batch_index,
                      block_height,
                      note_position,
+                     is_masp_fee_payment,
                  }| {
                     (
-                        IndexedTx {
-                            index: TxIndex(block_index),
-                            height: BlockHeight(block_height),
-                            batch_index: Some(batch_index),
+                        MaspIndexedTx {
+                            indexed_tx: IndexedTx {
+                                index: TxIndex(block_index),
+                                height: BlockHeight(block_height),
+                                batch_index: Some(batch_index),
+                            },
+                            kind: if is_masp_fee_payment {
+                                MaspEventKind::FeePayment
+                            } else {
+                                MaspEventKind::Transfer
+                            },
                         },
                         note_position,
                     )

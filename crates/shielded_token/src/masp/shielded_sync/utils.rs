@@ -599,7 +599,6 @@ mod test_blocks_left_to_fetch {
     }
 
     #[test]
-    // FIXME: proptest here?
     fn test_sort_indexed_masp_events() {
         let ev1 = MaspIndexedTx {
             kind: MaspEventKind::FeePayment,
@@ -618,6 +617,14 @@ mod test_blocks_left_to_fetch {
             },
         };
         let ev3 = MaspIndexedTx {
+            kind: MaspEventKind::FeePayment,
+            indexed_tx: IndexedTx {
+                height: BlockHeight(3),
+                index: TxIndex(2),
+                batch_index: Some(2),
+            },
+        };
+        let ev4 = MaspIndexedTx {
             kind: MaspEventKind::Transfer,
             indexed_tx: IndexedTx {
                 height: BlockHeight(1),
@@ -625,7 +632,7 @@ mod test_blocks_left_to_fetch {
                 batch_index: Some(1),
             },
         };
-        let ev4 = MaspIndexedTx {
+        let ev5 = MaspIndexedTx {
             kind: MaspEventKind::Transfer,
             indexed_tx: IndexedTx {
                 height: BlockHeight(1),
@@ -634,10 +641,10 @@ mod test_blocks_left_to_fetch {
             },
         };
 
-        let mut txs = [ev1.clone(), ev2.clone(), ev3.clone(), ev4.clone()];
+        let mut txs = [ev1, ev2, ev3, ev4, ev5];
 
         txs.sort();
 
-        assert_eq!(txs, [ev1, ev4, ev3, ev2])
+        assert_eq!(txs, [ev1, ev5, ev4, ev2, ev3])
     }
 }
