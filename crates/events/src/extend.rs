@@ -24,6 +24,9 @@ pub trait AttributesMap {
         K: Into<String>,
         V: Into<String>;
 
+    /// Delete an attribute.
+    fn delete_attribute(&mut self, key: &str);
+
     /// Retrieve an attribute.
     fn retrieve_attribute(&self, key: &str) -> Option<&str>;
 
@@ -42,6 +45,11 @@ impl AttributesMap for HashMap<String, String> {
         V: Into<String>,
     {
         self.insert(key.into(), value.into());
+    }
+
+    #[inline]
+    fn delete_attribute(&mut self, key: &str) {
+        self.swap_remove(key);
     }
 
     #[inline]
@@ -71,6 +79,11 @@ impl AttributesMap for BTreeMap<String, String> {
     }
 
     #[inline]
+    fn delete_attribute(&mut self, key: &str) {
+        self.remove(key);
+    }
+
+    #[inline]
     fn retrieve_attribute(&self, key: &str) -> Option<&str> {
         self.get(key).map(String::as_ref)
     }
@@ -94,6 +107,17 @@ impl AttributesMap for Vec<namada_core::tendermint::abci::EventAttribute> {
         V: Into<String>,
     {
         self.push((key, value, true).into());
+    }
+
+    #[inline]
+    fn delete_attribute(&mut self, key: &str) {
+        self.retain(|attr| match attr.key_str() {
+            Ok(k) => k != key,
+            Err(e) => {
+                tracing::debug!("Attribute key is malformed UTF-8: {e}");
+                true
+            }
+        })
     }
 
     #[inline]
@@ -155,6 +179,11 @@ impl AttributesMap
             value: value.into(),
             index: true,
         });
+    }
+
+    #[inline]
+    fn delete_attribute(&mut self, key: &str) {
+        self.retain(|attr| attr.key != key);
     }
 
     #[inline]
@@ -416,6 +445,27 @@ where
                 <Self as EventAttributeEntry<'value>>::KEY,
             ),
         )
+    }
+}
+
+/// Delete an attribute from an [event](Event)'s attributes.
+pub trait DeleteFromEventAttributes {
+    /// Delete an attribute from the provided event attributes.
+    fn delete_from_event_attributes<A>(attributes: &mut A)
+    where
+        A: AttributesMap;
+}
+
+impl<'value, DATA> DeleteFromEventAttributes for DATA
+where
+    DATA: EventAttributeEntry<'value>,
+{
+    /// Delete an attribute from the provided event attributes.
+    fn delete_from_event_attributes<A>(attributes: &mut A)
+    where
+        A: AttributesMap,
+    {
+        attributes.delete_attribute(DATA::KEY);
     }
 }
 
