@@ -1,6 +1,7 @@
 //! Helper functions and types
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
+use std::ops::{Bound, RangeBounds};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::memo::MemoBytes;
@@ -9,11 +10,12 @@ use masp_primitives::sapling::{Node, Note, PaymentAddress, ViewingKey};
 use masp_primitives::transaction::Transaction;
 use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
+use namada_state::TxIndex;
 use namada_tx::event::MaspEventKind;
-use namada_tx::{IndexedTx, IndexedTxRange};
+use namada_tx::IndexedTx;
 use serde::{Deserialize, Serialize};
 
-/// An indexed masp tx carrying information on wether it was a fee paying tx or
+/// An indexed masp tx carrying information on whether it was a fee paying tx or
 /// a normal transfer
 #[derive(
     Debug,
@@ -54,6 +56,76 @@ impl PartialOrd for MaspIndexedTx {
         Some(self.cmp(other))
     }
 }
+
+/// Inclusive range of [`MaspIndexedTx`] entries.
+pub struct MaspIndexedTxRange {
+    lo: MaspIndexedTx,
+    hi: MaspIndexedTx,
+}
+
+impl MaspIndexedTxRange {
+    /// Create a new [`MaspIndexedTxRange`].
+    pub const fn new(lo: MaspIndexedTx, hi: MaspIndexedTx) -> Self {
+        Self { lo, hi }
+    }
+
+    /// Create a new [`MaspIndexedTxRange`] over a range of [block
+    /// heights](BlockHeight).
+    pub const fn between_heights(from: BlockHeight, to: BlockHeight) -> Self {
+        Self::new(
+            MaspIndexedTx {
+                kind: MaspEventKind::FeePayment,
+                indexed_tx: IndexedTx {
+                    height: from,
+                    index: TxIndex(0),
+                    batch_index: None,
+                },
+            },
+            MaspIndexedTx {
+                kind: MaspEventKind::Transfer,
+                indexed_tx: IndexedTx {
+                    height: to,
+                    index: TxIndex(u32::MAX),
+                    batch_index: None,
+                },
+            },
+        )
+    }
+
+    /// Create a new [`MaspIndexedTxRange`] over a given [`BlockHeight`].
+    pub const fn with_height(height: BlockHeight) -> Self {
+        Self::between_heights(height, height)
+    }
+
+    /// The start of the range.
+    pub const fn start(&self) -> MaspIndexedTx {
+        self.lo
+    }
+
+    /// The end of the range.
+    pub const fn end(&self) -> MaspIndexedTx {
+        self.hi
+    }
+}
+
+impl RangeBounds<MaspIndexedTx> for MaspIndexedTxRange {
+    fn start_bound(&self) -> Bound<&MaspIndexedTx> {
+        Bound::Included(&self.lo)
+    }
+
+    fn end_bound(&self) -> Bound<&MaspIndexedTx> {
+        Bound::Included(&self.hi)
+    }
+
+    fn contains<U>(&self, item: &U) -> bool
+    where
+        MaspIndexedTx: PartialOrd<U>,
+        U: PartialOrd<MaspIndexedTx> + ?Sized,
+    {
+        *item >= self.lo && *item <= self.hi
+    }
+}
+
 /// Type alias for convenience and profit
 pub type IndexedNoteData = BTreeMap<MaspIndexedTx, Transaction>;
 
@@ -170,12 +242,7 @@ impl Fetched {
     /// block height.
     pub fn contains_height(&self, height: BlockHeight) -> bool {
         self.txs
-            .iter()
-            .map(|(masp_indexed_tx, transaction)| {
-                (masp_indexed_tx.indexed_tx, transaction)
-            })
-            .collect::<BTreeMap<_, _>>()
-            .range(IndexedTxRange::with_height(height))
+            .range(MaspIndexedTxRange::with_height(height))
             .next()
             .is_some()
     }
