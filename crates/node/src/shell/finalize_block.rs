@@ -346,7 +346,7 @@ where
         mut tx_logs: TxLogs<'_>,
     ) -> Option<WrapperCache> {
         match extended_dispatch_result {
-            Ok(tx_result) => match tx_data.tx.header.tx_type {
+            Ok(mut tx_result) => match tx_data.tx.header.tx_type {
                 TxType::Wrapper(_) => {
                     // Commit any changes brought in by the inner txs executed
                     // when handling the wrapper. For now it should be at most
@@ -364,13 +364,14 @@ where
                             Either::Right(cmt),
                         );
                         if let Some(Ok(batched_result)) =
-                            tx_result.0.get(&inner_tx_hash)
+                            tx_result.0.get_mut(&inner_tx_hash)
                         {
                             if batched_result.is_accepted() {
+                                // Take the events from the batch result to
+                                // avoid emitting them again after the exection
+                                // of the entire batch
                                 response.events.emit_many(
-                                    batched_result
-                                        .events
-                                        .clone()
+                                    std::mem::take(&mut batched_result.events)
                                         .into_iter()
                                         .map(|event| {
                                             event.with(Height(tx_data.height))
