@@ -41,11 +41,14 @@ impl Ord for MaspIndexedTx {
         // heights. If instead txs are in the same block, masp fee paying txs
         // take precedence over transfer masp txs. After that we sort them based
         // on their indexes
-        self.indexed_tx.height.cmp(&other.indexed_tx.height).then(
-            self.kind
-                .cmp(&other.kind)
-                .then(self.indexed_tx.cmp(&other.indexed_tx)),
-        )
+        self.indexed_tx
+            .block_height
+            .cmp(&other.indexed_tx.block_height)
+            .then(
+                self.kind
+                    .cmp(&other.kind)
+                    .then(self.indexed_tx.cmp(&other.indexed_tx)),
+            )
     }
 }
 
@@ -83,26 +86,6 @@ impl TrialDecrypted {
             .flat_map(|viewing_keys_to_notes| viewing_keys_to_notes.values())
             .map(|decrypted_notes| decrypted_notes.len())
             .sum::<usize>()
-    }
-
-    /// Update the transaction indices according to the given map. If a key is
-    /// not found, then return it.
-    pub fn reindex(
-        &mut self,
-        key_map: &BTreeMap<IndexedTx, IndexedTx>,
-    ) -> Option<IndexedTx> {
-        let mut value_map = HashMap::new();
-        // First grab all the values we need to make sure that we do not
-        // accidentally overwrite
-        for (old, new) in key_map {
-            if let Some(value) = self.inner.swap_remove(old) {
-                value_map.insert(*new, value);
-            } else {
-                return Some(*old);
-            }
-        }
-        self.inner.extend(value_map);
-        None
     }
 
     /// Get cached notes decrypted with `vk`, indexed at `itx`.
@@ -626,45 +609,52 @@ mod test_blocks_left_to_fetch {
     }
 
     #[test]
-    // FIXME: proptest here?
     fn test_sort_indexed_masp_events() {
         let ev1 = MaspIndexedTx {
             kind: MaspEventKind::FeePayment,
             indexed_tx: IndexedTx {
-                height: BlockHeight(1),
-                index: TxIndex(2),
+                block_height: BlockHeight(1),
+                block_index: TxIndex(2),
                 batch_index: Some(0),
             },
         };
         let ev2 = MaspIndexedTx {
             kind: MaspEventKind::Transfer,
             indexed_tx: IndexedTx {
-                height: BlockHeight(2),
-                index: TxIndex(0),
+                block_height: BlockHeight(2),
+                block_index: TxIndex(0),
                 batch_index: Some(0),
             },
         };
         let ev3 = MaspIndexedTx {
-            kind: MaspEventKind::Transfer,
+            kind: MaspEventKind::FeePayment,
             indexed_tx: IndexedTx {
-                height: BlockHeight(1),
-                index: TxIndex(1),
-                batch_index: Some(1),
+                block_height: BlockHeight(3),
+                block_index: TxIndex(2),
+                batch_index: Some(2),
             },
         };
         let ev4 = MaspIndexedTx {
             kind: MaspEventKind::Transfer,
             indexed_tx: IndexedTx {
-                height: BlockHeight(1),
-                index: TxIndex(1),
+                block_height: BlockHeight(1),
+                block_index: TxIndex(1),
+                batch_index: Some(1),
+            },
+        };
+        let ev5 = MaspIndexedTx {
+            kind: MaspEventKind::Transfer,
+            indexed_tx: IndexedTx {
+                block_height: BlockHeight(1),
+                block_index: TxIndex(1),
                 batch_index: Some(0),
             },
         };
 
-        let mut txs = [ev1.clone(), ev2.clone(), ev3.clone(), ev4.clone()];
+        let mut txs = [ev1, ev2, ev3, ev4, ev5];
 
         txs.sort();
 
-        assert_eq!(txs, [ev1, ev4, ev3, ev2])
+        assert_eq!(txs, [ev1, ev5, ev4, ev2, ev3])
     }
 }

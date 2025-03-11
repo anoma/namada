@@ -24,7 +24,7 @@ use namada_io::{MaybeSend, MaybeSync, ProgressBar};
 use namada_tx::IndexedTx;
 use namada_wallet::{DatedKeypair, DatedSpendingKey};
 
-use super::utils::{IndexedNoteEntry, MaspClient};
+use super::utils::{IndexedNoteEntry, MaspClient, MaspIndexedTx};
 use crate::masp::shielded_sync::trial_decrypt;
 use crate::masp::utils::{
     blocks_left_to_fetch, DecryptedData, Fetched, RetryStrategy, TrialDecrypted,
@@ -153,7 +153,9 @@ struct TaskError<C> {
 #[allow(clippy::large_enum_variant)]
 enum Message {
     UpdateCommitmentTree(Result<CommitmentTree<Node>, TaskError<BlockHeight>>),
-    UpdateNotesMap(Result<BTreeMap<IndexedTx, usize>, TaskError<BlockHeight>>),
+    UpdateNotesMap(
+        Result<BTreeMap<MaspIndexedTx, usize>, TaskError<BlockHeight>>,
+    ),
     UpdateWitnessMap(
         Result<
             HashMap<usize, IncrementalWitness<Node>>,
@@ -167,7 +169,7 @@ enum Message {
         >,
     ),
     TrialDecrypt(
-        IndexedTx,
+        MaspIndexedTx,
         ViewingKey,
         ControlFlow<(), BTreeMap<usize, DecryptedData>>,
     ),
@@ -222,7 +224,7 @@ enum DispatcherState {
 
 #[derive(Default, Debug)]
 struct InitialState {
-    last_witnessed_tx: Option<IndexedTx>,
+    last_witnessed_tx: Option<MaspIndexedTx>,
     start_height: BlockHeight,
     last_query_height: BlockHeight,
 }
@@ -405,29 +407,22 @@ where
             self.ctx
                 .save_shielded_spends(&stx_batch, needs_witness_map_update);
             if needs_witness_map_update
-                && Some(&masp_indexed_tx.indexed_tx)
-                    > last_witnessed_tx.as_ref()
+                && Some(&masp_indexed_tx) > last_witnessed_tx.as_ref()
             {
-                self.ctx.update_witness_map(
-                    masp_indexed_tx.indexed_tx,
-                    &stx_batch,
-                )?;
+                self.ctx.update_witness_map(masp_indexed_tx, &stx_batch)?;
             }
-            let first_note_pos =
-                self.ctx.note_index[&masp_indexed_tx.indexed_tx];
+            let first_note_pos = self.ctx.note_index[&masp_indexed_tx];
             let mut vk_heights = BTreeMap::new();
             std::mem::swap(&mut vk_heights, &mut self.ctx.vk_heights);
             for (vk, _) in vk_heights
                 .iter()
                 // NB: skip keys that are synced past the given `indexed_tx`
-                .filter(|(_vk, h)| {
-                    h.as_ref() < Some(&masp_indexed_tx.indexed_tx)
-                })
+                .filter(|(_vk, h)| h.as_ref() < Some(&masp_indexed_tx))
             {
                 for (note_pos_offset, (note, pa, memo)) in self
                     .cache
                     .trial_decrypted
-                    .take(&masp_indexed_tx.indexed_tx, vk)
+                    .take(&masp_indexed_tx, vk)
                     .unwrap_or_default()
                 {
                     self.ctx.save_decrypted_shielded_outputs(
@@ -449,12 +444,15 @@ where
             .iter_mut()
             // NB: skip keys that are synced past the last input height
             .filter(|(_vk, h)| {
-                h.as_ref().map(|itx| &itx.block_height)
+                h.as_ref().map(|itx| &itx.indexed_tx.block_height)
                     < Some(last_query_height)
             })
         {
             // NB: the entire block is synced
-            *h = Some(IndexedTx::entire_block(*last_query_height));
+            *h = Some(MaspIndexedTx {
+                indexed_tx: IndexedTx::entire_block(*last_query_height),
+                kind: namada_tx::event::MaspEventKind::Transfer,
+            });
         }
 
         Ok(())
@@ -486,13 +484,17 @@ where
         {
             if let Some(h) = self.ctx.vk_heights.entry(vk.key).or_default() {
                 let birthday = IndexedTx::entire_block(vk.birthday);
-                if birthday > *h {
-                    *h = birthday;
+                if birthday > h.indexed_tx {
+                    h.indexed_tx = birthday;
                 }
             } else if vk.birthday >= BlockHeight::first() {
-                self.ctx
-                    .vk_heights
-                    .insert(vk.key, Some(IndexedTx::entire_block(vk.birthday)));
+                self.ctx.vk_heights.insert(
+                    vk.key,
+                    Some(MaspIndexedTx {
+                        indexed_tx: IndexedTx::entire_block(vk.birthday),
+                        kind: namada_tx::event::MaspEventKind::Transfer,
+                    }),
+                );
             }
         }
 
@@ -629,7 +631,7 @@ where
             .set_upper_limit(number_of_fetches);
 
         for (itx, tx) in self.cache.fetched.iter() {
-            self.spawn_trial_decryptions(itx.indexed_tx, tx);
+            self.spawn_trial_decryptions(*itx, tx);
         }
     }
 
@@ -672,8 +674,8 @@ where
                 }
             }
             Message::FetchTxs(Ok((from, to, tx_batch))) => {
-                for (itx, txs) in &tx_batch {
-                    self.spawn_trial_decryptions(itx.indexed_tx, txs);
+                for (itx, tx) in &tx_batch {
+                    self.spawn_trial_decryptions(*itx, tx);
                 }
                 self.cache.fetched.extend(tx_batch);
 
@@ -802,7 +804,7 @@ where
         spawned_tasks
     }
 
-    fn spawn_trial_decryptions(&self, itx: IndexedTx, tx: &Transaction) {
+    fn spawn_trial_decryptions(&self, itx: MaspIndexedTx, tx: &Transaction) {
         for (vk, vk_height) in self.ctx.vk_heights.iter() {
             let key_is_outdated = vk_height.as_ref() < Some(&itx);
             let cached = self.cache.trial_decrypted.get(&itx, vk).is_some();
@@ -920,18 +922,15 @@ mod dispatcher_tests {
                     BTreeMap::from([(arbitrary_vk(), None)]);
                 // fill up the dispatcher's cache
                 for h in 0u64..10 {
-                    let itx = IndexedTx {
-                        block_height: h.into(),
-                        block_index: Default::default(),
-                        batch_index: None,
-                    };
-                    dispatcher.cache.fetched.insert((
-                        MaspIndexedTx {
-                            indexed_tx: itx,
-                            kind: MaspEventKind::Transfer,
+                    let itx = MaspIndexedTx {
+                        indexed_tx: IndexedTx {
+                            block_height: h.into(),
+                            block_index: Default::default(),
+                            batch_index: None,
                         },
-                        arbitrary_masp_tx(),
-                    ));
+                        kind: MaspEventKind::Transfer,
+                    };
+                    dispatcher.cache.fetched.insert((itx, arbitrary_masp_tx()));
                     dispatcher.ctx.note_index.insert(itx, h as usize);
                     dispatcher.cache.trial_decrypted.insert(
                         itx,
@@ -952,7 +951,10 @@ mod dispatcher_tests {
                 assert!(dispatcher.cache.trial_decrypted.is_empty());
                 let expected = BTreeMap::from([(
                     arbitrary_vk(),
-                    Some(IndexedTx::entire_block(9.into())),
+                    Some(MaspIndexedTx {
+                        indexed_tx: IndexedTx::entire_block(9.into()),
+                        kind: MaspEventKind::Transfer,
+                    }),
                 )]);
                 assert_eq!(expected, dispatcher.ctx.vk_heights);
             })
@@ -1133,10 +1135,13 @@ mod dispatcher_tests {
         assert_eq!(height, BlockHeight(1));
 
         // let's bump the vk height
-        *shielded_ctx.vk_heights.get_mut(&vk).unwrap() = Some(IndexedTx {
-            block_height: 6.into(),
-            block_index: TxIndex(0),
-            batch_index: None,
+        *shielded_ctx.vk_heights.get_mut(&vk).unwrap() = Some(MaspIndexedTx {
+            indexed_tx: IndexedTx {
+                block_height: 6.into(),
+                block_index: TxIndex(0),
+                batch_index: None,
+            },
+            kind: MaspEventKind::Transfer,
         });
 
         // the min height should now be 6
@@ -1248,22 +1253,31 @@ mod dispatcher_tests {
                 let keys =
                     ctx.note_index.keys().cloned().collect::<BTreeSet<_>>();
                 let expected = BTreeSet::from([
-                    IndexedTx {
-                        block_height: 1.into(),
-                        block_index: TxIndex(1),
-                        batch_index: None,
+                    MaspIndexedTx {
+                        indexed_tx: IndexedTx {
+                            block_height: 1.into(),
+                            block_index: TxIndex(1),
+                            batch_index: None,
+                        },
+                        kind: MaspEventKind::Transfer,
                     },
-                    IndexedTx {
-                        block_height: 1.into(),
-                        block_index: TxIndex(2),
-                        batch_index: None,
+                    MaspIndexedTx {
+                        indexed_tx: IndexedTx {
+                            block_height: 1.into(),
+                            block_index: TxIndex(2),
+                            batch_index: None,
+                        },
+                        kind: MaspEventKind::Transfer,
                     },
                 ]);
 
                 assert_eq!(keys, expected);
                 assert_eq!(
                     *ctx.vk_heights[&vk.key].as_ref().unwrap(),
-                    IndexedTx::entire_block(2.into(),)
+                    MaspIndexedTx {
+                        indexed_tx: IndexedTx::entire_block(2.into(),),
+                        kind: MaspEventKind::Transfer
+                    }
                 );
                 assert_eq!(ctx.note_map.len(), 2);
             })
@@ -1481,8 +1495,14 @@ mod dispatcher_tests {
         assert_eq!(
             birthdays,
             vec![
-                Some(IndexedTx::entire_block(BlockHeight(30))),
-                Some(IndexedTx::entire_block(BlockHeight(10)))
+                Some(MaspIndexedTx {
+                    indexed_tx: IndexedTx::entire_block(BlockHeight(30)),
+                    kind: MaspEventKind::Transfer
+                }),
+                Some(MaspIndexedTx {
+                    indexed_tx: IndexedTx::entire_block(BlockHeight(10)),
+                    kind: MaspEventKind::Transfer
+                })
             ]
         );
 
@@ -1522,8 +1542,14 @@ mod dispatcher_tests {
         assert_eq!(
             birthdays,
             vec![
-                Some(IndexedTx::entire_block(BlockHeight(60))),
-                Some(IndexedTx::entire_block(BlockHeight(10)))
+                Some(MaspIndexedTx {
+                    indexed_tx: IndexedTx::entire_block(BlockHeight(60)),
+                    kind: MaspEventKind::Transfer
+                }),
+                Some(MaspIndexedTx {
+                    indexed_tx: IndexedTx::entire_block(BlockHeight(10)),
+                    kind: MaspEventKind::Transfer
+                })
             ]
         )
     }

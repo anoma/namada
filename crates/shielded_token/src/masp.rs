@@ -40,11 +40,11 @@ use namada_io::{MaybeSend, MaybeSync};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use namada_tx::IndexedTx;
 use rand_core::{CryptoRng, RngCore};
 pub use shielded_wallet::ShieldedWallet;
 use thiserror::Error;
 
+use self::utils::MaspIndexedTx;
 pub use crate::masp::shielded_sync::dispatcher::{Dispatcher, DispatcherCache};
 #[cfg(not(target_family = "wasm"))]
 pub use crate::masp::shielded_sync::MaspLocalTaskEnv;
@@ -308,7 +308,7 @@ pub type TransferDelta = HashMap<Address, MaspChange>;
 pub type TransactionDelta = HashMap<ViewingKey, I128Sum>;
 
 /// Maps a shielded tx to the index of its first output note.
-pub type NoteIndex = BTreeMap<IndexedTx, usize>;
+pub type NoteIndex = BTreeMap<MaspIndexedTx, usize>;
 
 /// Maps the note index (in the commitment tree) to a witness
 pub type WitnessMap = HashMap<usize, IncrementalWitness<Node>>;
