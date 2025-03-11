@@ -15,6 +15,39 @@ use namada_tx::event::MaspEventKind;
 use namada_tx::IndexedTx;
 use serde::{Deserialize, Serialize};
 
+/// The type of a MASP transaction
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    BorshSerialize,
+    BorshDeserialize,
+    PartialOrd,
+    PartialEq,
+    Eq,
+    Ord,
+    Serialize,
+    Deserialize,
+    Hash,
+)]
+pub enum MaspTxKind {
+    /// A MASP transaction used for fee payment
+    FeePayment,
+    /// A general MASP transfer
+    #[default]
+    Transfer,
+}
+
+impl From<MaspEventKind> for MaspTxKind {
+    fn from(value: MaspEventKind) -> Self {
+        match value {
+            MaspEventKind::FeePayment => Self::FeePayment,
+            MaspEventKind::Transfer => Self::Transfer,
+        }
+    }
+}
+
 /// An indexed masp tx carrying information on whether it was a fee paying tx or
 /// a normal transfer
 #[derive(
@@ -32,7 +65,7 @@ use serde::{Deserialize, Serialize};
 )]
 pub struct MaspIndexedTx {
     /// The masp tx kind, fee-payment or transfer
-    pub kind: MaspEventKind,
+    pub kind: MaspTxKind,
     /// The pointer to the inner tx carrying this masp tx
     pub indexed_tx: IndexedTx,
 }
@@ -77,7 +110,7 @@ impl MaspIndexedTxRange {
     pub const fn between_heights(from: BlockHeight, to: BlockHeight) -> Self {
         Self::new(
             MaspIndexedTx {
-                kind: MaspEventKind::FeePayment,
+                kind: MaspTxKind::FeePayment,
                 indexed_tx: IndexedTx {
                     block_height: from,
                     block_index: TxIndex(0),
@@ -85,7 +118,7 @@ impl MaspIndexedTxRange {
                 },
             },
             MaspIndexedTx {
-                kind: MaspEventKind::Transfer,
+                kind: MaspTxKind::Transfer,
                 indexed_tx: IndexedTx {
                     block_height: to,
                     block_index: TxIndex(u32::MAX),
@@ -474,7 +507,7 @@ mod test_blocks_left_to_fetch {
                             block_index: TxIndex(0),
                             batch_index: None,
                         },
-                        kind: MaspEventKind::Transfer,
+                        kind: MaspTxKind::Transfer,
                     },
                     masp_tx.clone(),
                 )
@@ -678,7 +711,7 @@ mod test_blocks_left_to_fetch {
     #[test]
     fn test_sort_indexed_masp_events() {
         let ev1 = MaspIndexedTx {
-            kind: MaspEventKind::FeePayment,
+            kind: MaspTxKind::FeePayment,
             indexed_tx: IndexedTx {
                 block_height: BlockHeight(1),
                 block_index: TxIndex(2),
@@ -686,7 +719,7 @@ mod test_blocks_left_to_fetch {
             },
         };
         let ev2 = MaspIndexedTx {
-            kind: MaspEventKind::Transfer,
+            kind: MaspTxKind::Transfer,
             indexed_tx: IndexedTx {
                 block_height: BlockHeight(2),
                 block_index: TxIndex(0),
@@ -694,7 +727,7 @@ mod test_blocks_left_to_fetch {
             },
         };
         let ev3 = MaspIndexedTx {
-            kind: MaspEventKind::FeePayment,
+            kind: MaspTxKind::FeePayment,
             indexed_tx: IndexedTx {
                 block_height: BlockHeight(3),
                 block_index: TxIndex(2),
@@ -702,7 +735,7 @@ mod test_blocks_left_to_fetch {
             },
         };
         let ev4 = MaspIndexedTx {
-            kind: MaspEventKind::Transfer,
+            kind: MaspTxKind::Transfer,
             indexed_tx: IndexedTx {
                 block_height: BlockHeight(1),
                 block_index: TxIndex(1),
@@ -710,7 +743,7 @@ mod test_blocks_left_to_fetch {
             },
         };
         let ev5 = MaspIndexedTx {
-            kind: MaspEventKind::Transfer,
+            kind: MaspTxKind::Transfer,
             indexed_tx: IndexedTx {
                 block_height: BlockHeight(1),
                 block_index: TxIndex(1),

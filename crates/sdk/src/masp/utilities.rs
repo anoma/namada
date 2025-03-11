@@ -16,8 +16,9 @@ use namada_core::storage::TxIndex;
 use namada_io::Client;
 use namada_token::masp::utils::{
     IndexedNoteEntry, MaspClient, MaspClientCapabilities, MaspIndexedTx,
+    MaspTxKind,
 };
-use namada_tx::event::{MaspEvent, MaspEventKind};
+use namada_tx::event::MaspEvent;
 use namada_tx::{IndexedTx, Tx};
 use tokio::sync::Semaphore;
 
@@ -132,7 +133,7 @@ impl<C: Client + Send + Sync> LedgerMaspClient<C> {
                 txs.push((
                     MaspIndexedTx {
                         indexed_tx: tx_index,
-                        kind,
+                        kind: kind.into(),
                     },
                     extracted_masp_tx,
                 ));
@@ -550,9 +551,9 @@ impl MaspClient for IndexerMaspClient {
                         })?;
 
                     let kind = if slot.is_masp_fee_payment {
-                        MaspEventKind::FeePayment
+                        MaspTxKind::FeePayment
                     } else {
-                        MaspEventKind::Transfer
+                        MaspTxKind::Transfer
                     };
                     let masp_indexed_tx = MaspIndexedTx {
                         kind,
@@ -701,9 +702,9 @@ impl MaspClient for IndexerMaspClient {
                                 batch_index: Some(batch_index),
                             },
                             kind: if is_masp_fee_payment {
-                                MaspEventKind::FeePayment
+                                MaspTxKind::FeePayment
                             } else {
-                                MaspEventKind::Transfer
+                                MaspTxKind::Transfer
                             },
                         },
                         note_position,

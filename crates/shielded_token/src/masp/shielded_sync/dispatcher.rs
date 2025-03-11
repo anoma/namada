@@ -24,7 +24,7 @@ use namada_io::{MaybeSend, MaybeSync, ProgressBar};
 use namada_tx::IndexedTx;
 use namada_wallet::{DatedKeypair, DatedSpendingKey};
 
-use super::utils::{IndexedNoteEntry, MaspClient, MaspIndexedTx};
+use super::utils::{IndexedNoteEntry, MaspClient, MaspIndexedTx, MaspTxKind};
 use crate::masp::shielded_sync::trial_decrypt;
 use crate::masp::utils::{
     blocks_left_to_fetch, DecryptedData, Fetched, RetryStrategy, TrialDecrypted,
@@ -451,7 +451,7 @@ where
             // NB: the entire block is synced
             *h = Some(MaspIndexedTx {
                 indexed_tx: IndexedTx::entire_block(*last_query_height),
-                kind: namada_tx::event::MaspEventKind::Transfer,
+                kind: MaspTxKind::Transfer,
             });
         }
 
@@ -492,7 +492,7 @@ where
                     vk.key,
                     Some(MaspIndexedTx {
                         indexed_tx: IndexedTx::entire_block(vk.birthday),
-                        kind: namada_tx::event::MaspEventKind::Transfer,
+                        kind: MaspTxKind::Transfer,
                     }),
                 );
             }
@@ -885,7 +885,6 @@ mod dispatcher_tests {
     use namada_core::storage::TxIndex;
     use namada_core::task_env::TaskEnvironment;
     use namada_io::DevNullProgressBar;
-    use namada_tx::event::MaspEventKind;
     use namada_tx::IndexedTx;
     use namada_wallet::StoredKeypair;
     use tempfile::tempdir;
@@ -928,7 +927,7 @@ mod dispatcher_tests {
                             block_index: Default::default(),
                             batch_index: None,
                         },
-                        kind: MaspEventKind::Transfer,
+                        kind: MaspTxKind::Transfer,
                     };
                     dispatcher.cache.fetched.insert((itx, arbitrary_masp_tx()));
                     dispatcher.ctx.note_index.insert(itx, h as usize);
@@ -953,7 +952,7 @@ mod dispatcher_tests {
                     arbitrary_vk(),
                     Some(MaspIndexedTx {
                         indexed_tx: IndexedTx::entire_block(9.into()),
-                        kind: MaspEventKind::Transfer,
+                        kind: MaspTxKind::Transfer,
                     }),
                 )]);
                 assert_eq!(expected, dispatcher.ctx.vk_heights);
@@ -1141,7 +1140,7 @@ mod dispatcher_tests {
                 block_index: TxIndex(0),
                 batch_index: None,
             },
-            kind: MaspEventKind::Transfer,
+            kind: MaspTxKind::Transfer,
         });
 
         // the min height should now be 6
@@ -1224,7 +1223,7 @@ mod dispatcher_tests {
                                 block_index: TxIndex(1),
                                 batch_index: None,
                             },
-                            kind: MaspEventKind::Transfer,
+                            kind: MaspTxKind::Transfer,
                         },
                         masp_tx.clone(),
                     )))
@@ -1237,7 +1236,7 @@ mod dispatcher_tests {
                                 block_index: TxIndex(2),
                                 batch_index: None,
                             },
-                            kind: MaspEventKind::Transfer,
+                            kind: MaspTxKind::Transfer,
                         },
                         masp_tx.clone(),
                     )))
@@ -1259,7 +1258,7 @@ mod dispatcher_tests {
                             block_index: TxIndex(1),
                             batch_index: None,
                         },
-                        kind: MaspEventKind::Transfer,
+                        kind: MaspTxKind::Transfer,
                     },
                     MaspIndexedTx {
                         indexed_tx: IndexedTx {
@@ -1267,7 +1266,7 @@ mod dispatcher_tests {
                             block_index: TxIndex(2),
                             batch_index: None,
                         },
-                        kind: MaspEventKind::Transfer,
+                        kind: MaspTxKind::Transfer,
                     },
                 ]);
 
@@ -1276,7 +1275,7 @@ mod dispatcher_tests {
                     *ctx.vk_heights[&vk.key].as_ref().unwrap(),
                     MaspIndexedTx {
                         indexed_tx: IndexedTx::entire_block(2.into(),),
-                        kind: MaspEventKind::Transfer
+                        kind: MaspTxKind::Transfer
                     }
                 );
                 assert_eq!(ctx.note_map.len(), 2);
@@ -1319,7 +1318,7 @@ mod dispatcher_tests {
                                 block_index: TxIndex(1),
                                 batch_index: None,
                             },
-                            kind: MaspEventKind::Transfer,
+                            kind: MaspTxKind::Transfer,
                         },
                         masp_tx.clone(),
                     )))
@@ -1332,7 +1331,7 @@ mod dispatcher_tests {
                                 block_index: TxIndex(2),
                                 batch_index: None,
                             },
-                            kind: MaspEventKind::Transfer,
+                            kind: MaspTxKind::Transfer,
                         },
                         masp_tx.clone(),
                     )))
@@ -1357,7 +1356,7 @@ mod dispatcher_tests {
                                 block_index: TxIndex(1),
                                 batch_index: None,
                             },
-                            kind: MaspEventKind::Transfer,
+                            kind: MaspTxKind::Transfer,
                         },
                         masp_tx.clone(),
                     ),
@@ -1368,7 +1367,7 @@ mod dispatcher_tests {
                                 block_index: TxIndex(2),
                                 batch_index: None,
                             },
-                            kind: MaspEventKind::Transfer,
+                            kind: MaspTxKind::Transfer,
                         },
                         masp_tx.clone(),
                     ),
@@ -1413,7 +1412,7 @@ mod dispatcher_tests {
                                 block_index: TxIndex(1),
                                 batch_index: None,
                             },
-                            kind: MaspEventKind::Transfer,
+                            kind: MaspTxKind::Transfer,
                         },
                         masp_tx.clone(),
                     )))
@@ -1463,7 +1462,7 @@ mod dispatcher_tests {
                         block_index: TxIndex(1),
                         batch_index: None,
                     },
-                    kind: MaspEventKind::Transfer,
+                    kind: MaspTxKind::Transfer,
                 },
                 masp_tx.clone(),
             )))
@@ -1497,11 +1496,11 @@ mod dispatcher_tests {
             vec![
                 Some(MaspIndexedTx {
                     indexed_tx: IndexedTx::entire_block(BlockHeight(30)),
-                    kind: MaspEventKind::Transfer
+                    kind: MaspTxKind::Transfer
                 }),
                 Some(MaspIndexedTx {
                     indexed_tx: IndexedTx::entire_block(BlockHeight(10)),
-                    kind: MaspEventKind::Transfer
+                    kind: MaspTxKind::Transfer
                 })
             ]
         );
@@ -1519,7 +1518,7 @@ mod dispatcher_tests {
                         block_index: TxIndex(1),
                         batch_index: None,
                     },
-                    kind: MaspEventKind::Transfer,
+                    kind: MaspTxKind::Transfer,
                 },
                 masp_tx.clone(),
             )))
@@ -1544,11 +1543,11 @@ mod dispatcher_tests {
             vec![
                 Some(MaspIndexedTx {
                     indexed_tx: IndexedTx::entire_block(BlockHeight(60)),
-                    kind: MaspEventKind::Transfer
+                    kind: MaspTxKind::Transfer
                 }),
                 Some(MaspIndexedTx {
                     indexed_tx: IndexedTx::entire_block(BlockHeight(10)),
-                    kind: MaspEventKind::Transfer
+                    kind: MaspTxKind::Transfer
                 })
             ]
         )
