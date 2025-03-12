@@ -6281,6 +6281,7 @@ dependencies = [
  "ibc-testkit",
  "ics23",
  "itertools 0.14.0",
+ "masp_primitives",
  "namada_apps_lib",
  "namada_core",
  "namada_node",

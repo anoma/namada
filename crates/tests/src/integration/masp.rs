@@ -1,14 +1,16 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
+use masp_primitives::transaction::components::I128Sum;
 use namada_apps_lib::wallet::defaults::{
     get_unencrypted_keypair, is_use_device,
 };
 use namada_core::address::Address;
 use namada_core::dec::Dec;
-use namada_core::masp::{MaspTxId, TokenMap};
+use namada_core::masp::{encode_asset_type, MaspTxId, TokenMap};
 use namada_node::shell::testing::client::run;
 use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
@@ -18,9 +20,9 @@ use namada_sdk::signing::SigningTxData;
 use namada_sdk::state::{StorageRead, StorageWrite};
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::storage_key::{
-    masp_reward_precision_key, masp_token_map_key,
+    masp_conversion_key, masp_reward_precision_key, masp_token_map_key,
 };
-use namada_sdk::token::{self, Amount, DenominatedAmount};
+use namada_sdk::token::{self, Amount, DenominatedAmount, MaspEpoch};
 use namada_sdk::tx::{Section, Tx};
 use namada_sdk::{tx, DEFAULT_GAS_LIMIT};
 use test_log::test;
@@ -1440,6 +1442,457 @@ fn enable_rewards_after_shielding() -> Result<()> {
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
     assert!(captured.contains(&format!("{TEST_TOKEN_ADDR}: 500000")));
+
+    Ok(())
+}
+
+/// In this test we confirm that writing to the conversion update key is
+/// effective and changes rewards from their expected trajectory.
+#[test]
+fn reset_conversions() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::setup()?;
+    // Wait till epoch boundary
+    node.next_masp_epoch();
+    // Send 1 BTC from Albert to PA
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec![
+                "shield",
+                "--source",
+                ALBERT,
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                BTC,
+                "--amount",
+                "1",
+                "--signing-keys",
+                ALBERT_KEY,
+                "--node",
+                validator_one_rpc,
+            ]),
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            AB_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+
+    // Assert BTC balance at VK(A) is 1
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                BTC,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("btc: 1"));
+
+    // Assert NAM balance at VK(A) is 0
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0"));
+
+    // Assert the rewards estimate is also zero
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "estimate-shielding-rewards",
+                "--key",
+                AA_VIEWING_KEY,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(
+        captured.contains(
+            "Estimated native token rewards for the next MASP epoch: 0"
+        )
+    );
+
+    // Wait till epoch boundary
+    node.next_masp_epoch();
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+
+    // Assert BTC balance at VK(A) is still 1
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                BTC,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("btc: 1"));
+
+    // Assert NAM balance is a non-zero number (rewards have been dispensed)
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0.063"));
+
+    // Assert the rewards estimate matches the actual rewards
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "estimate-shielding-rewards",
+                "--key",
+                AA_VIEWING_KEY,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(
+        "Estimated native token rewards for the next MASP epoch: 0.063"
+    ));
+
+    // Assert NAM balance at MASP pool is exclusively the
+    // rewards from the shielded BTC
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                MASP,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0.063"));
+
+    // Wait till epoch boundary
+    node.next_masp_epoch();
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+
+    // Assert BTC balance at VK(A) is still 1
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                BTC,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("btc: 1"));
+
+    // Assert NAM balance is a number greater than the last epoch's balance
+    // (more rewards have been dispensed)
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0.18887"));
+
+    // Assert the rewards estimate are 0 since we haven't shielded any more
+    // tokens
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "estimate-shielding-rewards",
+                "--key",
+                AA_VIEWING_KEY,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(
+        captured.contains(
+            "Estimated native token rewards for the next MASP epoch: 0"
+        )
+    );
+
+    // Assert NAM balance at MASP pool is exclusively the
+    // rewards from the shielded BTC
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                MASP,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0.18887"));
+
+    // Get the necessary information to construct BTC asset types
+    let btc_alias = BTC.to_lowercase();
+    let token_map_key = masp_token_map_key();
+    let tokens: TokenMap = node
+        .shell
+        .lock()
+        .unwrap()
+        .state
+        .read(&token_map_key)
+        .unwrap()
+        .unwrap_or_default();
+    let btc_addr = &tokens[&btc_alias];
+    let btc_denom =
+        token::read_denom(&node.shell.lock().unwrap().state, btc_addr)?
+            .expect("unable to read token denomination");
+
+    // Erase the BTC rewards that have been distributed so far
+    const PRECISION: i128 = 100000;
+    let mut asset_types = BTreeMap::new();
+    let mut precision_btcs = BTreeMap::new();
+    let mut reward_deltas = BTreeMap::new();
+    // BTC[ep, digit]
+    let mut asset_type = |epoch, digit| {
+        *asset_types.entry((epoch, digit)).or_insert_with(|| {
+            encode_asset_type(btc_addr.clone(), btc_denom, digit, Some(epoch))
+                .expect("unable to encode asset type")
+        })
+    };
+    // PRECISION BTC[ep, digit]
+    let mut precision_btc = |epoch, digit| {
+        precision_btcs
+            .entry((epoch, digit))
+            .or_insert_with(|| {
+                I128Sum::from_pair(asset_type(epoch, digit), PRECISION)
+            })
+            .clone()
+    };
+    // -PRECISION BTC[ep, digit] + PRECISION BTC[ep+1, digit]
+    let mut reward_delta = |epoch, digit| {
+        reward_deltas
+            .entry((epoch, digit))
+            .or_insert_with(|| {
+                -precision_btc(epoch, digit)
+                    + precision_btc(epoch.next().unwrap(), digit)
+            })
+            .clone()
+    };
+    // Write the new BTC conversions to memory
+    for digit in token::MaspDigitPos::iter() {
+        // -PRECISION BTC[ep, digit] + PRECISION BTC[current_ep, digit]
+        let mut reward = I128Sum::zero();
+        for epoch in MaspEpoch::iter_bounds_inclusive(
+            MaspEpoch::zero(),
+            node.current_masp_epoch().prev().unwrap(),
+        )
+        .rev()
+        {
+            // BTC[ep, digit]
+            let asset_type = encode_asset_type(
+                btc_addr.clone(),
+                btc_denom,
+                digit,
+                Some(epoch),
+            )
+            .expect("unable to encode asset type");
+            reward += reward_delta(epoch, digit);
+            // Write the conversion update to memory
+            node.shell
+                .lock()
+                .unwrap()
+                .state
+                .write(&masp_conversion_key(&asset_type), reward.clone())
+                .expect("unable to write conversion update");
+        }
+    }
+
+    // Wait till epoch boundary
+    node.next_masp_epoch();
+
+    // Assert BTC balance at VK(A) is still 1
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                BTC,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("btc: 1"));
+
+    // Assert NAM balance is a number greater than the last epoch's balance
+    // (more rewards have been dispensed)
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0.188976"));
+
+    // Assert the rewards estimate are 0 since we haven't shielded any more
+    // tokens
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "estimate-shielding-rewards",
+                "--key",
+                AA_VIEWING_KEY,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(
+        captured.contains(
+            "Estimated native token rewards for the next MASP epoch: 0"
+        )
+    );
+
+    // Assert NAM balance at MASP pool is exclusively the
+    // rewards from the shielded BTC
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                MASP,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0.378968"));
 
     Ok(())
 }
