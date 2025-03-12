@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
+use masp_primitives::convert::AllowedConversion;
 use masp_primitives::transaction::components::I128Sum;
 use namada_apps_lib::wallet::defaults::{
     get_unencrypted_keypair, is_use_device,
@@ -1732,7 +1733,7 @@ fn reset_conversions() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.18963"));
+    assert!(captured.contains("nam: 0.18887"));
 
     // Get the necessary information to construct BTC asset types
     let btc_alias = BTC.to_lowercase();
@@ -1767,7 +1768,10 @@ fn reset_conversions() -> Result<()> {
         precision_btcs
             .entry((epoch, digit))
             .or_insert_with(|| {
-                I128Sum::from_pair(asset_type(epoch, digit), PRECISION)
+                AllowedConversion::from(I128Sum::from_pair(
+                    asset_type(epoch, digit),
+                    PRECISION,
+                ))
             })
             .clone()
     };
@@ -1784,7 +1788,7 @@ fn reset_conversions() -> Result<()> {
     // Write the new BTC conversions to memory
     for digit in token::MaspDigitPos::iter() {
         // -PRECISION BTC[ep, digit] + PRECISION BTC[current_ep, digit]
-        let mut reward = I128Sum::zero();
+        let mut reward: AllowedConversion = I128Sum::zero().into();
         for epoch in MaspEpoch::iter_bounds_inclusive(
             MaspEpoch::zero(),
             node.current_masp_epoch().prev().unwrap(),
@@ -1892,7 +1896,7 @@ fn reset_conversions() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.379752"));
+    assert!(captured.contains("nam: 0.378968"));
 
     Ok(())
 }

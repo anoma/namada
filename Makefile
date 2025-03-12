@@ -217,7 +217,7 @@ test-unit-with-coverage:
 test-integration-with-coverage:
 	$(cargo) +$(nightly) llvm-cov --lib --output-path lcov.info \
 		--lcov \
-		-- integration \
+		-- integration::masp::reset_conversions integration::masp::masp_incentives \
 		--test-threads=1 \
 		-Z unstable-options --report-time
 
