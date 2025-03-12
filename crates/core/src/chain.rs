@@ -357,7 +357,7 @@ impl Epoch {
     pub fn iter_bounds_inclusive(
         start: Self,
         end: Self,
-    ) -> impl Iterator<Item = Epoch> + Clone {
+    ) -> impl DoubleEndedIterator<Item = Epoch> + Clone {
         let start_ix = start.0;
         let end_ix = end.0;
         (start_ix..=end_ix).map(Epoch::from)

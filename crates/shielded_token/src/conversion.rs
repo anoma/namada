@@ -27,15 +27,17 @@ use namada_core::masp::MaspEpoch;
 use namada_core::token::MaspDigitPos;
 use namada_core::token::{Amount, DenominatedAmount, Denomination};
 use namada_core::uint::Uint;
+use namada_state::iter_prefix_with_filter_map;
 use namada_systems::{parameters, trans_token};
 
+use crate::storage_key::{
+    is_masp_conversion_key, masp_conversion_key_prefix, masp_kd_gain_key,
+    masp_kp_gain_key, masp_last_inflation_key, masp_last_locked_amount_key,
+    masp_locked_amount_target_key, masp_max_reward_rate_key,
+    masp_reward_precision_key,
+};
 #[cfg(any(feature = "multicore", test))]
 use crate::storage_key::{masp_assets_hash_key, masp_token_map_key};
-use crate::storage_key::{
-    masp_kd_gain_key, masp_kp_gain_key, masp_last_inflation_key,
-    masp_last_locked_amount_key, masp_locked_amount_target_key,
-    masp_max_reward_rate_key, masp_reward_precision_key,
-};
 #[cfg(any(feature = "multicore", test))]
 use crate::{ConversionLeaf, Error, OptionExt, ResultExt};
 use crate::{Result, StorageRead, StorageWrite, WithConversionState};
@@ -517,6 +519,51 @@ where
 }
 
 #[cfg(any(feature = "multicore", test))]
+/// Apply the conversion updates that are in storage to the in memory structure
+/// and delete them.
+fn apply_stored_conversion_updates<S>(storage: &mut S) -> Result<()>
+where
+    S: StorageWrite + StorageRead + WithConversionState,
+{
+    use masp_primitives::transaction::components::I128Sum;
+
+    let conversion_key_prefix = masp_conversion_key_prefix();
+    let mut conversion_updates = BTreeMap::new();
+    // Read conversion updates from storage and store them in a map
+    for conv_result in iter_prefix_with_filter_map(
+        storage,
+        &conversion_key_prefix,
+        is_masp_conversion_key,
+    )? {
+        match conv_result {
+            Ok((asset_type, conv)) => {
+                conversion_updates.insert(asset_type, conv);
+            }
+            Err(err) => {
+                tracing::warn!("Encountered malformed conversion: {}", err);
+                continue;
+            }
+        }
+    }
+    // Apply the conversion updates to the in memory structure
+    let assets = &mut storage.conversion_state_mut().assets;
+    for (asset_type, conv) in conversion_updates {
+        let Some(leaf) = assets.get_mut(&asset_type) else {
+            tracing::warn!(
+                "Encountered non-existent asset type: {}",
+                asset_type
+            );
+            continue;
+        };
+        // This operation will be expensive for large conversions
+        leaf.conversion = From::<I128Sum>::from(conv);
+    }
+    // Delete the updates now that they have been applied
+    storage.delete_prefix(&conversion_key_prefix)?;
+    Ok(())
+}
+
+#[cfg(any(feature = "multicore", test))]
 /// Update the MASP's allowed conversions
 pub fn update_allowed_conversions<S, Params, TransToken>(
     storage: &mut S,
@@ -542,6 +589,7 @@ where
 
     use crate::mint_rewards;
 
+    apply_stored_conversion_updates(storage)?;
     let token_map_key = masp_token_map_key();
     let token_map: namada_core::masp::TokenMap =
         storage.read(&token_map_key)?.unwrap_or_default();
