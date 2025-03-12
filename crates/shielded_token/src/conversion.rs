@@ -27,17 +27,20 @@ use namada_core::masp::MaspEpoch;
 use namada_core::token::MaspDigitPos;
 use namada_core::token::{Amount, DenominatedAmount, Denomination};
 use namada_core::uint::Uint;
+#[cfg(any(feature = "multicore", test))]
 use namada_state::iter_prefix_with_filter_map;
 use namada_systems::{parameters, trans_token};
 
-use crate::storage_key::{
-    is_masp_conversion_key, masp_conversion_key_prefix, masp_kd_gain_key,
-    masp_kp_gain_key, masp_last_inflation_key, masp_last_locked_amount_key,
-    masp_locked_amount_target_key, masp_max_reward_rate_key,
-    masp_reward_precision_key,
-};
 #[cfg(any(feature = "multicore", test))]
-use crate::storage_key::{masp_assets_hash_key, masp_token_map_key};
+use crate::storage_key::{
+    is_masp_conversion_key, masp_assets_hash_key, masp_conversion_key_prefix,
+    masp_token_map_key,
+};
+use crate::storage_key::{
+    masp_kd_gain_key, masp_kp_gain_key, masp_last_inflation_key,
+    masp_last_locked_amount_key, masp_locked_amount_target_key,
+    masp_max_reward_rate_key, masp_reward_precision_key,
+};
 #[cfg(any(feature = "multicore", test))]
 use crate::{ConversionLeaf, Error, OptionExt, ResultExt};
 use crate::{Result, StorageRead, StorageWrite, WithConversionState};
@@ -525,8 +528,6 @@ fn apply_stored_conversion_updates<S>(storage: &mut S) -> Result<()>
 where
     S: StorageWrite + StorageRead + WithConversionState,
 {
-    use masp_primitives::transaction::components::I128Sum;
-
     let conversion_key_prefix = masp_conversion_key_prefix();
     let mut conversion_updates = BTreeMap::new();
     // Read conversion updates from storage and store them in a map
@@ -555,8 +556,7 @@ where
             );
             continue;
         };
-        // This operation will be expensive for large conversions
-        leaf.conversion = From::<I128Sum>::from(conv);
+        leaf.conversion = conv;
     }
     // Delete the updates now that they have been applied
     storage.delete_prefix(&conversion_key_prefix)?;
