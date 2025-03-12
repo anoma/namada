@@ -36,6 +36,50 @@ Namada v1.0.0 is the first stable release of the Namada apps.
 - updated namada libraries to libs-v0.46.1
   ([\#4123](https://github.com/anoma/namada/pull/4123))
 
+## libs-v0.48.0
+
+Namada libraries v0.48.0 major release.
+
+### BUG FIXES
+
+- Fixes the commitment tree anchor mismatch bug by making
+  the client search for the correct Transaction ordering
+  ([\#4442](https://github.com/anoma/namada/pull/4442))
+
+## libs-v0.47.3
+
+Namada libs v0.47.3 minor release.
+
+### BUG FIXES
+
+- Fixed the build of some crates with non-default features.
+  ([\#4403](https://github.com/anoma/namada/pull/4403))
+
+### IMPROVEMENTS
+
+- Improved the transaction building process to avoid duplicated sections.
+  ([\#4230](https://github.com/anoma/namada/pull/4230))
+- Make the test vector generator print the chain ID of transactions in expert
+  mode ([\#4282](https://github.com/anoma/namada/issues/4282))
+- Added a wallet check of the minimum supported Ledger app version for shielded
+  key derivation. ([\#4358](https://github.com/anoma/namada/pull/4358))
+- Formalized Namada versioning scheme. Please consult
+  `VERSIONING.md` in the root of the Namada repository.
+  ([\#4371](https://github.com/anoma/namada/pull/4371))
+
+### MISCELLANEOUS
+
+- Updated most of the dependencies. Note that WASM build of the SDK crate now
+  requires `RUSTFLAGS='--cfg getrandom_backend="wasm_js"'`. Consult <https://github.com/rust-random/getrandom?tab=readme-ov-file#webassembly-support>
+  for more details. ([\#4284](https://github.com/anoma/namada/pull/4284))
+- Update Hermes version to the upstream
+  ([\#4367](https://github.com/anoma/namada/issues/4367))
+
+### TESTING
+
+- Update genesis templates for hardware wallet using new shielded key derivation
+  algorithm. ([\#4374](https://github.com/anoma/namada/pull/4374))
+
 ## libs-v0.47.2
 
 Namada libs v0.47.2 patch release.

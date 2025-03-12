@@ -182,7 +182,7 @@ pub mod mock_web3_client {
                 }
                 if client.last_block_processed.as_ref() < Some(&block_to_check)
                 {
-                    _ = client.blocks_processed.send(block_to_check.clone());
+                    _ = client.blocks_processed.send(block_to_check);
                     client.last_block_processed = Some(block_to_check);
                 }
                 Ok(logs)
@@ -205,7 +205,7 @@ pub mod mock_web3_client {
             _: Duration,
             _: Instant,
         ) -> Result<SyncStatus, Error> {
-            let height = self.0.lock().unwrap().latest_block_height.clone();
+            let height = self.0.lock().unwrap().latest_block_height;
             Ok(SyncStatus::AtHeight(height))
         }
 

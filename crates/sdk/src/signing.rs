@@ -85,22 +85,45 @@ pub struct SigningTxData {
 
 impl PartialEq for SigningTxData {
     fn eq(&self, other: &Self) -> bool {
-        if !(self.owner == other.owner
-            && self.threshold == other.threshold
-            && self.account_public_keys_map == other.account_public_keys_map
-            && self.fee_payer == other.fee_payer)
+        // Deconstruct the two instances to ensure we don't forget any new field
+        let SigningTxData {
+            owner,
+            public_keys,
+            threshold,
+            account_public_keys_map,
+            fee_payer,
+            shielded_hash,
+        } = self;
+        let SigningTxData {
+            owner: other_owner,
+            public_keys: other_public_keys,
+            threshold: other_threshold,
+            account_public_keys_map: other_account_public_keys_map,
+            fee_payer: other_fee_payer,
+            shielded_hash: other_shielded_hash,
+        } = other;
+
+        if !(owner == other_owner
+            && threshold == other_threshold
+            && account_public_keys_map == other_account_public_keys_map
+            && fee_payer == other_fee_payer
+            && shielded_hash == other_shielded_hash)
         {
             return false;
         }
 
         // Check equivalence of the public keys ignoring the specific ordering
-        if self.public_keys.len() != other.public_keys.len() {
-            return false;
-        }
+        // and duplicates (the PartialEq implementation of IndexSet ignores the
+        // order)
+        let unique_public_keys = HashSet::<
+            &namada_account::common::CommonPublicKey,
+        >::from_iter(public_keys.iter());
+        let unique_other_public_keys =
+            HashSet::<&namada_account::common::CommonPublicKey>::from_iter(
+                other_public_keys.iter(),
+            );
 
-        self.public_keys
-            .iter()
-            .all(|pubkey| other.public_keys.contains(pubkey))
+        unique_public_keys == unique_other_public_keys
     }
 }
 
@@ -314,6 +337,10 @@ where
             }
         }
     }
+
+    // Before signing the wrapper tx prune all the possible duplicated sections
+    // (including duplicated raw signatures)
+    tx.prune_duplicated_sections();
 
     // Then try signing the wrapper header (fee payer). Check if there's a
     // provided wrapper signature, otherwise sign with the software wallet or
@@ -2182,6 +2209,7 @@ pub async fn to_ledger_vector(
                     .map_err(|e| Error::Other(format!("{}", e)))?,
             );
             tv.output_expert.extend(vec![
+                format!("Chain ID : {}", tx.header.chain_id),
                 format!(
                     "Timestamp : {}",
                     format_timestamp(tx.header.timestamp)

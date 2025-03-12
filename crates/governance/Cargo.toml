@@ -13,7 +13,7 @@ repository.workspace = true
 version.workspace = true
 
 [features]
-testing = ["proptest"]
+testing = ["proptest", "namada_core/testing"]
 arbitrary = ["dep:arbitrary", "namada_core/arbitrary"]
 migrations = ["namada_migrations", "linkme"]
 

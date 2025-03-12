@@ -32,6 +32,11 @@ name = "wasm_opcodes"
 harness = false
 path = "wasm_opcodes.rs"
 
+[[bench]]
+name = "mempool_validate"
+harness = false
+path = "mempool_validate.rs"
+
 [features]
 namada-eth-bridge = ["namada_apps_lib/namada-eth-bridge"]
 
@@ -47,7 +52,7 @@ namada_vp.workspace = true
 masp_primitives.workspace = true
 masp_proofs = { workspace = true, features = ["benchmarks", "multicore"] }
 borsh.workspace = true
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion.workspace = true
 lazy_static.workspace = true
 prost.workspace = true
 rand_core.workspace = true

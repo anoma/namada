@@ -97,7 +97,7 @@ bech32.workspace = true
 bimap.workspace = true
 borsh.workspace = true
 circular-queue.workspace = true
-clap = { version = "4.3", default-features = false, features = ["std"] }
+clap = { workspace = true, default-features = false, features = ["std"] }
 data-encoding.workspace = true
 duration-str.workspace = true
 either.workspace = true
@@ -145,6 +145,7 @@ tokio = { workspace = true, features = ["full"] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 tokio = { workspace = true, default-features = false, features = ["sync"] }
+getrandom = { workspace = true, features = ["wasm_js"] }
 
 [dev-dependencies]
 namada_account = { path = "../account", features = ["testing"] }

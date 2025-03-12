@@ -725,7 +725,12 @@ pub fn update_cosmos_config(test: &Test) -> Result<()> {
         .write(true)
         .truncate(true)
         .open(&config_path)?;
-    file.write_all(values.to_string().as_bytes()).map_err(|e| {
+    file.write_all(
+        toml::to_string(&values)
+            .expect("Values should be converted")
+            .as_bytes(),
+    )
+    .map_err(|e| {
         eyre!(format!("Writing a Cosmos config file failed: {}", e))
     })?;
 
@@ -742,9 +747,12 @@ pub fn update_cosmos_config(test: &Test) -> Result<()> {
         .write(true)
         .truncate(true)
         .open(&app_path)?;
-    file.write_all(values.to_string().as_bytes()).map_err(|e| {
-        eyre!(format!("Writing a Cosmos app.toml failed: {}", e))
-    })?;
+    file.write_all(
+        toml::to_string(&values)
+            .expect("Values should be converted")
+            .as_bytes(),
+    )
+    .map_err(|e| eyre!(format!("Writing a Cosmos app.toml failed: {}", e)))?;
 
     let genesis_path = cosmos_dir.join("config/genesis.json");
     let s = std::fs::read_to_string(&genesis_path)
@@ -782,7 +790,7 @@ pub fn update_cosmos_config(test: &Test) -> Result<()> {
         .open(&genesis_path)?;
     let writer = std::io::BufWriter::new(file);
     serde_json::to_writer_pretty(writer, &genesis)
-        .expect("Writing Cosmos genesis.toml failed");
+        .expect("Writing Cosmos genesis.json failed");
 
     if matches!(chain_type, CosmosChainType::Osmosis) {
         let client_path = cosmos_dir.join("config/client.toml");
@@ -800,7 +808,12 @@ pub fn update_cosmos_config(test: &Test) -> Result<()> {
             .write(true)
             .truncate(true)
             .open(&client_path)?;
-        file.write_all(values.to_string().as_bytes()).map_err(|e| {
+        file.write_all(
+            toml::to_string(&values)
+                .expect("Values should be converted")
+                .as_bytes(),
+        )
+        .map_err(|e| {
             eyre!(format!(
                 "Writing a  Osmosis client config file failed: {}",
                 e

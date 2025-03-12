@@ -16,7 +16,7 @@ version.workspace = true
 default = []
 std = ["fd-lock", "download-params"]
 download-params = []
-migrations = ["namada_migrations"]
+migrations = ["namada_migrations", "linkme"]
 
 [dependencies]
 namada_core = { workspace = true, features = ["rand"] }
@@ -30,6 +30,7 @@ itertools.workspace = true
 derivation-path.workspace = true
 data-encoding.workspace = true
 fd-lock = { workspace = true, optional = true }
+linkme = { workspace = true, optional = true }
 masp_primitives.workspace = true
 orion.workspace = true
 rand.workspace = true
