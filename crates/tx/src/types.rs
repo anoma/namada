@@ -906,9 +906,11 @@ impl<'tx> Tx {
 )]
 pub struct IndexedTx {
     /// The block height of the indexed tx
-    pub height: BlockHeight,
+    pub block_height: BlockHeight,
+    /// Relative index of this tx in the MASP
+    pub masp_index: u32,
     /// The index in the block of the tx
-    pub index: TxIndex,
+    pub block_index: TxIndex,
     /// The optional index of an inner tx within this batc
     pub batch_index: Option<u32>,
 }
@@ -918,8 +920,9 @@ impl IndexedTx {
     /// txs in a block with some height `height`.
     pub const fn entire_block(height: BlockHeight) -> Self {
         Self {
-            height,
-            index: TxIndex(u32::MAX),
+            block_height: height,
+            masp_index: u32::MAX,
+            block_index: TxIndex(u32::MAX),
             batch_index: None,
         }
     }
@@ -928,8 +931,9 @@ impl IndexedTx {
 impl Default for IndexedTx {
     fn default() -> Self {
         Self {
-            height: BlockHeight::first(),
-            index: TxIndex(0),
+            block_height: BlockHeight::first(),
+            masp_index: 0,
+            block_index: TxIndex(0),
             batch_index: None,
         }
     }
@@ -952,13 +956,15 @@ impl IndexedTxRange {
     pub const fn between_heights(from: BlockHeight, to: BlockHeight) -> Self {
         Self::new(
             IndexedTx {
-                height: from,
-                index: TxIndex(0),
+                block_height: from,
+                masp_index: 0,
+                block_index: TxIndex(0),
                 batch_index: None,
             },
             IndexedTx {
-                height: to,
-                index: TxIndex(u32::MAX),
+                block_height: to,
+                masp_index: u32::MAX,
+                block_index: TxIndex(u32::MAX),
                 batch_index: None,
             },
         )
