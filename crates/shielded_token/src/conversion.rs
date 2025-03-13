@@ -104,6 +104,28 @@ where
     Ok((checked!(10u128 ^ precision_denom)?, denomination))
 }
 
+/// Get the balance of the given token at the MASP address that is eligble to
+/// receive rewards.
+fn get_masp_dated_balance<S, TransToken>(
+    storage: &mut S,
+    token: &Address,
+) -> Result<Amount>
+where
+    S: StorageWrite + StorageRead,
+    TransToken: trans_token::Keys + trans_token::Read<S>,
+{
+    use crate::read_undated_balance;
+    let masp_addr = MASP;
+
+    // total locked amount in the Shielded pool
+    let total_tokens_in_masp =
+        TransToken::read_balance(storage, token, &masp_addr)?;
+    // Since dated and undated tokens are stored together in the pool, subtract
+    // the latter to get the dated balance
+    let masp_undated_balance = read_undated_balance(storage, token)?;
+    Ok(checked!(total_tokens_in_masp - masp_undated_balance)?)
+}
+
 /// Compute the MASP rewards by applying the PD-controller to the genesis
 /// parameters and the last inflation and last locked rewards ratio values.
 pub fn calculate_masp_rewards<S, TransToken>(
@@ -173,17 +195,21 @@ where
         last_locked_dec,
     );
 
+    // total locked amount in the Shielded pool
+    let rewardable_tokens_in_masp =
+        get_masp_dated_balance::<S, TransToken>(storage, token)?;
+
     // inflation-per-token = inflation / locked tokens = n/PRECISION
     // ∴ n = (inflation * PRECISION) / locked tokens
     // Since we must put the notes in a compatible format with the
     // note format, we must make the inflation amount discrete.
-    let noterized_inflation = if total_tokens_in_masp.is_zero() {
+    let noterized_inflation = if rewardable_tokens_in_masp.is_zero() {
         0u128
     } else {
         inflation
             .checked_mul_div(
                 Uint::from(precision),
-                total_tokens_in_masp.raw_amount(),
+                rewardable_tokens_in_masp.raw_amount(),
             )
             .and_then(|x| x.0.try_into().ok())
             .unwrap_or_else(|| {
@@ -198,7 +224,7 @@ where
     };
     let inflation_amount = Amount::from_uint(
         checked!(
-            total_tokens_in_masp.raw_amount() / precision.into()
+            rewardable_tokens_in_masp.raw_amount() / precision.into()
                 * Uint::from(noterized_inflation)
         )?,
         0,
@@ -451,7 +477,7 @@ where
         );
     }
     // Dispense a transparent reward in parallel to the shielded rewards
-    let addr_bal = TransToken::read_balance(storage, token, &MASP)?;
+    let addr_bal = get_masp_dated_balance::<S, TransToken>(storage, token)?;
     // The reward for each reward.1 units of the current asset
     // is reward.0 units of the reward token
     *total_reward = total_reward
@@ -513,10 +539,6 @@ where
     // The total transparent value of the rewards being distributed
     let mut total_deflated_reward = Amount::zero();
 
-    // Construct MASP asset type for rewards. Always deflate and timestamp
-    // reward tokens with the zeroth epoch to minimize the number of convert
-    // notes clients have to use. This trick works under the assumption that
-    // reward tokens will then be reinflated back to the current epoch.
     let reward_assets =
         encode_reward_asset_types(&native_token).into_storage_result()?;
     // Conversions from the previous to current asset for each address
