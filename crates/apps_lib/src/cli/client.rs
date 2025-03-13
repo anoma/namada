@@ -494,6 +494,7 @@ impl CliApi {
                         client.wait_until_node_is_synced(&io).await?;
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_and_print_epoch(&namada).await;
+                        rpc::query_and_print_masp_epoch(&namada).await;
                     }
                     Sub::QueryNextEpochInfo(QueryNextEpochInfo(args)) => {
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
