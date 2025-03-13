@@ -1,7 +1,7 @@
 //! SDK functions to construct different types of transactions
 
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -3555,7 +3555,9 @@ async fn construct_shielded_parts<N: Namada>(
 ) -> Result<Option<(ShieldedTransfer, HashSet<AssetData>)>> {
     // Precompute asset types to increase chances of success in decoding
     let token_map = context.wallet().await.get_addresses();
-    let tokens = token_map.values().collect();
+    let mut tokens: BTreeSet<_> = token_map.values().collect();
+    let native_token = context.native_token();
+    tokens.insert(&native_token);
 
     let stx_result = {
         let mut shielded = context.shielded_mut().await;
@@ -3941,7 +3943,9 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
 
     // Precompute asset types to increase chances of success in decoding
     let token_map = context.wallet().await.get_addresses();
-    let tokens = token_map.values().collect();
+    let mut tokens: BTreeSet<_> = token_map.values().collect();
+    let native_token = context.native_token();
+    tokens.insert(&native_token);
     let _ = context
         .shielded_mut()
         .await
