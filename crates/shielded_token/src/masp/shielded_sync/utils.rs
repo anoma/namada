@@ -39,6 +39,26 @@ impl TrialDecrypted {
             .sum::<usize>()
     }
 
+    /// Update the transaction indices according to the given map. If a key is
+    /// not found, then return it.
+    pub fn reindex(
+        &mut self,
+        key_map: &BTreeMap<IndexedTx, IndexedTx>,
+    ) -> Option<IndexedTx> {
+        let mut value_map = HashMap::new();
+        // First grab all the values we need to make sure that we do not
+        // accidentally overwrite
+        for (old, new) in key_map {
+            if let Some(value) = self.inner.swap_remove(old) {
+                value_map.insert(*new, value);
+            } else {
+                return Some(*old);
+            }
+        }
+        self.inner.extend(value_map);
+        None
+    }
+
     /// Get cached notes decrypted with `vk`, indexed at `itx`.
     pub fn get(
         &self,
@@ -262,6 +282,13 @@ pub trait MaspClient: Clone {
         &self,
         height: BlockHeight,
     ) -> Result<HashMap<usize, IncrementalWitness<Node>>, Self::Error>;
+
+    /// Check whether the given commitment anchor exists
+    #[allow(async_fn_in_trait)]
+    async fn commitment_anchor_exists(
+        &self,
+        root: &Node,
+    ) -> Result<bool, Self::Error>;
 }
 
 /// Given a block height range we wish to request and a cache of fetched block
@@ -341,8 +368,9 @@ mod test_blocks_left_to_fetch {
             .map(|height| {
                 (
                     IndexedTx {
-                        height,
-                        index: TxIndex(0),
+                        block_height: height,
+                        masp_index: 0,
+                        block_index: TxIndex(0),
                         batch_index: None,
                     },
                     masp_tx.clone(),
