@@ -194,25 +194,6 @@ mod test {
             >,
         >::new();
 
-        for SingleTransfer {
-            src,
-            dest,
-            token,
-            amount,
-        } in &transfers
-        {
-            tx_host_env::with(|tx_env| {
-                tx_env.spawn_accounts([src, dest, token]);
-                tx_env.credit_tokens(src, token, *amount);
-            });
-            // Store the credited token balances
-            *genesis_balances
-                .entry(token.clone())
-                .or_default()
-                .entry(src.clone())
-                .or_default() += *amount;
-        }
-
         let mut transfer = Transfer::default();
         for SingleTransfer {
             src,
@@ -225,6 +206,29 @@ mod test {
             transfer = transfer
                 .transfer(src.clone(), dest.clone(), token.clone(), denom)
                 .unwrap();
+        }
+
+        for (account, amount) in &transfer.sources {
+            tx_host_env::with(|tx_env| {
+                tx_env.spawn_accounts([&account.owner, &account.token]);
+                tx_env.credit_tokens(
+                    &account.owner,
+                    &account.token,
+                    amount.amount(),
+                );
+            });
+            // Store the credited token balances
+            *genesis_balances
+                .entry(account.token.clone())
+                .or_default()
+                .entry(account.owner.clone())
+                .or_default() += amount.amount();
+        }
+
+        for account in transfer.targets.keys() {
+            tx_host_env::with(|tx_env| {
+                tx_env.spawn_accounts([&account.owner, &account.token]);
+            });
         }
 
         let tx_data = BatchedTx {
@@ -256,15 +260,19 @@ mod test {
             *token_changes.entry(src.clone()).or_default() -= change;
             *token_changes.entry(dest.clone()).or_default() += change;
 
-            // Every address has to be in the verifier set
-            tx_host_env::with(|tx_env| {
-                // Internal token address have to be part of the verifier set
-                assert!(
-                    !token.is_internal() || tx_env.verifiers.contains(token)
-                );
-                assert!(tx_env.verifiers.contains(src));
-                assert!(tx_env.verifiers.contains(dest));
-            })
+            if !amount.is_zero() {
+                // Every address has to be in the verifier set
+                tx_host_env::with(|tx_env| {
+                    // Internal token address have to be part of the verifier
+                    // set
+                    assert!(
+                        !token.is_internal()
+                            || tx_env.verifiers.contains(token)
+                    );
+                    assert!(tx_env.verifiers.contains(src));
+                    assert!(tx_env.verifiers.contains(dest));
+                })
+            }
         }
 
         // Check all the changed balances
