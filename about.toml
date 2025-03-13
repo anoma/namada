@@ -12,6 +12,7 @@ accepted = [
     "OpenSSL",
     "OpenSSL-standalone",
     "Unicode-DFS-2016",
+    "Unicode-3.0",
     "Apache-2.0 WITH LLVM-exception",
     "Apache-2.0",
     "NOASSERTION",
@@ -20,4 +21,5 @@ accepted = [
     "SSLeay-standalone",
     "LicenseRef-scancode-public-domain",
     "LicenseRef-scancode-unknown-license-reference",
+    "NCSA",
 ]
