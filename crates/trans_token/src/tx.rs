@@ -239,8 +239,9 @@ mod test {
     use namada_core::token::testing::arb_amount;
     use namada_core::uint::Uint;
     use namada_core::{address, token};
-    use namada_events::extend::EventAttributeEntry;
+    use namada_events::extend::{EventAttributeEntry, InnerTxHash, TxHash};
     use namada_tests::tx::{ctx, tx_host_env};
+    use namada_tx::data::InnerTxId;
     use proptest::prelude::*;
 
     use super::*;
@@ -337,6 +338,12 @@ mod test {
             let attrs = event.into_attributes();
             let amount_uint: Uint = amount.into();
 
+            let inner_tx_id = InnerTxId {
+                wrapper_hash: None,
+                commitments_hash: Cow::Owned(tx_env.batched_tx.cmt.get_hash()),
+            };
+            let exp_tx_hash = inner_tx_id.wrapper_hash().to_string();
+            let exp_inner_tx_hash = inner_tx_id.inner_hash().to_string();
             let exp_balances = if src < dest {
                 format!(
                     "[[[\"internal-address/{src}\",\"{token}\"],\"0\"],[[\"\
@@ -362,6 +369,8 @@ mod test {
             itertools::assert_equal(
                 attrs,
                 BTreeMap::from_iter([
+                    (TxHash::KEY.to_string(), exp_tx_hash),
+                    (InnerTxHash::KEY.to_string(), exp_inner_tx_hash),
                     (PostBalances::KEY.to_string(), exp_balances),
                     (SourceAccounts::KEY.to_string(), exp_sources),
                     (TargetAccounts::KEY.to_string(), exp_targets),

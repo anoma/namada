@@ -9,11 +9,13 @@ use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::hash::Hash;
 use namada_core::{arith, storage};
+use namada_events::extend::{InnerTxHash, TxHash};
 use namada_events::{Event, EventToEmit, EventType};
 use namada_gas::{
     Gas, MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_DELETE_GAS_PER_BYTE,
     STORAGE_WRITE_GAS_PER_BYTE,
 };
+use namada_tx::data::InnerTxId;
 use patricia_tree::map::StringPatriciaMap;
 use thiserror::Error;
 
@@ -504,7 +506,19 @@ impl WriteLog {
     /// Set an event and return the gas cost. Returns `None` on gas u64
     /// overflow.
     pub fn emit_event<E: EventToEmit>(&mut self, event: E) -> Option<Gas> {
-        let event = event.into();
+        self.emit_event_with_tx_hashes(event, None)
+    }
+
+    /// Set an event and return the gas cost.
+    ///
+    /// Returns `None` on gas u64 overflow. The optional tx hashes
+    /// are included as new attributes in the event, free of charge.
+    pub fn emit_event_with_tx_hashes<E: EventToEmit>(
+        &mut self,
+        event: E,
+        inner_tx_id: Option<InnerTxId<'_>>,
+    ) -> Option<Gas> {
+        let mut event = event.into();
         let gas_cost = event.emission_gas_cost(MEMORY_ACCESS_GAS_PER_BYTE);
         if gas_cost.as_ref().is_some() {
             let event_type = event.kind().to_string();
@@ -513,6 +527,10 @@ impl WriteLog {
                     .events
                     .tree
                     .insert(&event_type, HashSet::new());
+            }
+            if let Some(inner_tx_id) = inner_tx_id {
+                event.extend(TxHash(inner_tx_id.wrapper_hash()));
+                event.extend(InnerTxHash(inner_tx_id.inner_hash()));
             }
             self.tx_write_log
                 .events

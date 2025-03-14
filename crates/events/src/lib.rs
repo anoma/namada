@@ -392,6 +392,15 @@ impl Event {
         })
     }
 
+    /// Delete the given attribute.
+    #[inline]
+    pub fn delete_attribute<DATA>(&mut self)
+    where
+        DATA: extend::DeleteFromEventAttributes,
+    {
+        DATA::delete_from_event_attributes(&mut self.attributes);
+    }
+
     /// Get the raw string value corresponding to a given attribute, if it
     /// exists.
     #[inline]
