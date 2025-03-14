@@ -34,8 +34,9 @@ masp_proofs = { workspace = true, default-features = false, features = [
     "download-params",
 ] }
 namada_apps_lib = { workspace = true, features = ["migrations"] }
+namada_core = { workspace = true, default-features = false }
 namada_macros = { workspace = true }
-namada_migrations = { workspace = true }
+namada_migrations = { workspace = true, features = ["masp"] }
 namada_parameters = { workspace = true }
 namada_trans_token = { workspace = true, features = ["migrations"] }
 namada_sdk = { workspace = true, default-features = false, features = [

@@ -5750,6 +5750,7 @@ dependencies = [
  "masp_primitives",
  "masp_proofs",
  "namada_apps_lib",
+ "namada_core",
  "namada_macros",
  "namada_migrations",
  "namada_parameters",
@@ -5934,6 +5935,7 @@ version = "0.48.0"
 dependencies = [
  "lazy_static",
  "linkme",
+ "masp_primitives",
  "namada_macros",
 ]
 

@@ -12,3 +12,5 @@ derive_typehash!(Vec::<u8>);
 derive_typehash!(Vec::<String>);
 derive_typehash!(u64);
 derive_typehash!(u128);
+#[cfg(feature = "masp")]
+derive_typehash!(masp_primitives::convert::AllowedConversion);
