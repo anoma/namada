@@ -135,6 +135,14 @@ impl MaspEpoch {
         ))
     }
 
+    /// Iterate a range of epochs, inclusive of the start and end.
+    pub fn iter_bounds_inclusive(
+        start: Self,
+        end: Self,
+    ) -> impl DoubleEndedIterator<Item = Self> + Clone {
+        Epoch::iter_bounds_inclusive(start.0, end.0).map(Self)
+    }
+
     /// Returns a 0 masp epoch
     pub const fn zero() -> Self {
         Self(Epoch(0))

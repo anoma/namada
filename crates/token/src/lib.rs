@@ -53,8 +53,8 @@ pub mod storage_key {
         is_masp_commitment_anchor_key, is_masp_key, is_masp_nullifier_key,
         is_masp_token_map_key, is_masp_transfer_key, masp_assets_hash_key,
         masp_commitment_anchor_key, masp_commitment_tree_key,
-        masp_convert_anchor_key, masp_nullifier_key, masp_token_map_key,
-        masp_total_rewards,
+        masp_conversion_key, masp_convert_anchor_key, masp_nullifier_key,
+        masp_token_map_key, masp_total_rewards,
     };
     pub use namada_trans_token::storage_key::*;
 
@@ -73,6 +73,11 @@ pub mod storage_key {
     /// The max reward rate key for the given token
     pub fn masp_max_reward_rate_key(token_addr: &Address) -> storage::Key {
         shielded::masp_max_reward_rate_key::<TransToken>(token_addr)
+    }
+
+    /// The shielded rewards precision key for the given token
+    pub fn masp_reward_precision_key(token_addr: &Address) -> storage::Key {
+        shielded::masp_reward_precision_key::<TransToken>(token_addr)
     }
 
     /// Obtain the locked target amount key for the given token

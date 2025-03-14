@@ -30,7 +30,7 @@ use namada_tx::BatchedTxRef;
 use namada_vp_env::{Error, Result, VpEnv};
 
 use crate::storage_key::{
-    is_masp_key, is_masp_nullifier_key, is_masp_token_map_key,
+    is_masp_governance_key, is_masp_key, is_masp_nullifier_key,
     is_masp_transfer_key, masp_commitment_anchor_key, masp_commitment_tree_key,
     masp_convert_anchor_key, masp_nullifier_key,
 };
@@ -79,7 +79,7 @@ where
         let masp_keys_changed: Vec<&Key> =
             keys_changed.iter().filter(|key| is_masp_key(key)).collect();
         let non_allowed_changes = masp_keys_changed.iter().any(|key| {
-            !is_masp_transfer_key(key) && !is_masp_token_map_key(key)
+            !is_masp_transfer_key(key) && !is_masp_governance_key(key)
         });
 
         // Check that the transaction didn't write unallowed masp keys
@@ -88,20 +88,20 @@ where
                 "Found modifications to non-allowed masp keys",
             ));
         }
-        let masp_token_map_changed = masp_keys_changed
+        let masp_governance_changes = masp_keys_changed
             .iter()
-            .any(|key| is_masp_token_map_key(key));
+            .any(|key| is_masp_governance_key(key));
         let masp_transfer_changes = masp_keys_changed
             .iter()
             .any(|key| is_masp_transfer_key(key));
-        if masp_token_map_changed && masp_transfer_changes {
+        if masp_governance_changes && masp_transfer_changes {
             Err(Error::new_const(
                 "Cannot simultaneously do governance proposal and MASP \
                  transfer",
             ))
-        } else if masp_token_map_changed {
-            // The token map can only be changed by a successful governance
-            // proposal
+        } else if masp_governance_changes {
+            // The token map or allowed conversions can only be changed by a
+            // successful governance proposal
             Self::is_valid_parameter_change(ctx, tx_data)
         } else if masp_transfer_changes {
             // The MASP transfer keys can only be changed by a valid Transaction

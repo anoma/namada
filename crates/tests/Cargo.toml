@@ -46,6 +46,7 @@ ibc-middleware-packet-forward.workspace = true
 ibc-testkit.workspace = true
 ics23.workspace = true
 itertools.workspace = true
+masp_primitives.workspace = true
 proptest.workspace = true
 prost.workspace = true
 regex.workspace = true
