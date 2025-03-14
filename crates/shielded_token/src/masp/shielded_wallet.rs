@@ -25,7 +25,7 @@ use masp_primitives::transaction::fees::fixed::FeeRule;
 use masp_primitives::transaction::{builder, Transaction};
 use masp_primitives::zip32::{ExtendedKey, PseudoExtendedKey};
 use namada_core::address::Address;
-use namada_core::arith::checked;
+use namada_core::arith::{checked, CheckedAdd, CheckedSub};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::chain::BlockHeight;
 use namada_core::collections::{HashMap, HashSet};
@@ -367,11 +367,24 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
         // Forget about the trace amount left over because we cannot
         // realize its value
         let trace = I128Sum::from_pair(asset_type, value % threshold);
-        // Record how much more of the given conversion has been used
-        *usage += required;
-        // Apply the conversions to input and move the trace amount to output
-        *input += conv * required - trace.clone();
-        *output += trace;
+        match checked!(input + &(conv * required) - &trace) {
+            // If applying the conversion does not overflow or result in
+            // negative input
+            Ok(new_input) if new_input >= I128Sum::zero() => {
+                // Record how much more of the given conversion has been used
+                *usage += required;
+                // Apply conversions to input and move trace amount to output
+                *input = new_input;
+                *output += trace;
+            }
+            _ => {
+                // Otherwise don't apply the conversion and simply move value
+                // over to output
+                let comp = I128Sum::from_pair(asset_type, value);
+                *output += comp.clone();
+                *input -= comp;
+            }
+        }
         Ok(())
     }
 
