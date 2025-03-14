@@ -13,7 +13,11 @@ repository.workspace = true
 version.workspace = true
 rust-version.workspace = true
 
+[features]
+masp = ["masp_primitives"]
+
 [dependencies]
+masp_primitives = { workspace = true, optional = true }
 namada_macros.workspace = true
 
 lazy_static.workspace = true
