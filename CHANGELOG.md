@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## v1.1.4
+
+Namada apps v1.1.4 patch release
+
+## v1.1.3
+
+Namada apps v1.1.3 patch release.
+
+### MISCELLANEOUS
+
+- updated Namada libraries to libs-v0.48.0
+  ([\#4464](https://github.com/anoma/namada/pull/4464))
+
 ## v1.1.2
 
 Namada apps v1.1.2 patch release.
@@ -35,6 +48,16 @@ Namada v1.0.0 is the first stable release of the Namada apps.
 
 - updated namada libraries to libs-v0.46.1
   ([\#4123](https://github.com/anoma/namada/pull/4123))
+
+## libs-v0.48.0
+
+Namada libraries v0.48.0 major release.
+
+### BUG FIXES
+
+- Fixes the commitment tree anchor mismatch bug by making
+  the client search for the correct Transaction ordering
+  ([\#4442](https://github.com/anoma/namada/pull/4442))
 
 ## libs-v0.47.3
 
