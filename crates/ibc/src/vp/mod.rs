@@ -2,6 +2,7 @@
 
 pub mod context;
 
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
@@ -17,6 +18,9 @@ use namada_core::address::Address;
 use namada_core::arith::checked;
 use namada_core::collections::HashSet;
 use namada_core::storage::Key;
+use namada_events::extend::{
+    InnerTxHash as InnerTxHashAttr, TxHash as TxHashAttr,
+};
 use namada_gas::{IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS};
 use namada_state::write_log::StorageModification;
 use namada_state::{Error, Result, StateRead};
@@ -280,9 +284,18 @@ where
             .state
             .write_log()
             .get_events_of::<IbcEvent>()
+            .cloned()
+            .map(|mut event| {
+                // NB: these attributes are attached to wasm txs
+                // by the protocol.
+                event.delete_attribute::<TxHashAttr>();
+                event.delete_attribute::<InnerTxHashAttr>();
+                Cow::Owned(event)
+            })
             .collect();
         let ctx_borrow = ctx.borrow();
-        let expected: BTreeSet<_> = ctx_borrow.storage.event.iter().collect();
+        let expected: BTreeSet<_> =
+            ctx_borrow.storage.event.iter().map(Cow::Borrowed).collect();
         if actual != expected {
             return Err(VpError::IbcEvent(format!(
                 "The IBC event is invalid: Actual {actual:?}, Expected \
