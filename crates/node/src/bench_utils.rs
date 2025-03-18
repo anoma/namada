@@ -1056,16 +1056,14 @@ impl Client for BenchShell {
                 let tx_event: Event = new_tx_event(tx, height.value())
                     .with(Batch(&tx_result))
                     .into();
-                let mut masp_ref = None;
-                for section in &tx.sections {
+                // Expect a single masp tx in the batch
+                let masp_ref = tx.sections.iter().find_map(|section| {
                     if let Section::MaspTx(transaction) = section {
-                        masp_ref = Some(MaspTxRef::MaspSection(
-                            transaction.txid().into(),
-                        ));
-                        // Expect a single masp tx in the batch
-                        break;
+                        Some(MaspTxRef::MaspSection(transaction.txid().into()))
+                    } else {
+                        None
                     }
-                }
+                });
 
                 let masp_event = masp_ref.map(|data| {
                     let masp_event: Event = MaspEvent {
