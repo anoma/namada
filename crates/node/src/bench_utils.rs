@@ -276,6 +276,7 @@ impl BenchShellInner {
         run::tx(
             &mut self.inner.state,
             &gas_meter,
+            None,
             &TxIndex(0),
             batched_tx.tx,
             batched_tx.cmt,
