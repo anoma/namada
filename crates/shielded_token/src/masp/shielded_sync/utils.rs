@@ -727,14 +727,30 @@ mod test_blocks_left_to_fetch {
             },
         };
         let ev3 = MaspIndexedTx {
+            kind: MaspTxKind::Transfer,
+            indexed_tx: IndexedTx {
+                block_height: BlockHeight(3),
+                block_index: TxIndex(1),
+                batch_index: Some(1),
+            },
+        };
+        let ev4 = MaspIndexedTx {
+            kind: MaspTxKind::FeePayment,
+            indexed_tx: IndexedTx {
+                block_height: BlockHeight(3),
+                block_index: TxIndex(3),
+                batch_index: Some(2),
+            },
+        };
+        let ev5 = MaspIndexedTx {
             kind: MaspTxKind::FeePayment,
             indexed_tx: IndexedTx {
                 block_height: BlockHeight(3),
                 block_index: TxIndex(2),
-                batch_index: Some(2),
+                batch_index: Some(0),
             },
         };
-        let ev4 = MaspIndexedTx {
+        let ev6 = MaspIndexedTx {
             kind: MaspTxKind::Transfer,
             indexed_tx: IndexedTx {
                 block_height: BlockHeight(1),
@@ -742,7 +758,7 @@ mod test_blocks_left_to_fetch {
                 batch_index: Some(1),
             },
         };
-        let ev5 = MaspIndexedTx {
+        let ev7 = MaspIndexedTx {
             kind: MaspTxKind::Transfer,
             indexed_tx: IndexedTx {
                 block_height: BlockHeight(1),
@@ -751,10 +767,10 @@ mod test_blocks_left_to_fetch {
             },
         };
 
-        let mut txs = [ev1, ev2, ev3, ev4, ev5];
+        let mut txs = [ev1, ev2, ev3, ev4, ev5, ev6, ev7];
 
         txs.sort();
 
-        assert_eq!(txs, [ev1, ev5, ev4, ev2, ev3])
+        assert_eq!(txs, [ev1, ev7, ev6, ev2, ev5, ev4, ev3])
     }
 }
