@@ -999,7 +999,7 @@ impl<'finalize> TempTxLogs {
     ) -> ValidityFlags {
         let mut flags = ValidityFlags::default();
 
-        for (cmt_hash, batched_result) in tx_result.0.iter_mut() {
+        for (cmt_hash, batched_result) in tx_result.iter_mut() {
             match batched_result {
                 Ok(result) => {
                     if result.is_accepted() {
@@ -1015,10 +1015,6 @@ impl<'finalize> TempTxLogs {
                         self.stats.increment_successful_txs();
                         flags.commit_batch_hash = true;
 
-                        // FIXME: let's start by taking the events here and then
-                        // do another commit where maybe we rework TxResult?
-                        // Need to see if it brakes compatibility with external
-                        // tools
                         self.response_events.emit_many(
                             // Take the events to avoid replicating them when
                             // emitting the transaction's result event
