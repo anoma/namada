@@ -456,7 +456,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     async fn precompute_asset_types<C: Client + Sync>(
         &mut self,
         client: &C,
-        tokens: Vec<&Address>,
+        tokens: BTreeSet<&Address>,
     ) -> Result<(), eyre::Error> {
         // To facilitate lookups of human-readable token names
         for token in tokens {
@@ -1796,10 +1796,10 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             .encode()
             .map_err(|_| eyre!("unable to create asset type"))?;
         if self.decode_asset_type(client, asset_type).await.is_none() {
-            // If we fail to decode the epoched asset type, then remove the
+            // If we fail to decode the dated asset type, then remove the
             // epoch
             tracing::debug!(
-                "Failed to decode epoched asset type, undating it: {:#?}",
+                "Failed to decode dated asset type, undating it: {:#?}",
                 decoded
             );
             *decoded = decoded.clone().undate();

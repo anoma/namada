@@ -1,13 +1,20 @@
 //! Token transaction
 
 use std::borrow::Cow;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
+use namada_core::arith::CheckedSub;
 use namada_core::collections::HashSet;
-use namada_core::masp;
+use namada_core::masp::encode_asset_type;
+use namada_core::masp_primitives::transaction::Transaction;
+use namada_core::token::MaspDigitPos;
+use namada_core::uint::I320;
+use namada_core::{masp, token};
 use namada_events::EmitEvents;
-use namada_shielded_token::{utils, MaspTxId};
+use namada_shielded_token::storage_key::masp_undated_balance_key;
+use namada_shielded_token::{read_undated_balance, utils, MaspTxId};
 use namada_storage::{Error, OptionExt, ResultExt};
+use namada_trans_token::read_denom;
 pub use namada_trans_token::tx::transfer;
 use namada_tx::action::{self, Action, MaspAction};
 use namada_tx::BatchedTx;
@@ -26,12 +33,12 @@ where
     ENV: TxEnv + EmitEvents + action::Write<Err = Error>,
 {
     // Effect the transparent multi transfer(s)
-    let debited_accounts =
+    let (debited_accounts, tokens) =
         if let Some(transparent) = transfers.transparent_part() {
             apply_transparent_transfers(env, transparent, event_desc)
                 .wrap_err("Transparent token transfer failed")?
         } else {
-            HashSet::new()
+            (HashSet::new(), HashSet::new())
         };
 
     // Apply the shielded transfer if there is a link to one
@@ -40,6 +47,7 @@ where
             env,
             masp_section_ref,
             debited_accounts,
+            tokens,
             tx_data,
         )
         .wrap_err("Shielded token transfer failed")?;
@@ -56,16 +64,93 @@ pub fn apply_transparent_transfers<ENV>(
     env: &mut ENV,
     transfers: TransparentTransfersRef<'_>,
     event_desc: Cow<'static, str>,
-) -> Result<HashSet<Address>>
+) -> Result<(HashSet<Address>, HashSet<Address>)>
 where
     ENV: TxEnv + EmitEvents,
 {
     let sources = transfers.sources();
     let targets = transfers.targets();
-    let debited_accounts = namada_trans_token::tx::multi_transfer(
+    let (debited_accounts, tokens) = namada_trans_token::tx::multi_transfer(
         env, sources, targets, event_desc,
     )?;
-    Ok(debited_accounts)
+    Ok((debited_accounts, tokens))
+}
+
+/// Update the undated balance keys to reflect the net changes implied by the
+/// given shielded transaction.
+///
+/// This function takes the set of token addresses impacted by the transaction
+/// in order to help it decode the asset types in its value balance.
+pub fn update_undated_balances<ENV>(
+    env: &mut ENV,
+    shielded: &Transaction,
+    tokens: HashSet<Address>,
+) -> Result<()>
+where
+    ENV: TxEnv + EmitEvents + action::Write<Err = Error>,
+{
+    // Record undated balance changes
+    let mut undated_balances = BTreeMap::new();
+    let mut undated_asset_types = BTreeMap::new();
+    let asset_type_err =
+        |err| Error::new_alloc(format!("unable to create asset type: {err}"));
+    // First construct a map to decode asset types
+    for token in tokens {
+        let Some(denom) = read_denom(env, &token)? else {
+            // Ignore asset type if denomination cannot be read
+            continue;
+        };
+        // Read the undated balance of the current token
+        let undated_balance = read_undated_balance(env, &token)?;
+        // Save the undated balance in a map for updating
+        undated_balances.insert(token.clone(), I320::from(undated_balance));
+        // Store the encoding for each digit
+        for digit in MaspDigitPos::iter() {
+            let atype = encode_asset_type(token.clone(), denom, digit, None)
+                .map_err(asset_type_err)?;
+            undated_asset_types.insert(atype, (token.clone(), denom, digit));
+        }
+    }
+    // Update the undated balances with the Sapling value balance
+    for (asset_type, val) in shielded.sapling_value_balance().components() {
+        let Some((token, _denom, digit)) = undated_asset_types.get(asset_type)
+        else {
+            // Assume that token cannot be decoded because it's dated
+            continue;
+        };
+        // Retrieve the current undated balance
+        let undated_balance =
+            undated_balances.get_mut(token).ok_or_else(|| {
+                Error::new_alloc(format!(
+                    "unable to retrieve undated balance for {token}"
+                ))
+            })?;
+        // Construct the undated balance change from value and digit
+        let change =
+            I320::from_masp_denominated(*val, *digit).map_err(|_| {
+                Error::new_alloc(format!(
+                    "overflow in undated balance for {token}"
+                ))
+            })?;
+        // Update the undated balance
+        *undated_balance =
+            undated_balance.checked_sub(change).ok_or_else(|| {
+                Error::new_alloc(format!(
+                    "overflow in undated balance for {token}"
+                ))
+            })?;
+    }
+    // Now commit to the updated balances to storage
+    for (token, balance) in undated_balances {
+        let undated_balance_key = masp_undated_balance_key(&token);
+        // Convert the undated balance back into an Amount
+        let balance: token::Amount = balance.try_into().map_err(|_| {
+            Error::new_alloc(format!("overflow in undated balance for {token}"))
+        })?;
+        // Save the unddated balance back into storage
+        env.write(&undated_balance_key, balance)?;
+    }
+    Ok(())
 }
 
 /// Apply a shielded transfer
@@ -73,6 +158,7 @@ pub fn apply_shielded_transfer<ENV>(
     env: &mut ENV,
     masp_section_ref: MaspTxId,
     debited_accounts: HashSet<Address>,
+    tokens: HashSet<Address>,
     tx_data: &BatchedTx,
 ) -> Result<()>
 where
@@ -94,6 +180,7 @@ where
     env.push_action(Action::Masp(MaspAction::MaspSectionRef(
         masp_section_ref,
     )))?;
+    update_undated_balances(env, &shielded, tokens)?;
     // Extract the debited accounts for the masp part of the transfer and
     // push the relative actions
     let vin_addresses =
