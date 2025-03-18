@@ -228,6 +228,9 @@ pub struct DryRunResult(pub TxResult<String>, pub WholeGas);
 // management with regards to replay protection, whereas for logging we use
 // strings
 // TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
+// FIXME: if we change the type we serialize in the events maybe we don't need
+// the generic on this one anymore
+// FIXME: should we try removing this generic?
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct TxResult<T>(HashMap<Hash, Result<BatchedTxResult, T>>);
 
@@ -237,6 +240,7 @@ impl<T> Default for TxResult<T> {
     }
 }
 
+// FIXME: if we remove the generic can we also remove this?
 impl<T: Serialize> Serialize for TxResult<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -403,6 +407,8 @@ pub struct BatchedTxResult {
     /// New established addresses created by the transaction
     pub initialized_accounts: Vec<Address>,
     /// Events emitted by the transaction
+    // FIXME: also need to skip borsh serialization?
+    #[serde(skip_serializing, skip_deserializing)]
     pub events: BTreeSet<Event>,
 }
 
@@ -476,6 +482,7 @@ pub struct VpsResult {
     pub status_flags: VpStatusFlags,
 }
 
+// FIXME: maybe no need for these display and from str anymore
 impl<T: Serialize> fmt::Display for TxResult<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if f.alternate() {
