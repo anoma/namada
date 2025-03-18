@@ -24,6 +24,9 @@ use crate::borsh::BorshSerializeExt;
 /// The maximum number of character printed per value.
 const PRINTLN_CUTOFF: usize = 300;
 
+/// For migrations involving the conversion state
+const CONVERSION_STATE_KEY: &str = "conversion_state";
+
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 enum UpdateBytes {
     Raw {
@@ -303,6 +306,19 @@ impl DbUpdateType {
                         key
                     };
                     state.in_mem_mut().block.tree.update(merk_key, value)?;
+                } else if DbColFam::STATE == *cf
+                    && CONVERSION_STATE_KEY == key.to_string()
+                {
+                    let conversion_state =
+                        crate::decode(value).map_err(|_| {
+                            eyre::eyre!(
+                                "The value provided for the key {} is not a \
+                                 valid ConversionState",
+                                key,
+                            )
+                        })?;
+                    // Make sure to put the conversion state into memory too
+                    state.in_mem_mut().conversion_state = conversion_state;
                 }
 
                 migrator.write(state.db(), key, cf, value, persist_diffs);
