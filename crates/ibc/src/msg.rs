@@ -11,7 +11,9 @@ use ibc::apps::nft_transfer::types::PORT_ID_STR as NFT_PORT_ID_STR;
 use ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use ibc::apps::transfer::types::packet::PacketData;
 use ibc::apps::transfer::types::PORT_ID_STR as FT_PORT_ID_STR;
-use ibc::core::channel::types::msgs::PacketMsg;
+use ibc::core::channel::types::msgs::{
+    MsgRecvPacket as IbcMsgRecvPacket, PacketMsg,
+};
 use ibc::core::channel::types::packet::Packet;
 use ibc::core::handler::types::msgs::MsgEnvelope;
 use ibc::core::host::types::identifiers::PortId;
@@ -20,6 +22,8 @@ use masp_primitives::transaction::Transaction as MaspTransaction;
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::string_encoding::StringEncoded;
 use serde::{Deserialize, Serialize};
+
+use crate::trace;
 
 trait Sealed {}
 
@@ -324,6 +328,38 @@ fn extract_memo_from_packet(
             );
             None
         }
+    }
+}
+
+/// Extract the traces used in a receive packet message
+pub fn extract_traces_from_recv_msg(
+    msg: &IbcMsgRecvPacket,
+) -> Result<Vec<String>, serde_json::Error> {
+    match msg.packet.port_id_on_b.as_str() {
+        FT_PORT_ID_STR => {
+            // Record the token credited/debited in this
+            // transfer
+            let packet_data =
+                serde_json::from_slice::<PacketData>(&msg.packet.data)?;
+            let ibc_denom = packet_data.token.denom.to_string();
+            Ok([ibc_denom].into())
+        }
+        NFT_PORT_ID_STR => {
+            // Record the tokens credited/debited in this NFT
+            // transfer
+            let packet_data =
+                serde_json::from_slice::<NftPacketData>(&msg.packet.data)?;
+            let ibc_traces: Vec<_> = packet_data
+                .token_ids
+                .0
+                .iter()
+                .map(|token_id| {
+                    trace::ibc_trace_for_nft(&packet_data.class_id, token_id)
+                })
+                .collect();
+            Ok(ibc_traces)
+        }
+        _ => Ok(vec![]),
     }
 }
 

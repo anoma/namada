@@ -28,7 +28,7 @@ use crate::string_encoding::{
     self, MASP_EXT_FULL_VIEWING_KEY_HRP, MASP_EXT_SPENDING_KEY_HRP,
     MASP_PAYMENT_ADDRESS_HRP,
 };
-use crate::token::{Denomination, MaspDigitPos};
+use crate::token::{Denomination, MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
 
 /// Serialize the given TxId
 pub fn serialize_txid<S>(txid: &TxIdInner, s: S) -> Result<S::Ok, S::Error>
@@ -249,11 +249,15 @@ pub fn encode_asset_type(
     .encode()
 }
 
-/// Encode the assets that are used for masp rewards
+/// Encode the assets that are used for masp rewards. The address supplied to
+/// this function must be that of the native token.
 pub fn encode_reward_asset_types(
     native_token: &Address,
 ) -> Result<[AssetType; 4], std::io::Error> {
-    use crate::token::{MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
+    // Construct MASP asset type for rewards. Always deflate and timestamp
+    // reward tokens with the zeroth epoch to minimize the number of convert
+    // notes clients have to use. This trick works under the assumption that
+    // reward tokens will then be reinflated back to the current epoch.
     Ok([
         encode_asset_type(
             native_token.clone(),

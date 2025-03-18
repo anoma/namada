@@ -1,5 +1,7 @@
 //! Shielded token storage keys
 
+use std::str::FromStr;
+
 use masp_primitives::bls12_381::Scalar;
 use masp_primitives::sapling::Nullifier;
 use namada_core::address::{self, Address};
@@ -11,6 +13,8 @@ use namada_systems::trans_token;
 const BALANCE_STORAGE_KEY: &str = "balance";
 /// Key segment prefix for the nullifiers
 pub const MASP_NULLIFIERS_KEY: &str = "nullifiers";
+/// The key for the masp reward balance
+pub const MASP_UNDATED_BALANCE_KEY: &str = "undated_balance";
 /// Key segment prefix for the note commitment merkle tree
 pub const MASP_NOTE_COMMITMENT_TREE_KEY: &str = "commitment_tree";
 /// Key segment prefix for the note commitment anchor
@@ -85,6 +89,27 @@ pub fn masp_last_inflation_key<TransToken: trans_token::Keys>(
         .with_segment(MASP_LAST_INFLATION_KEY.to_owned())
 }
 
+/// Check if the given storage key is a masp reward balance key
+pub fn is_masp_undated_balance_key(key: &storage::Key) -> Option<Address> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(address::MASP),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(token),
+        ] if prefix == MASP_UNDATED_BALANCE_KEY => {
+            Address::from_str(token).ok()
+        }
+        _ => None,
+    }
+}
+
+/// Obtain the storage key for the undated balance of a token
+pub fn masp_undated_balance_key(token_address: &Address) -> storage::Key {
+    storage::Key::from(address::MASP.to_db_key())
+        .with_segment(MASP_UNDATED_BALANCE_KEY.to_owned())
+        .with_segment(token_address.to_string().to_db_key())
+}
+
 /// Check if the given storage key is MASP transparent balance key
 pub fn is_masp_balance_key(key: &storage::Key) -> bool {
     matches!(
@@ -115,12 +140,11 @@ pub fn is_masp_transfer_key(key: &storage::Key) -> bool {
         {
             true
         }
-        [
-            DbKeySeg::AddressSeg(addr),
-            DbKeySeg::StringSeg(key),
-            DbKeySeg::StringSeg(_nullifier),
-        ] if *addr == address::MASP && key == MASP_NULLIFIERS_KEY => true,
-        _ => is_masp_balance_key(key),
+        _ => {
+            is_masp_nullifier_key(key)
+                || is_masp_balance_key(key)
+                || is_masp_undated_balance_key(key).is_some()
+        }
     }
 }
 
@@ -129,7 +153,7 @@ pub fn is_masp_nullifier_key(key: &storage::Key) -> bool {
     matches!(&key.segments[..],
     [DbKeySeg::AddressSeg(addr),
              DbKeySeg::StringSeg(prefix),
-             ..
+             DbKeySeg::StringSeg(_nullifier),
         ] if *addr == address::MASP && prefix == MASP_NULLIFIERS_KEY)
 }
 
