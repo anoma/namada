@@ -977,7 +977,7 @@ impl IndexedTxRange {
             IndexedTx {
                 block_height: to,
                 block_index: TxIndex(u32::MAX),
-                batch_index: None,
+                batch_index: Some(u32::MAX),
             },
         )
     }
