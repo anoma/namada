@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 #[cfg(any(feature = "multicore", test))]
 use masp_primitives::asset_type::AssetType;
 #[cfg(any(feature = "multicore", test))]
-use masp_primitives::convert::AllowedConversion;
+use masp_primitives::convert::{AllowedConversion, UncheckedAllowedConversion};
 #[cfg(any(feature = "multicore", test))]
 use masp_primitives::transaction::components::I128Sum as MaspAmount;
 use namada_controller::PDController;
@@ -529,7 +529,8 @@ where
     S: StorageWrite + StorageRead + WithConversionState,
 {
     let conversion_key_prefix = masp_conversion_key_prefix();
-    let mut conversion_updates = BTreeMap::new();
+    let mut conversion_updates =
+        BTreeMap::<_, UncheckedAllowedConversion>::new();
     // Read conversion updates from storage and store them in a map
     for conv_result in iter_prefix_with_filter_map(
         storage,
@@ -556,7 +557,7 @@ where
             );
             continue;
         };
-        leaf.conversion = conv;
+        leaf.conversion = conv.0;
     }
     // Delete the updates now that they have been applied
     storage.delete_prefix(&conversion_key_prefix)?;
