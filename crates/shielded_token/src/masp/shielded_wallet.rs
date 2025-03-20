@@ -43,11 +43,11 @@ use namada_io::{
     display_line, edisplay_line, Io, MaybeSend, MaybeSync, NamadaIo,
     ProgressBar,
 };
-use namada_tx::IndexedTx;
 use namada_wallet::{DatedKeypair, DatedSpendingKey};
 use rand::prelude::StdRng;
 use rand_core::{OsRng, SeedableRng};
 
+use super::utils::MaspIndexedTx;
 use crate::masp::utils::MaspClient;
 #[cfg(any(test, feature = "testing"))]
 use crate::masp::{testing, ENV_VAR_MASP_TEST_SEED};
@@ -70,7 +70,7 @@ pub struct ShieldedWallet<U: ShieldedUtils> {
     pub tree: CommitmentTree<Node>,
     /// Maps viewing keys to the block height to which they are synced.
     /// In particular, the height given by the value *has been scanned*.
-    pub vk_heights: BTreeMap<ViewingKey, Option<IndexedTx>>,
+    pub vk_heights: BTreeMap<ViewingKey, Option<MaspIndexedTx>>,
     /// Maps viewing keys to applicable note positions
     pub pos_map: HashMap<ViewingKey, BTreeSet<usize>>,
     /// Maps a nullifier to the note position to which it applies
@@ -141,34 +141,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
         self.utils.save(self).await
     }
 
-    /// Update only the Merkle tree without updating anything else. Useful for
-    /// checking note commitment tree anchors with less overhead.
-    pub(crate) fn update_merkle_tree(
-        &mut self,
-        shielded: &Transaction,
-    ) -> Result<(), eyre::Error> {
-        for so in shielded
-            .sapling_bundle()
-            .map_or(&vec![], |x| &x.shielded_outputs)
-        {
-            // Create merkle tree leaf node from note commitment
-            let node = Node::new(so.cmu.to_repr());
-            self.tree.append(node).map_err(|()| {
-                eyre!("note commitment tree is full".to_string())
-            })?;
-        }
-        Ok(())
-    }
-
     /// Update the merkle tree of witnesses the first time we
     /// scan new MASP transactions.
     pub(crate) fn update_witness_map(
         &mut self,
-        indexed_tx: IndexedTx,
+        masp_indexed_tx: MaspIndexedTx,
         shielded: &Transaction,
     ) -> Result<(), eyre::Error> {
         let mut note_pos = self.tree.size();
-        self.note_index.insert(indexed_tx, note_pos);
+        self.note_index.insert(masp_indexed_tx, note_pos);
 
         for so in shielded
             .sapling_bundle()
@@ -237,7 +218,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
             ));
         };
         Ok(maybe_least_synced_vk_height
-            .map_or_else(BlockHeight::first, |itx| itx.block_height))
+            .map_or_else(BlockHeight::first, |itx| itx.indexed_tx.block_height))
     }
 
     #[allow(missing_docs)]

@@ -7,9 +7,10 @@ use either::Either;
 use eyre::{eyre, WrapErr};
 use namada_sdk::address::{Address, InternalAddress};
 use namada_sdk::booleans::BoolResultUnitExt;
+use namada_sdk::chain::BlockHeight;
+use namada_sdk::collections::HashSet;
 use namada_sdk::events::extend::{
-    ComposeEvent, Height as HeightAttr, MaspTxRef, MaspTxRefs,
-    TxHash as TxHashAttr, UserAccount,
+    ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr, UserAccount,
 };
 use namada_sdk::events::EventLevel;
 use namada_sdk::gas::{self, Gas, GasMetering, TxGasMeter, VpGasMeter};
@@ -25,10 +26,11 @@ use namada_sdk::token::Amount;
 use namada_sdk::tx::action::{self, Read};
 use namada_sdk::tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_sdk::tx::data::{
-    BatchedTxResult, ExtendedTxResult, TxResult, VpStatusFlags, VpsResult,
+    compute_inner_tx_hash, BatchedTxResult, TxResult, VpStatusFlags, VpsResult,
     WrapperTx,
 };
-use namada_sdk::tx::{BatchedTxRef, Tx, TxCommitments};
+use namada_sdk::tx::event::{MaspEvent, MaspEventKind, MaspTxRef};
+use namada_sdk::tx::{BatchedTxRef, IndexedTx, Tx, TxCommitments};
 use namada_sdk::validation::{
     EthBridgeNutVp, EthBridgePoolVp, EthBridgeVp, GovernanceVp, IbcVp, MaspVp,
     MultitokenVp, NativeVpCtx, ParametersVp, PgfVp, PosVp,
@@ -140,9 +142,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct DispatchError {
     /// The result of the function call
     pub error: Error,
-    /// The extended tx result produced. It could be produced even in case of
+    /// The tx result produced. It could be produced even in case of
     /// an error
-    pub tx_result: Option<ExtendedTxResult<Error>>,
+    pub tx_result: Option<TxResult<Error>>,
 }
 
 impl Display for DispatchError {
@@ -168,12 +170,14 @@ pub enum DispatchArgs<'a, CA: 'static + WasmCacheAccess + Sync> {
     Raw {
         /// The tx index
         tx_index: TxIndex,
+        /// The block height
+        height: BlockHeight,
         /// Hash of the header of the wrapper tx containing
         /// this raw tx
         wrapper_hash: Option<&'a Hash>,
         /// The result of the corresponding wrapper tx (missing if governance
         /// transaction)
-        wrapper_tx_result: Option<ExtendedTxResult<Error>>,
+        wrapper_tx_result: Option<TxResult<Error>>,
         /// Vp cache
         vp_wasm_cache: &'a mut VpCache<CA>,
         /// Tx cache
@@ -187,6 +191,8 @@ pub enum DispatchArgs<'a, CA: 'static + WasmCacheAccess + Sync> {
         tx_bytes: &'a [u8],
         /// The tx index
         tx_index: TxIndex,
+        /// The block height
+        height: BlockHeight,
         /// The block proposer
         block_proposer: &'a Address,
         /// Vp cache
@@ -205,7 +211,7 @@ pub fn dispatch_tx<'a, D, H, CA>(
     dispatch_args: DispatchArgs<'a, CA>,
     tx_gas_meter: &'a RefCell<TxGasMeter>,
     state: &'a mut WlState<D, H>,
-) -> std::result::Result<ExtendedTxResult<Error>, DispatchError>
+) -> std::result::Result<TxResult<Error>, DispatchError>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -214,6 +220,7 @@ where
     match dispatch_args {
         DispatchArgs::Raw {
             tx_index,
+            height,
             wrapper_hash,
             wrapper_tx_result,
             vp_wasm_cache,
@@ -236,6 +243,7 @@ where
                     wrapper_hash,
                     tx_result,
                     tx_index,
+                    height,
                     tx_gas_meter,
                     state,
                     vp_wasm_cache,
@@ -266,8 +274,7 @@ where
                         Ok(batched_tx_result),
                     );
                     batch_results
-                }
-                .to_extended_result(None))
+                })
             }
         }
         DispatchArgs::Protocol(protocol_tx) => {
@@ -284,13 +291,13 @@ where
                     Ok(batched_tx_result),
                 );
                 batch_results
-            }
-            .to_extended_result(None))
+            })
         }
         DispatchArgs::Wrapper {
             wrapper,
             tx_bytes,
             tx_index,
+            height,
             block_proposer,
             vp_wasm_cache,
             tx_wasm_cache,
@@ -307,6 +314,7 @@ where
                 wrapper,
                 tx_bytes,
                 &tx_index,
+                height,
                 tx_gas_meter,
                 &mut shell_params,
                 Some(block_proposer),
@@ -316,31 +324,18 @@ where
     }
 }
 
-pub(crate) fn get_batch_txs_to_execute<'a>(
-    tx: &'a Tx,
-    masp_tx_refs: &MaspTxRefs,
-) -> impl Iterator<Item = &'a TxCommitments> {
-    let mut batch_iter = tx.commitments().iter();
-    if !masp_tx_refs.0.is_empty() {
-        // If fees were paid via masp skip the first transaction of the batch
-        // which has already been executed
-        batch_iter.next();
-    }
-
-    batch_iter
-}
-
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn dispatch_inner_txs<'a, S, D, H, CA>(
     tx: &Tx,
     wrapper_hash: Option<&'a Hash>,
-    mut extended_tx_result: ExtendedTxResult<Error>,
+    mut tx_result: TxResult<Error>,
     tx_index: TxIndex,
+    height: BlockHeight,
     tx_gas_meter: &'a RefCell<TxGasMeter>,
     state: &'a mut S,
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
-) -> std::result::Result<ExtendedTxResult<Error>, DispatchError>
+) -> std::result::Result<TxResult<Error>, DispatchError>
 where
     S: 'static
         + State<D = D, H = H>
@@ -351,7 +346,20 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    for cmt in get_batch_txs_to_execute(tx, &extended_tx_result.masp_tx_refs) {
+    // Extract the inner transactions of the batch that need to be executed,
+    // excluding those that already ran during the handling of the wrapper tx.
+    let inner_txs = tx
+        .commitments()
+        .iter()
+        .filter(|cmt| {
+            let inner_tx_hash =
+                compute_inner_tx_hash(wrapper_hash, Either::Right(cmt));
+            !tx_result.0.contains_key(&inner_tx_hash)
+        })
+        .collect::<HashSet<_>>()
+        .into_iter();
+
+    for cmt in inner_txs {
         match apply_wasm_tx(
             wrapper_hash,
             &tx.batch_ref_tx(cmt),
@@ -365,7 +373,7 @@ where
         ) {
             Err(Error::GasError(ref msg)) => {
                 // Gas error aborts the execution of the entire batch
-                extended_tx_result.tx_result.insert_inner_tx_result(
+                tx_result.insert_inner_tx_result(
                     wrapper_hash,
                     either::Right(cmt),
                     Err(Error::GasError(msg.to_owned())),
@@ -373,54 +381,68 @@ where
                 state.write_log_mut().drop_tx();
                 return Err(DispatchError {
                     error: Error::GasError(msg.to_owned()),
-                    tx_result: Some(extended_tx_result),
+                    tx_result: Some(tx_result),
                 });
             }
-            res => {
-                let batched_tx_result = match &res {
-                    Ok(batched_tx_result) => Some(batched_tx_result.to_owned()),
-                    Err(_) => None,
-                };
+            Ok(mut batched_tx_result) if batched_tx_result.is_accepted() => {
+                // If the transaction was a masp one generate the
+                // appropriate event
+                if let Some(masp_ref) = get_optional_masp_ref(
+                    state,
+                    cmt,
+                    Either::Right(&batched_tx_result),
+                )? {
+                    batched_tx_result.events.insert(
+                        MaspEvent {
+                            tx_index: IndexedTx {
+                                block_height: height,
+                                block_index: tx_index,
+                                batch_index: tx
+                                    .header
+                                    .batch
+                                    .get_index_of(cmt)
+                                    .map(|idx| {
+                                        TxIndex::must_from_usize(idx).into()
+                                    }),
+                            },
+                            kind: MaspEventKind::Transfer,
+                            data: masp_ref,
+                        }
+                        .into(),
+                    );
+                }
 
-                extended_tx_result.tx_result.insert_inner_tx_result(
+                tx_result.insert_inner_tx_result(
+                    wrapper_hash,
+                    either::Right(cmt),
+                    Ok(batched_tx_result),
+                );
+
+                state.write_log_mut().commit_tx_to_batch();
+            }
+            // Handle all the other failure cases
+            res => {
+                tx_result.insert_inner_tx_result(
                     wrapper_hash,
                     either::Right(cmt),
                     res,
                 );
 
-                match batched_tx_result {
-                    Some(ref res) if res.is_accepted() => {
-                        // If the transaction was a masp one append the
-                        // transaction refs for the events.
-                        if let Some(masp_ref) = get_optional_masp_ref(
-                            state,
-                            cmt,
-                            Either::Right(res),
-                        )? {
-                            extended_tx_result.masp_tx_refs.0.push(masp_ref)
-                        }
-                        state.write_log_mut().commit_tx_to_batch();
-                    }
-                    _ => {
-                        state.write_log_mut().drop_tx();
+                state.write_log_mut().drop_tx();
 
-                        if tx.header.atomic {
-                            // Stop the execution of an atomic batch at the
-                            // first failed transaction
-                            return Err(DispatchError {
-                                error: Error::FailingAtomicBatch(
-                                    cmt.get_hash(),
-                                ),
-                                tx_result: Some(extended_tx_result),
-                            });
-                        }
-                    }
+                if tx.header.atomic {
+                    // Stop the execution of an atomic batch at the
+                    // first failed transaction
+                    return Err(DispatchError {
+                        error: Error::FailingAtomicBatch(cmt.get_hash()),
+                        tx_result: Some(tx_result),
+                    });
                 }
             }
         };
     }
 
-    Ok(extended_tx_result)
+    Ok(tx_result)
 }
 
 /// Transaction result for masp transfer
@@ -433,15 +455,17 @@ pub struct MaspTxResult {
 ///  - replay protection
 ///  - fee payment
 ///  - gas accounting
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
     tx: &Tx,
     wrapper: &WrapperTx,
     tx_bytes: &[u8],
     tx_index: &TxIndex,
+    height: BlockHeight,
     tx_gas_meter: &RefCell<TxGasMeter>,
     shell_params: &mut ShellParams<'_, S, D, H, CA>,
     block_proposer: Option<&Address>,
-) -> Result<ExtendedTxResult<Error>>
+) -> Result<TxResult<Error>>
 where
     S: 'static
         + State<D = D, H = H>
@@ -477,10 +501,23 @@ where
         .write_log_mut()
         .commit_batch_and_current_tx();
 
-    let (batch_results, masp_section_refs) = payment_result.map_or_else(
-        || (TxResult::default(), None),
-        |masp_tx_result| {
+    let batch_results =
+        payment_result.map_or_else(TxResult::default, |mut masp_tx_result| {
             let mut batch = TxResult::default();
+            // Generate Masp event if needed
+            masp_tx_result.tx_result.events.insert(
+                MaspEvent {
+                    tx_index: IndexedTx {
+                        block_height: height,
+                        block_index: tx_index.to_owned(),
+                        batch_index: Some(0),
+                    },
+                    kind: MaspEventKind::FeePayment,
+                    data: masp_tx_result.masp_section_ref,
+                }
+                .into(),
+            );
+
             batch.insert_inner_tx_result(
                 // Ok to unwrap cause if we have a batched result it means
                 // we've executed the first tx in the batch
@@ -488,12 +525,9 @@ where
                 either::Right(tx.first_commitments().unwrap()),
                 Ok(masp_tx_result.tx_result),
             );
-            (
-                batch,
-                Some(MaspTxRefs(vec![masp_tx_result.masp_section_ref])),
-            )
-        },
-    );
+
+            batch
+        });
 
     // Account for gas
     tx_gas_meter
@@ -501,7 +535,7 @@ where
         .add_wrapper_gas(tx_bytes)
         .map_err(|err| Error::GasError(err.to_string()))?;
 
-    Ok(batch_results.to_extended_result(masp_section_refs))
+    Ok(batch_results)
 }
 
 /// Perform the actual transfer of fees from the fee payer to the block
