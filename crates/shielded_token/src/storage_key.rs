@@ -70,7 +70,7 @@ pub fn masp_max_reward_rate_key<TransToken: trans_token::Keys>(
         .with_segment(MASP_MAX_REWARD_RATE_KEY.to_owned())
 }
 
-/// The precision of rewards for the given token
+/// The shielded reward precision key for the given token
 pub fn masp_reward_precision_key<TransToken: trans_token::Keys>(
     token_addr: &Address,
 ) -> storage::Key {
@@ -102,7 +102,7 @@ pub fn masp_last_inflation_key<TransToken: trans_token::Keys>(
         .with_segment(MASP_LAST_INFLATION_KEY.to_owned())
 }
 
-/// Check if the given storage key is a masp reward balance key
+/// Check if the given storage key is the undated balance of a token
 pub fn is_masp_undated_balance_key(key: &storage::Key) -> Option<Address> {
     match &key.segments[..] {
         [
@@ -199,7 +199,7 @@ pub fn is_masp_token_map_key(key: &storage::Key) -> bool {
         ] if *addr == address::MASP && prefix == MASP_TOKEN_MAP_KEY)
 }
 
-/// Check if the given storage key is a masp nullifier key
+/// Check if the given storage key is a masp conversion key
 pub fn is_masp_conversion_key(key: &storage::Key) -> Option<AssetType> {
     match &key.segments[..] {
         [
