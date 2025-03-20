@@ -2273,9 +2273,9 @@ checksum = "04cbf5b083de1c7e0222a7a51dbfdba1cbe1c6ab0b15e29fff3f6c077fd9cd9f"
 
 [[package]]
 name = "masp_note_encryption"
-version = "1.2.0"
+version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9736dbd86140a9d6711b464297a87af9cc0ae485d73a956c595f1bc1f6a7920"
+checksum = "7b136637896ff0e2a9f18f25464eb8cc75dde909ab616918d3e13ab7401ab89a"
 dependencies = [
  "borsh",
  "chacha20",
@@ -2287,9 +2287,9 @@ dependencies = [
 
 [[package]]
 name = "masp_primitives"
-version = "1.2.0"
+version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fb184254ca5cd5fb12e11b81a6a0d6b955d98c7263eae11057f669c31c7123c"
+checksum = "c6c3739b3b1a5e767ad88a38c9000cf8014e5fab84b93c4e9415e10a56cede54"
 dependencies = [
  "aes",
  "bip0039",
@@ -2319,9 +2319,9 @@ dependencies = [
 
 [[package]]
 name = "masp_proofs"
-version = "1.2.0"
+version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "833eb23ccc5e4781636f6a7b2e720f60f31e53e534d1abb2b0ac5e86eb099c14"
+checksum = "131fd70050405eb3cfd45e704982a1b44fafc9443dbb352d079ccf1c1cda53c9"
 dependencies = [
  "bellman",
  "blake2b_simd",
