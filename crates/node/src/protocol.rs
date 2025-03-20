@@ -384,63 +384,59 @@ where
                     tx_result: Some(tx_result),
                 });
             }
-            mut res => {
-                let is_tx_accepted = match &mut res {
-                    Ok(batched_tx_result)
-                        if batched_tx_result.is_accepted() =>
-                    {
-                        // If the transaction was a masp one generate the
-                        // appropriate event
-                        if let Some(masp_ref) = get_optional_masp_ref(
-                            state,
-                            cmt,
-                            Either::Right(batched_tx_result),
-                        )? {
-                            batched_tx_result.events.insert(
-                                MaspEvent {
-                                    tx_index: IndexedTx {
-                                        block_height: height,
-                                        block_index: tx_index,
-                                        batch_index: tx
-                                            .header
-                                            .batch
-                                            .get_index_of(cmt)
-                                            .map(|idx| {
-                                                TxIndex::must_from_usize(idx)
-                                                    .into()
-                                            }),
-                                    },
-                                    kind: MaspEventKind::Transfer,
-                                    data: masp_ref,
-                                }
-                                .into(),
-                            );
+            Ok(mut batched_tx_result) if batched_tx_result.is_accepted() => {
+                // If the transaction was a masp one generate the
+                // appropriate event
+                if let Some(masp_ref) = get_optional_masp_ref(
+                    state,
+                    cmt,
+                    Either::Right(&batched_tx_result),
+                )? {
+                    batched_tx_result.events.insert(
+                        MaspEvent {
+                            tx_index: IndexedTx {
+                                block_height: height,
+                                block_index: tx_index,
+                                batch_index: tx
+                                    .header
+                                    .batch
+                                    .get_index_of(cmt)
+                                    .map(|idx| {
+                                        TxIndex::must_from_usize(idx).into()
+                                    }),
+                            },
+                            kind: MaspEventKind::Transfer,
+                            data: masp_ref,
                         }
+                        .into(),
+                    );
+                }
 
-                        true
-                    }
-                    _ => false,
-                };
+                tx_result.insert_inner_tx_result(
+                    wrapper_hash,
+                    either::Right(cmt),
+                    Ok(batched_tx_result),
+                );
 
+                state.write_log_mut().commit_tx_to_batch();
+            }
+            // Handle all the other failure cases
+            res => {
                 tx_result.insert_inner_tx_result(
                     wrapper_hash,
                     either::Right(cmt),
                     res,
                 );
 
-                if is_tx_accepted {
-                    state.write_log_mut().commit_tx_to_batch();
-                } else {
-                    state.write_log_mut().drop_tx();
+                state.write_log_mut().drop_tx();
 
-                    if tx.header.atomic {
-                        // Stop the execution of an atomic batch at the
-                        // first failed transaction
-                        return Err(DispatchError {
-                            error: Error::FailingAtomicBatch(cmt.get_hash()),
-                            tx_result: Some(tx_result),
-                        });
-                    }
+                if tx.header.atomic {
+                    // Stop the execution of an atomic batch at the
+                    // first failed transaction
+                    return Err(DispatchError {
+                        error: Error::FailingAtomicBatch(cmt.get_hash()),
+                        tx_result: Some(tx_result),
+                    });
                 }
             }
         };
