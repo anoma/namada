@@ -604,8 +604,10 @@ jobs:
           cd ../ledger-namada
           git checkout "v$LEDGER_APP_VERSION"
           git submodule update --init --recursive
-          sudo update-alternatives --install /usr/bin/python python /usr/bin/python3 10
           sudo apt-get update
+          sudo apt-get upgrade
+          sudo update-alternatives --install /usr/bin/python python /usr/bin/python3 10
+          pip install --upgrade setuptools
           make deps
       - name: Install rust
         uses: actions-rs/toolchain@v1
