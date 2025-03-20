@@ -793,7 +793,7 @@ where
                         .await
                         .wrap_err("Failed to fetch shielded transfers")
                         .map_err(|error| TaskError {
-                            error: eyre!("{error}"),
+                            error,
                             context: [from, to],
                         })
                         .map(|batch| (from, to, batch)),
