@@ -3821,16 +3821,22 @@ pub async fn build_custom(
         let code_path = code_path
             .as_ref()
             .ok_or(Error::Other("No code path supplied".to_string()))?;
-        let tx_code_hash = query_wasm_code_hash_buf(context, code_path).await?;
+        let tx_code_hash = query_wasm_code_hash_buf(context, code_path).await;
         let chain_id = tx_args.chain_id.clone().unwrap();
         let mut tx = Tx::new(chain_id, tx_args.expiration.to_datetime());
         if let Some(memo) = &tx_args.memo {
             tx.add_memo(memo);
         }
-        tx.add_code_from_hash(
-            tx_code_hash,
-            Some(code_path.to_string_lossy().into_owned()),
-        );
+        if let Ok(tx_code_hash) = tx_code_hash {
+            tx.add_code_from_hash(
+                tx_code_hash,
+                Some(code_path.to_string_lossy().into_owned()),
+            );
+        } else {
+            // If the code doesn't exist on-chain include it in the tx
+            let code = tokio::fs::read(code_path).await.unwrap();
+            tx.add_code(code, None);
+        }
         data_path.clone().map(|data| tx.add_serialized_data(data));
         tx
     };

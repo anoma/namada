@@ -605,10 +605,11 @@ pub async fn dry_run_tx<N: Namada>(
             .await,
     )?
     .data;
+    let DryRunResult(tx_result, gas_cost) = &result;
 
     display_line!(context.io(), "Dry-run result:");
     let mut all_inners_successful = true;
-    for (inner_hash, cmt_result) in result.0.iter() {
+    for (inner_hash, cmt_result) in tx_result.iter() {
         match cmt_result {
             Ok(result) => {
                 if result.is_accepted() {
@@ -644,18 +645,18 @@ pub async fn dry_run_tx<N: Namada>(
         }
     }
 
-    // Display the gas used only if the entire batch was successful. In all the
-    // other cases the gas consumed is misleading since most likely the inner
-    // transactions did not have the chance to run until completion. This could
-    // trick the user into setting wrong gas limit values when trying to
-    // resubmit the tx
-    if all_inners_successful {
-        display_line!(
-            context.io(),
-            "The batch consumed {} gas units.",
-            result.1
-        );
-    }
+    display_line!(
+        context.io(),
+        "The batch consumed {} gas units.{}",
+        gas_cost,
+        if all_inners_successful {
+            ""
+        } else {
+            "The gas consumed might be misleading if the inner transactions \
+             did not have the chance to run until completion. Do not rely on \
+             this value to set gas limit."
+        }
+    );
 
     Ok(result)
 }
