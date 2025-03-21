@@ -1,7 +1,7 @@
 //! Namada node CLI.
 
 use eyre::{Context, Result};
-use namada_apps_lib::cli::cmds::TestGenesis;
+use namada_apps_lib::cli::cmds::{DryRunProposal, TestGenesis};
 use namada_apps_lib::cli::{self, cmds};
 use namada_apps_lib::config::{NodeLocalConfig, ValidatorLocalConfig};
 #[cfg(not(feature = "migrations"))]
@@ -141,6 +141,9 @@ pub fn main() -> Result<()> {
         cli::NamadaNode::Utils(sub, global_args) => match sub {
             cmds::NodeUtils::TestGenesis(TestGenesis(args)) => {
                 node::utils::test_genesis(args, global_args)
+            }
+            cmds::NodeUtils::DryRunProposal(DryRunProposal(args)) => {
+                node::utils::dry_run_proposal(args, global_args)?;
             }
         },
     }
