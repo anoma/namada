@@ -194,6 +194,16 @@ fn shielded_reward_reset_migration() {
                 })
                 .clone()
         };
+        // The key holding the shielded reward precision of current token
+        let shielded_token_reward_precision_key =
+            masp_reward_precision_key::<Store<()>>(&token_address);
+
+        updates.push(migrations::DbUpdateType::Add {
+            key: shielded_token_reward_precision_key,
+            cf: DbColFam::SUBSPACE,
+            value: (precision as u128).into(),
+            force: false,
+        });
         // Write the new TOK conversions to memory
         for digit in MaspDigitPos::iter() {
             // -PRECISION TOK[ep, digit] + PRECISION TOK[current_ep, digit]
