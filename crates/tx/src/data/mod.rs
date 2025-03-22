@@ -11,7 +11,7 @@ pub mod protocol;
 pub mod wrapper;
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fmt::{self, Display};
 use std::marker::PhantomData;
 use std::str::FromStr;
@@ -22,6 +22,7 @@ use namada_core::address::Address;
 use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
+use namada_core::collections::HashMap;
 use namada_core::hash::Hash;
 use namada_core::storage;
 use namada_events::Event;
@@ -227,7 +228,7 @@ pub struct DryRunResult(pub TxResult<String>, pub WholeGas);
 // strings
 // TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-pub struct TxResult<T>(pub BTreeMap<Hash, Result<BatchedTxResult, T>>);
+pub struct TxResult<T>(pub HashMap<Hash, Result<BatchedTxResult, T>>);
 
 impl<T> Default for TxResult<T> {
     fn default() -> Self {
@@ -300,8 +301,8 @@ impl<'de, T: Deserialize<'de>> serde::Deserialize<'de> for TxResult<T> {
 impl<T: Display> TxResult<T> {
     /// Convert the batched result to a string
     pub fn to_result_string(self) -> TxResult<String> {
-        let mut batch_results: BTreeMap<Hash, Result<BatchedTxResult, String>> =
-            BTreeMap::new();
+        let mut batch_results: HashMap<Hash, Result<BatchedTxResult, String>> =
+            HashMap::new();
 
         for (hash, res) in self.0 {
             let res = match res {
@@ -317,8 +318,8 @@ impl<T: Display> TxResult<T> {
 
 impl<T> TxResult<T> {
     /// Return a new set of tx results.
-    pub const fn new() -> Self {
-        Self(BTreeMap::new())
+    pub fn new() -> Self {
+        Self(HashMap::new())
     }
 
     /// Insert an inner tx result into this [`TxResult`].
