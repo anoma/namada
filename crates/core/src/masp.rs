@@ -262,34 +262,31 @@ pub fn encode_asset_type(
 pub fn encode_reward_asset_types(
     native_token: &Address,
 ) -> Result<[AssetType; 4], std::io::Error> {
-    // Construct MASP asset type for rewards. Always deflate and timestamp
-    // reward tokens with the zeroth epoch to minimize the number of convert
-    // notes clients have to use. This trick works under the assumption that
-    // reward tokens will then be reinflated back to the current epoch.
+    // Construct MASP asset types for rewards. These are always undated.
     Ok([
         encode_asset_type(
             native_token.clone(),
             NATIVE_MAX_DECIMAL_PLACES.into(),
             MaspDigitPos::Zero,
-            Some(MaspEpoch::zero()),
+            None,
         )?,
         encode_asset_type(
             native_token.clone(),
             NATIVE_MAX_DECIMAL_PLACES.into(),
             MaspDigitPos::One,
-            Some(MaspEpoch::zero()),
+            None,
         )?,
         encode_asset_type(
             native_token.clone(),
             NATIVE_MAX_DECIMAL_PLACES.into(),
             MaspDigitPos::Two,
-            Some(MaspEpoch::zero()),
+            None,
         )?,
         encode_asset_type(
             native_token.clone(),
             NATIVE_MAX_DECIMAL_PLACES.into(),
             MaspDigitPos::Three,
-            Some(MaspEpoch::zero()),
+            None,
         )?,
     ])
 }
