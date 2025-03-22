@@ -2,8 +2,9 @@
 
 use std::str::FromStr;
 
+use masp_primitives::asset_type::AssetType;
 use masp_primitives::bls12_381::Scalar;
-use masp_primitives::sapling::Nullifier;
+use masp_primitives::sapling::{Node, Nullifier};
 use namada_core::address::{self, Address};
 use namada_core::hash::Hash;
 use namada_core::storage::{self, DbKeySeg, KeySeg};
@@ -15,6 +16,8 @@ const BALANCE_STORAGE_KEY: &str = "balance";
 pub const MASP_NULLIFIERS_KEY: &str = "nullifiers";
 /// The key for the masp reward balance
 pub const MASP_UNDATED_BALANCE_KEY: &str = "undated_balance";
+/// Key segment prefix for the conversions
+pub const MASP_CONVERSIONS_KEY: &str = "conversions";
 /// Key segment prefix for the note commitment merkle tree
 pub const MASP_NOTE_COMMITMENT_TREE_KEY: &str = "commitment_tree";
 /// Key segment prefix for the note commitment anchor
@@ -40,6 +43,8 @@ pub const MASP_LOCKED_AMOUNT_TARGET_KEY: &str = "locked_amount_target";
 pub const MASP_MAX_REWARD_RATE_KEY: &str = "max_reward_rate";
 /// The key for the total inflation rewards minted by MASP
 pub const MASP_TOTAL_REWARDS: &str = "max_total_rewards";
+/// The key for the reward precision for a given asset
+pub const MASP_REWARD_PRECISION_KEY: &str = "reward_precision";
 
 /// Obtain the nominal proportional key for the given token
 pub fn masp_kp_gain_key<TransToken: trans_token::Keys>(
@@ -63,6 +68,14 @@ pub fn masp_max_reward_rate_key<TransToken: trans_token::Keys>(
 ) -> storage::Key {
     TransToken::parameter_prefix(token_addr)
         .with_segment(MASP_MAX_REWARD_RATE_KEY.to_owned())
+}
+
+/// The shielded reward precision key for the given token
+pub fn masp_reward_precision_key<TransToken: trans_token::Keys>(
+    token_addr: &Address,
+) -> storage::Key {
+    TransToken::parameter_prefix(token_addr)
+        .with_segment(MASP_REWARD_PRECISION_KEY.to_owned())
 }
 
 /// Obtain the locked target amount key for the given token
@@ -89,7 +102,7 @@ pub fn masp_last_inflation_key<TransToken: trans_token::Keys>(
         .with_segment(MASP_LAST_INFLATION_KEY.to_owned())
 }
 
-/// Check if the given storage key is a masp reward balance key
+/// Check if the given storage key is the undated balance of a token
 pub fn is_masp_undated_balance_key(key: &storage::Key) -> Option<Address> {
     match &key.segments[..] {
         [
@@ -131,21 +144,26 @@ pub fn is_masp_key(key: &storage::Key) -> bool {
     }
 }
 
+/// Check if the given storage key is allowed to be touched by a governance
+/// proposal
+pub fn is_masp_governance_key(key: &storage::Key) -> bool {
+    is_masp_token_map_key(key) || is_masp_conversion_key(key).is_some()
+}
+
 /// Check if the given storage key is allowed to be touched by a masp transfer
 pub fn is_masp_transfer_key(key: &storage::Key) -> bool {
-    match &key.segments[..] {
+    is_masp_commitment_tree_key(key)
+        || is_masp_nullifier_key(key)
+        || is_masp_balance_key(key)
+        || is_masp_undated_balance_key(key).is_some()
+}
+
+/// Check if the given storage key is a masp commitment tree key
+pub fn is_masp_commitment_tree_key(key: &storage::Key) -> bool {
+    matches!(&key.segments[..],
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
             if *addr == address::MASP
-                && key == MASP_NOTE_COMMITMENT_TREE_KEY =>
-        {
-            true
-        }
-        _ => {
-            is_masp_nullifier_key(key)
-                || is_masp_balance_key(key)
-                || is_masp_undated_balance_key(key).is_some()
-        }
-    }
+                && key == MASP_NOTE_COMMITMENT_TREE_KEY)
 }
 
 /// Check if the given storage key is a masp nullifier key
@@ -158,12 +176,19 @@ pub fn is_masp_nullifier_key(key: &storage::Key) -> bool {
 }
 
 /// Check if the given key is a masp commitment anchor
-pub fn is_masp_commitment_anchor_key(key: &storage::Key) -> bool {
-    matches!(&key.segments[..],
-    [DbKeySeg::AddressSeg(addr),
-             DbKeySeg::StringSeg(prefix),
-            ..
-        ] if *addr == address::MASP && prefix == MASP_NOTE_COMMITMENT_ANCHOR_PREFIX)
+pub fn is_masp_commitment_anchor_key(key: &storage::Key) -> Option<Node> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(anchor),
+        ] if *addr == address::MASP
+            && prefix == MASP_NOTE_COMMITMENT_ANCHOR_PREFIX =>
+        {
+            Hash::from_str(anchor).map(|x| Node::new(x.0)).ok()
+        }
+        _ => None,
+    }
 }
 
 /// Check if the given storage key is a masp token map key
@@ -174,12 +199,42 @@ pub fn is_masp_token_map_key(key: &storage::Key) -> bool {
         ] if *addr == address::MASP && prefix == MASP_TOKEN_MAP_KEY)
 }
 
+/// Check if the given storage key is a masp conversion key
+pub fn is_masp_conversion_key(key: &storage::Key) -> Option<AssetType> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(address::MASP),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(asset_type),
+        ] if prefix == MASP_CONVERSIONS_KEY => {
+            AssetType::from_str(asset_type).ok()
+        }
+        _ => None,
+    }
+}
+
 /// Get a key for a masp nullifier
 pub fn masp_nullifier_key(nullifier: &Nullifier) -> storage::Key {
     storage::Key::from(address::MASP.to_db_key())
         .push(&MASP_NULLIFIERS_KEY.to_owned())
         .expect("Cannot obtain a storage key")
         .push(&Hash(nullifier.0))
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get a key for a masp conversion
+pub fn masp_conversion_key(asset_type: &AssetType) -> storage::Key {
+    storage::Key::from(address::MASP.to_db_key())
+        .push(&MASP_CONVERSIONS_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&asset_type.to_string())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the key prefix for masp conversions
+pub fn masp_conversion_key_prefix() -> storage::Key {
+    storage::Key::from(address::MASP.to_db_key())
+        .push(&MASP_CONVERSIONS_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 

@@ -402,7 +402,7 @@ pub fn is_key_diff_storable(key: &namada_sdk::storage::Key) -> bool {
         && *key != token::storage_key::masp_convert_anchor_key()
         && *key != token::storage_key::masp_token_map_key()
         && *key != token::storage_key::masp_assets_hash_key()
-        && !token::storage_key::is_masp_commitment_anchor_key(key)
+        && token::storage_key::is_masp_commitment_anchor_key(key).is_none()
         || ibc::storage::is_ibc_counter_key(key)
         || proof_of_stake::storage_key::is_delegation_targets_key(key))
 }
