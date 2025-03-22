@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 #[cfg(any(feature = "multicore", test))]
 use masp_primitives::asset_type::AssetType;
 #[cfg(any(feature = "multicore", test))]
-use masp_primitives::convert::AllowedConversion;
+use masp_primitives::convert::{AllowedConversion, UncheckedAllowedConversion};
 #[cfg(any(feature = "multicore", test))]
 use masp_primitives::transaction::components::I128Sum as MaspAmount;
 use namada_controller::PDController;
@@ -27,14 +27,19 @@ use namada_core::masp::MaspEpoch;
 use namada_core::token::MaspDigitPos;
 use namada_core::token::{Amount, DenominatedAmount, Denomination};
 use namada_core::uint::Uint;
+#[cfg(any(feature = "multicore", test))]
+use namada_state::iter_prefix_with_filter_map;
 use namada_systems::{parameters, trans_token};
 
 #[cfg(any(feature = "multicore", test))]
-use crate::storage_key::{masp_assets_hash_key, masp_token_map_key};
+use crate::storage_key::{
+    is_masp_conversion_key, masp_assets_hash_key, masp_conversion_key_prefix,
+    masp_token_map_key,
+};
 use crate::storage_key::{
     masp_kd_gain_key, masp_kp_gain_key, masp_last_inflation_key,
     masp_last_locked_amount_key, masp_locked_amount_target_key,
-    masp_max_reward_rate_key,
+    masp_max_reward_rate_key, masp_reward_precision_key,
 };
 #[cfg(any(feature = "multicore", test))]
 use crate::{ConversionLeaf, Error, OptionExt, ResultExt};
@@ -87,21 +92,44 @@ pub fn calculate_masp_rewards_precision<S, TransToken>(
 ) -> Result<(u128, Denomination)>
 where
     S: StorageWrite + StorageRead,
-    TransToken: trans_token::Read<S>,
+    TransToken: trans_token::Keys + trans_token::Read<S>,
 {
     let denomination = TransToken::read_denom(storage, addr)?
         .expect("failed to read token denomination");
+
     // Inflation is implicitly denominated by this value. The lower this
     // figure, the less precise inflation computations are. This is especially
     // problematic when inflation is coming from a token with much higher
     // denomination than the native token. The higher this figure, the higher
     // the threshold of holdings required in order to receive non-zero rewards.
-    // This value should be fixed constant for each asset type. Here we choose
-    // a thousandth of the given asset.
-    let precision_denom = std::cmp::max(u32::from(denomination.0), 3)
-        .checked_sub(3)
-        .expect("Cannot underflow");
-    Ok((checked!(10u128 ^ precision_denom)?, denomination))
+    // This value should be fixed constant for each asset type. Here we read a
+    // value from storage and failing that we choose a thousandth of the given
+    // asset.
+    // Key to read/write reward precision from
+    let reward_precision_key = masp_reward_precision_key::<TransToken>(addr);
+    // Now read the desired reward precision for this token address
+    let reward_precision: u128 =
+        storage.read(&reward_precision_key)?.map_or_else(
+            || -> Result<u128> {
+                // Since reading reward precision has failed, choose a
+                // thousandth of the given token. But clamp the precision above
+                // by 10^38, the maximum power of 10 that can be contained by a
+                // u128.
+                let precision_denom =
+                    u32::from(denomination.0).saturating_sub(3).clamp(0, 38);
+                let reward_precision = checked!(10u128 ^ precision_denom)?;
+                // Record the precision that is now being used so that it does
+                // not have to be recomputed each time, and to
+                // ensure that this value is not accidentally
+                // changed even by a change to this initialization
+                // algorithm.
+                storage.write(&reward_precision_key, reward_precision)?;
+                Ok(reward_precision)
+            },
+            Ok,
+        )?;
+
+    Ok((reward_precision, denomination))
 }
 
 /// Get the balance of the given token at the MASP address that is eligble to
@@ -494,6 +522,49 @@ where
 }
 
 #[cfg(any(feature = "multicore", test))]
+/// Apply the conversion updates that are in storage to the in memory structure
+/// and delete them.
+fn apply_stored_conversion_updates<S>(storage: &mut S) -> Result<()>
+where
+    S: StorageWrite + StorageRead + WithConversionState,
+{
+    let conversion_key_prefix = masp_conversion_key_prefix();
+    let mut conversion_updates =
+        BTreeMap::<_, UncheckedAllowedConversion>::new();
+    // Read conversion updates from storage and store them in a map
+    for conv_result in iter_prefix_with_filter_map(
+        storage,
+        &conversion_key_prefix,
+        is_masp_conversion_key,
+    )? {
+        match conv_result {
+            Ok((asset_type, conv)) => {
+                conversion_updates.insert(asset_type, conv);
+            }
+            Err(err) => {
+                tracing::warn!("Encountered malformed conversion: {}", err);
+                continue;
+            }
+        }
+    }
+    // Apply the conversion updates to the in memory structure
+    let assets = &mut storage.conversion_state_mut().assets;
+    for (asset_type, conv) in conversion_updates {
+        let Some(leaf) = assets.get_mut(&asset_type) else {
+            tracing::warn!(
+                "Encountered non-existent asset type: {}",
+                asset_type
+            );
+            continue;
+        };
+        leaf.conversion = conv.0;
+    }
+    // Delete the updates now that they have been applied
+    storage.delete_prefix(&conversion_key_prefix)?;
+    Ok(())
+}
+
+#[cfg(any(feature = "multicore", test))]
 /// Update the MASP's allowed conversions
 pub fn update_allowed_conversions<S, Params, TransToken>(
     storage: &mut S,
@@ -519,6 +590,7 @@ where
 
     use crate::mint_rewards;
 
+    apply_stored_conversion_updates(storage)?;
     let token_map_key = masp_token_map_key();
     let token_map: namada_core::masp::TokenMap =
         storage.read(&token_map_key)?.unwrap_or_default();

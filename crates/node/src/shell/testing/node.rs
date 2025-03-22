@@ -50,6 +50,7 @@ use crate::ethereum_oracle::{
     control, last_processed_block, try_process_eth_events,
 };
 use crate::shell::testing::utils::TestDir;
+use crate::shell::token::MaspEpoch;
 use crate::shell::{EthereumOracleChannels, Shell};
 use crate::shims::abcipp_shim_types::shim::request::{
     FinalizeBlock, ProcessedTx,
@@ -405,6 +406,16 @@ impl MockNode {
             .in_mem()
             .get_current_epoch()
             .0
+    }
+
+    pub fn current_masp_epoch(&mut self) -> MaspEpoch {
+        let masp_epoch_multiplier =
+            namada_sdk::parameters::read_masp_epoch_multiplier_parameter(
+                &self.shell.lock().unwrap().state,
+            )
+            .unwrap();
+        let current_epoch = self.current_epoch();
+        MaspEpoch::try_from_epoch(current_epoch, masp_epoch_multiplier).unwrap()
     }
 
     pub fn next_masp_epoch(&mut self) -> Epoch {

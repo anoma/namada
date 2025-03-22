@@ -5088,9 +5088,9 @@ dependencies = [
 
 [[package]]
 name = "masp_note_encryption"
-version = "1.2.0"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9736dbd86140a9d6711b464297a87af9cc0ae485d73a956c595f1bc1f6a7920"
+checksum = "cfa6b33e4b4d7eb2ec6d8a6b3db92cd92b63b50b15f226e227188b3ec6a1f92c"
 dependencies = [
  "arbitrary",
  "borsh",
@@ -5103,9 +5103,9 @@ dependencies = [
 
 [[package]]
 name = "masp_primitives"
-version = "1.2.0"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fb184254ca5cd5fb12e11b81a6a0d6b955d98c7263eae11057f669c31c7123c"
+checksum = "57c4482dd67fb614da7840a08b56d387e43ec8a06129e4f7bdba02900f4e3dbc"
 dependencies = [
  "aes",
  "arbitrary",
@@ -5137,9 +5137,9 @@ dependencies = [
 
 [[package]]
 name = "masp_proofs"
-version = "1.2.0"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "833eb23ccc5e4781636f6a7b2e720f60f31e53e534d1abb2b0ac5e86eb099c14"
+checksum = "f07358ecd7aa622deec656874eee2d309dcd9f046f89022105336de73d97b34f"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -5750,6 +5750,7 @@ dependencies = [
  "masp_primitives",
  "masp_proofs",
  "namada_apps_lib",
+ "namada_core",
  "namada_macros",
  "namada_migrations",
  "namada_parameters",
@@ -5934,6 +5935,7 @@ version = "0.48.0"
 dependencies = [
  "lazy_static",
  "linkme",
+ "masp_primitives",
  "namada_macros",
 ]
 
@@ -6284,6 +6286,7 @@ dependencies = [
  "ibc-testkit",
  "ics23",
  "itertools 0.14.0",
+ "masp_primitives",
  "namada_apps_lib",
  "namada_core",
  "namada_node",

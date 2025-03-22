@@ -588,7 +588,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   test-ledger-app:
-    timeout-minutes: 30
+    timeout-minutes: 40
     runs-on: [ubuntu-latest]
 
     env:

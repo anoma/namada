@@ -59,9 +59,9 @@ pub use namada_storage::conversion_state::{
 pub use namada_storage::types::{KVBytes, PatternIterator, PrefixIterator};
 pub use namada_storage::{
     collections, iter_prefix, iter_prefix_bytes, iter_prefix_with_filter,
-    mockdb, tx_queue, BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch,
-    DbError, DbResult, Error, OptionExt, Result, ResultExt, StorageHasher,
-    StorageRead, StorageWrite, DB,
+    iter_prefix_with_filter_map, mockdb, tx_queue, BlockStateRead,
+    BlockStateWrite, DBIter, DBWriteBatch, DbError, DbResult, Error, OptionExt,
+    Result, ResultExt, StorageHasher, StorageRead, StorageWrite, DB,
 };
 use namada_systems::parameters;
 use thiserror::Error;
