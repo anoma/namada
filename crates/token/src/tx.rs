@@ -42,10 +42,10 @@ where
         };
 
     // Apply the shielded transfer if there is a link to one
-    if let Some(masp_section_ref) = transfers.shielded_section_hash {
+    if let Some(shielded_data) = transfers.shielded_data {
         apply_shielded_transfer(
             env,
-            masp_section_ref,
+            shielded_data.masp_tx_id,
             debited_accounts,
             tokens,
             tx_data,
