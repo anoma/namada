@@ -238,6 +238,7 @@ impl<Transfer: BorshSchema> BorshSchema for MsgNftTransfer<Transfer> {
 
 /// Shielding data in IBC packet memo
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
+// TODO: add flag ciphertext here
 pub struct IbcShieldingData(pub MaspTransaction);
 
 impl From<&IbcShieldingData> for String {

@@ -23,6 +23,7 @@ use sha2::Sha256;
 use crate::address::{Address, DecodeError, HASH_HEX_LEN, IBC, MASP};
 use crate::borsh::BorshSerializeExt;
 use crate::chain::Epoch;
+use crate::hash::Hash;
 use crate::impl_display_and_from_str_via_format;
 use crate::string_encoding::{
     self, MASP_EXT_FULL_VIEWING_KEY_HRP, MASP_EXT_SPENDING_KEY_HRP,
@@ -82,6 +83,44 @@ impl From<TxIdInner> for MaspTxId {
 impl Display for MaspTxId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+/// Pointers to MASP data included in Namada transactions.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+#[derive(
+    Serialize,
+    Deserialize,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Debug,
+    Eq,
+    PartialEq,
+    Copy,
+    Ord,
+    PartialOrd,
+    Hash,
+)]
+pub struct MaspTxData {
+    /// Id of the MASP transaction.
+    ///
+    /// This is used to look-up a MASP transaction section.
+    pub masp_tx_id: MaspTxId,
+    /// Section hash of the FMD flag ciphertext.
+    ///
+    /// This is used to look-up a transaction data section
+    /// containing an FMD flag ciphertext.
+    pub flag_ciphertext_sechash: Hash,
+}
+
+impl Display for MaspTxData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("")
+            .field("masp_tx_id", &self.masp_tx_id)
+            .field("flag_ciphertext_sechash", &self.flag_ciphertext_sechash)
+            .finish()
     }
 }
 

@@ -41,7 +41,9 @@ use namada_core::ibc::core::client::types::Height as IbcHeight;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::primitives::{IntoTimestamp, Timestamp as IbcTimestamp};
 use namada_core::key::{self, *};
-use namada_core::masp::{AssetData, MaspEpoch, TransferSource, TransferTarget};
+use namada_core::masp::{
+    AssetData, MaspEpoch, MaspTxData, TransferSource, TransferTarget,
+};
 use namada_core::storage;
 use namada_core::time::DateTimeUtc;
 use namada_events::extend::EventAttributeEntry;
@@ -2819,7 +2821,12 @@ pub async fn build_ibc_transfer(
         .map(|(shielded_transfer, asset_types)| {
             let masp_tx_hash =
                 tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
-            transfer.shielded_section_hash = Some(masp_tx_hash);
+            transfer.shielded_data = Some(MaspTxData {
+                masp_tx_id: masp_tx_hash,
+                // TODO: change this to the actual sechash
+                // of the fmd flag
+                flag_ciphertext_sechash: Hash::zero(),
+            });
             signing_data.shielded_hash = Some(masp_tx_hash);
             tx.add_masp_builder(MaspBuilder {
                 asset_types,
@@ -3265,7 +3272,12 @@ pub async fn build_shielded_transfer<N: Namada>(
             target: section_hash,
         });
 
-        data.shielded_section_hash = Some(section_hash);
+        data.shielded_data = Some(MaspTxData {
+            masp_tx_id: section_hash,
+            // TODO: change this to the actual sechash
+            // of the fmd flag
+            flag_ciphertext_sechash: Hash::zero(),
+        });
         signing_data.shielded_hash = Some(section_hash);
         tracing::debug!("Transfer data {data:?}");
         Ok(())
@@ -3435,7 +3447,12 @@ pub async fn build_shielding_transfer<N: Namada>(
             target: shielded_section_hash,
         });
 
-        data.shielded_section_hash = Some(shielded_section_hash);
+        data.shielded_data = Some(MaspTxData {
+            masp_tx_id: shielded_section_hash,
+            // TODO: change this to the actual sechash
+            // of the fmd flag
+            flag_ciphertext_sechash: Hash::zero(),
+        });
         signing_data.shielded_hash = Some(shielded_section_hash);
         tracing::debug!("Transfer data {data:?}");
         Ok(())
@@ -3558,7 +3575,12 @@ pub async fn build_unshielding_transfer<N: Namada>(
             target: shielded_section_hash,
         });
 
-        data.shielded_section_hash = Some(shielded_section_hash);
+        data.shielded_data = Some(MaspTxData {
+            masp_tx_id: shielded_section_hash,
+            // TODO: change this to the actual sechash
+            // of the fmd flag
+            flag_ciphertext_sechash: Hash::zero(),
+        });
         signing_data.shielded_hash = Some(shielded_section_hash);
         tracing::debug!("Transfer data {data:?}");
         Ok(())

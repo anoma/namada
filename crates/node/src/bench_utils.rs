@@ -89,7 +89,9 @@ use namada_sdk::state::StorageRead;
 use namada_sdk::state::write_log::StorageModification;
 use namada_sdk::storage::{Key, KeySeg, TxIndex};
 use namada_sdk::time::DateTimeUtc;
-use namada_sdk::token::{self, Amount, DenominatedAmount, Transfer};
+use namada_sdk::token::{
+    self, Amount, DenominatedAmount, MaspTxData, Transfer,
+};
 use namada_sdk::tx::data::pos::Bond;
 use namada_sdk::tx::data::{
     BatchedTxResult, Fee, TxResult, VpsResult, compute_inner_tx_hash,
@@ -1279,13 +1281,18 @@ impl BenchShieldedCtx {
             )
             .expect("MASP must have shielded part");
 
-        let shielded_section_hash = shielded.txid().into();
+        let shielded_data = MaspTxData {
+            masp_tx_id: shielded.txid().into(),
+            // TODO: change this to the actual sechash
+            // of the fmd flag
+            flag_ciphertext_sechash: Default::default(),
+        };
         let tx = if source.effective_address() == MASP
             && target.effective_address() == MASP
         {
             namada.client().read().generate_tx(
                 TX_TRANSFER_WASM,
-                Transfer::masp(shielded_section_hash),
+                Transfer::masp(shielded_data),
                 Some(shielded),
                 None,
                 vec![&defaults::albert_keypair()],
@@ -1293,7 +1300,7 @@ impl BenchShieldedCtx {
         } else if target.effective_address() == MASP {
             namada.client().read().generate_tx(
                 TX_TRANSFER_WASM,
-                Transfer::masp(shielded_section_hash)
+                Transfer::masp(shielded_data)
                     .transfer(
                         source.effective_address(),
                         MASP,
@@ -1308,7 +1315,7 @@ impl BenchShieldedCtx {
         } else {
             namada.client().read().generate_tx(
                 TX_TRANSFER_WASM,
-                Transfer::masp(shielded_section_hash)
+                Transfer::masp(shielded_data)
                     .transfer(
                         MASP,
                         target.effective_address(),
@@ -1382,6 +1389,7 @@ impl BenchShieldedCtx {
         let vectorized_transfer =
             Transfer::deserialize(&mut tx.tx.data(&tx.cmt).unwrap().as_slice())
                 .unwrap();
+        let masp_tx_id = vectorized_transfer.masp_tx_id().unwrap();
         let sources =
             vec![vectorized_transfer.sources.into_iter().next().unwrap()]
                 .into_iter()
@@ -1393,15 +1401,14 @@ impl BenchShieldedCtx {
         let transfer = Transfer {
             sources,
             targets,
-            shielded_section_hash: Some(
-                vectorized_transfer.shielded_section_hash.unwrap(),
-            ),
+            shielded_data: Some(MaspTxData {
+                masp_tx_id,
+                // TODO: change this to the actual sechash
+                // of the fmd flag
+                flag_ciphertext_sechash: Default::default(),
+            }),
         };
-        let masp_tx = tx
-            .tx
-            .get_masp_section(&transfer.shielded_section_hash.unwrap())
-            .unwrap()
-            .clone();
+        let masp_tx = tx.tx.get_masp_section(&masp_tx_id).unwrap().clone();
         let msg = MsgTransfer::<token::Transfer> {
             message: msg,
             transfer: Some(transfer),

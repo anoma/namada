@@ -22,7 +22,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
                     Default::default()
                 };
 
-            (transfers.shielded_section_hash, tokens)
+            (transfers.masp_tx_id(), tokens)
         } else {
             (None, Default::default())
         };
