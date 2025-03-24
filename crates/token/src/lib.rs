@@ -182,8 +182,8 @@ pub struct Transfer {
     pub sources: BTreeMap<Account, DenominatedAmount>,
     /// Targets of this transfer
     pub targets: BTreeMap<Account, DenominatedAmount>,
-    /// Hash of tx section that contains the MASP transaction
-    pub shielded_section_hash: Option<MaspTxId>,
+    /// Pointers to MASP data within a transfer tx
+    pub shielded_data: Option<MaspTxData>,
 }
 
 /// References to the transparent sections of a [`Transfer`].
@@ -197,9 +197,9 @@ pub struct TransparentTransfersRef<'a> {
 
 impl Transfer {
     /// Create a MASP transaction
-    pub fn masp(hash: MaspTxId) -> Self {
+    pub fn masp(shielded_data: MaspTxData) -> Self {
         Self {
-            shielded_section_hash: Some(hash),
+            shielded_data: Some(shielded_data),
             ..Self::default()
         }
     }
@@ -522,7 +522,10 @@ pub mod testing {
                 &mut rng,
                 &mut rng_build_params,
             ).unwrap();
-            transfer.shielded_section_hash = Some(masp_tx.txid().into());
+            transfer.shielded_data = Some(MaspTxData {
+                masp_tx_id: masp_tx.txid().into(),
+                flag_ciphertext_sechash: Hash::zero(),
+            });
             (transfer, ShieldedTransfer {
                 builder: builder.map_builder(WalletMap),
                 metadata,
