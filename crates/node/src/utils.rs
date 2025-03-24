@@ -11,8 +11,9 @@ use namada_apps_lib::{cli, wallet};
 use namada_sdk::address::{Address, ImplicitAddress};
 use namada_sdk::gas::TxGasMeter;
 use namada_sdk::key::common;
-use namada_sdk::state::Sha256Hasher;
-use namada_sdk::state::{FullAccessState, StorageWrite, TxIndex};
+use namada_sdk::state::{
+    FullAccessState, Sha256Hasher, StorageWrite, TxIndex, WlState,
+};
 use namada_sdk::tx::data::TxType;
 use namada_sdk::tx::{self, Tx};
 use namada_sdk::wallet::FindKeyError;
@@ -169,8 +170,8 @@ pub fn dry_run_proposal(
     let config = &chain_ctx.config.ledger;
     let chain_id = &config.chain_id;
     let db_path = config.shell.db_dir(chain_id);
-    let mut state: FullAccessState<storage::PersistentDB, Sha256Hasher> =
-        FullAccessState::open(
+    let mut state: WlState<storage::PersistentDB, Sha256Hasher> =
+        FullAccessState::open_read_only(
             db_path,
             None,
             chain_id.clone(),
@@ -178,9 +179,10 @@ pub fn dry_run_proposal(
             config.shell.storage_read_past_height_limit,
             |_key| true,
         );
-    let state = state.restrict_writes_to_write_log();
 
+    // A fake proposal ID
     let id = u64::MAX;
+    // Instruct VPs that this is a gov proposal
     let pending_execution_key =
         governance::storage::keys::get_proposal_execution_key(id);
     state.write(&pending_execution_key, ())?;
@@ -193,9 +195,6 @@ pub fn dry_run_proposal(
     tx.header.chain_id = chain_id.clone();
     tx.set_data(tx::Data::new(encode(&id)));
     tx.set_code(tx::Code::new(proposal_code, None));
-
-    let gas_scale = parameters::get_gas_scale(state)
-        .expect("Failed to get gas scale from parameters");
 
     let mut vp_wasm_cache =
         VpCache::<WasmCacheRwAccess>::new(test_dir.path(), usize::MAX);
@@ -215,7 +214,7 @@ pub fn dry_run_proposal(
         },
         // No gas limit for governance proposal
         &RefCell::new(TxGasMeter::new(u64::MAX, gas_scale)),
-        state,
+        &mut state,
     );
     info!("Execution finished");
     // Governance must construct the tx with data and code commitments
