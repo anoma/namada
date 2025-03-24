@@ -19,7 +19,6 @@ use namada_sdk::chain::{BlockHeight, Epoch};
 use namada_sdk::collections::{HashMap, HashSet};
 use namada_sdk::control_flow::time::{Duration, Instant};
 use namada_sdk::dec::Dec;
-use namada_sdk::events::Event;
 use namada_sdk::governance::ProposalVote;
 use namada_sdk::governance::parameters::GovernanceParameters;
 use namada_sdk::governance::pgf::parameters::PgfParameters;
@@ -46,8 +45,8 @@ use namada_sdk::proof_of_stake::types::{
 use namada_sdk::proof_of_stake::{self, OwnedPosParams, PosParams};
 use namada_sdk::queries::RPC;
 use namada_sdk::rpc::{
-    self, TxResponse, enriched_bonds_and_unbonds, format_denominated_amount,
-    query_epoch, query_ibc_params,
+    self, TxAppliedEvents, TxResponse, enriched_bonds_and_unbonds,
+    format_denominated_amount, query_epoch, query_ibc_params,
 };
 use namada_sdk::state::LastBlock;
 use namada_sdk::storage::BlockResults;
@@ -69,7 +68,7 @@ pub async fn query_tx_status(
     namada: &impl Namada,
     status: namada_sdk::rpc::TxEventQuery<'_>,
     deadline: Instant,
-) -> (Event, Vec<Event>) {
+) -> TxAppliedEvents {
     rpc::query_tx_status(namada, status, deadline)
         .await
         .unwrap()
@@ -2273,7 +2272,7 @@ pub async fn query_has_storage_key<C: Client + Sync>(
 pub async fn query_tx_events<C: Client + Sync>(
     client: &C,
     tx_event_query: namada_sdk::rpc::TxEventQuery<'_>,
-) -> std::result::Result<Option<(Event, Vec<Event>)>, <C as Client>::Error> {
+) -> std::result::Result<Option<TxAppliedEvents>, <C as Client>::Error> {
     namada_sdk::rpc::query_tx_events(client, tx_event_query).await
 }
 

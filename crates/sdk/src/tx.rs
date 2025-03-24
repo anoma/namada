@@ -431,9 +431,8 @@ pub async fn submit_tx(
 
     // The transaction is now on chain. We wait for it to be applied
     let tx_query = rpc::TxEventQuery::Applied(tx_hash.as_str());
-    let (applied_event, tx_events) =
-        rpc::query_tx_status(context, tx_query, deadline).await?;
-    let response = TxResponse::from_events(applied_event, tx_events);
+    let tx_events = rpc::query_tx_status(context, tx_query, deadline).await?;
+    let response = TxResponse::from_events(tx_events);
     display_batch_resp(context, &response);
     Ok(response)
 }
