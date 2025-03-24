@@ -108,7 +108,11 @@ pub struct MaspTxData {
     ///
     /// This is used to look-up a MASP transaction section.
     pub masp_tx_id: MaspTxId,
-    /// Section hash of the FMD flag ciphertext.
+    /// Section hash of the FMD flag ciphertexts.
+    ///
+    /// This is used to look-up a transaction section containing
+    /// all flag ciphertexts. The section is expected to host a
+    /// flag ciphertext per shielded output in the MASP bundle.
     pub flag_ciphertext_sechash: Hash,
 }
 
