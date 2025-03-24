@@ -165,6 +165,12 @@ impl QueryMatcher {
         .and_attribute(PacketDstChannel(destination_channel))
         .and_attribute(PacketSequence(sequence))
     }
+
+    /// Returns all the events associated with the provided transaction's hash
+    pub fn tx_events(tx_hash: Hash) -> Self {
+        // FIXME: does this prefix work?
+        Self::with_prefix(EventType::new("")).and_attribute(TxHashAttr(tx_hash))
+    }
 }
 
 #[cfg(test)]

@@ -105,7 +105,7 @@ router! {SHELL,
     ( "results" ) -> Vec<BlockResults> = read_results,
 
     // was the transaction applied?
-    ( "applied" / [tx_hash: Hash] ) -> Option<Event> = applied,
+    ( "applied" / [tx_hash: Hash] ) -> Option<(Event, Vec<Event>)> = applied,
 
     // Query account subspace
     ( "account" / [owner: Address] ) -> Option<Account> = account,
@@ -574,13 +574,36 @@ where
 fn applied<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     tx_hash: Hash,
-) -> namada_storage::Result<Option<Event>>
+) -> namada_storage::Result<Option<(Event, Vec<Event>)>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let matcher = dumb_queries::QueryMatcher::applied(tx_hash);
-    Ok(ctx.event_log.with_matcher(matcher).iter().next().cloned())
+    // FIXME: at this point it's probably better to add the tx hash to masp
+    // events too
+    let matcher_applied = dumb_queries::QueryMatcher::applied(tx_hash);
+    let applied_event = ctx
+        .event_log
+        .with_matcher(matcher_applied)
+        .iter()
+        .next()
+        .cloned();
+
+    if let Some(tx_event) = applied_event {
+        // Look for all the other events relative to this transaction
+        let matcher_events = dumb_queries::QueryMatcher::tx_events(tx_hash);
+        let tx_events = ctx
+            .event_log
+            .with_matcher(matcher_events)
+            .iter()
+            .cloned()
+            .collect();
+
+        // FIXME: should probably condense everything into a vec of events
+        Ok(Some((tx_event, tx_events)))
+    } else {
+        Ok(None)
+    }
 }
 
 fn ibc_client_update<D, H, V, T>(
