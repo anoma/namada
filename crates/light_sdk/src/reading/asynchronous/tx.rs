@@ -1,5 +1,4 @@
-use namada_sdk::events::Event;
-use namada_sdk::rpc::{TxEventQuery, TxResponse};
+use namada_sdk::rpc::{TxAppliedEvents, TxEventQuery, TxResponse};
 use namada_sdk::tx::data::DryRunResult;
 
 use super::*;
@@ -9,7 +8,7 @@ use super::*;
 pub async fn query_tx_events(
     tendermint_addr: &str,
     tx_hash: &str,
-) -> Result<Option<(Event, Vec<Event>)>, Error> {
+) -> Result<Option<TxAppliedEvents>, Error> {
     let client = HttpClient::new(
         TendermintAddress::from_str(tendermint_addr)
             .map_err(|e| Error::Other(e.to_string()))?,
@@ -58,7 +57,7 @@ pub async fn query_tx_response(
 pub async fn query_tx_status(
     tendermint_addr: &str,
     tx_hash: &str,
-) -> Result<(Event, Vec<Event>), Error> {
+) -> Result<TxAppliedEvents, Error> {
     let maybe_event = query_tx_events(tendermint_addr, tx_hash).await?;
     if let Some(e) = maybe_event {
         Ok(e)
