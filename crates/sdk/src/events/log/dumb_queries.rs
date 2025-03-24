@@ -168,7 +168,6 @@ impl QueryMatcher {
 
     /// Returns all the events associated with the provided transaction's hash
     pub fn tx_events(tx_hash: Hash) -> Self {
-        // FIXME: does this prefix work?
         Self::with_prefix(EventType::new("")).and_attribute(TxHashAttr(tx_hash))
     }
 }
@@ -176,6 +175,8 @@ impl QueryMatcher {
 #[cfg(test)]
 mod tests {
     use namada_ethereum_bridge::event::EthBridgeEvent;
+    use namada_token::event::types::TRANSFER;
+    use namada_tx::event::masp_types::TRANSFER as MASP_TRANSFER;
 
     use super::*;
     use crate::events::EventLevel;
@@ -222,6 +223,33 @@ mod tests {
                 panic!("Test failed");
             }
         }
+    }
+
+    // Test if we can query all the events associated with a specific
+    // transaction's hash
+    #[test]
+    fn test_query_all_tx_events() {
+        let tx_hash: Hash = HASH.parse().unwrap();
+        let matcher = QueryMatcher::tx_events(tx_hash);
+
+        let event_1: Event = Event::new(UPDATE_CLIENT, EventLevel::Tx)
+            .with(TxHashAttr(tx_hash))
+            .into();
+        let event_2: Event = Event::new(APPLIED_TX, EventLevel::Tx)
+            .with(TxHashAttr(tx_hash))
+            .into();
+        let event_3: Event = Event::new(TRANSFER, EventLevel::Tx)
+            .with(TxHashAttr(tx_hash))
+            .into();
+        let event_4: Event = Event::new(MASP_TRANSFER, EventLevel::Tx);
+
+        for ev in [event_1, event_2, event_3] {
+            assert!(matcher.matches(&ev))
+        }
+        // FIXME: need a higher level test to check that we can reconstruct
+        // events for the specific inner txs Check that the event
+        // missing the transaction hash attribute is not captured by the matcher
+        assert!(!matcher.matches(&event_4))
     }
 
     /// Test if query matching is working as expected.
