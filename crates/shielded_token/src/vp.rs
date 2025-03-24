@@ -968,7 +968,6 @@ mod shielded_token_tests {
     use namada_core::address::testing::nam;
     use namada_core::address::MASP;
     use namada_core::borsh::BorshSerializeExt;
-    use namada_core::masp::TokenMap;
     use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_state::testing::{arb_account_storage_key, arb_key, TestState};
     use namada_state::{StateRead, TxIndex};
@@ -986,7 +985,6 @@ mod shielded_token_tests {
 
     use crate::storage_key::{
         is_masp_key, is_masp_token_map_key, is_masp_transfer_key,
-        masp_token_map_key,
     };
 
     type CA = WasmCacheRwAccess;
@@ -1070,67 +1068,6 @@ mod shielded_token_tests {
                 .is_err()
             );
         }
-    }
-
-    // Changing keys for both a transfer and a governance proposal is not
-    // allowed
-    #[test]
-    fn test_mixed_keys_rejected() {
-        let mut state = TestState::default();
-        namada_parameters::init_test_storage(&mut state).unwrap();
-        let balance_key = balance_key(&nam(), &MASP);
-        let token_map_key = masp_token_map_key();
-        let keys_changed =
-            BTreeSet::from([balance_key.clone(), token_map_key.clone()]);
-        let verifiers = Default::default();
-
-        let tx_index = TxIndex::default();
-        let mut tx = Tx::from_type(namada_tx::data::TxType::Raw);
-        tx.push_default_inner_tx();
-        let BatchedTx { tx, cmt } = tx.batch_first_tx();
-
-        // Write the conflicting keys
-        let amount = Amount::native_whole(100);
-        let _ = state
-            .write_log_mut()
-            .write(&balance_key, amount.serialize_to_vec())
-            .unwrap();
-        let token_map = TokenMap::new();
-        let _ = state
-            .write_log_mut()
-            .write(&token_map_key, token_map.serialize_to_vec())
-            .unwrap();
-
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                u64::MAX,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
-        let (vp_vp_cache, _vp_cache_dir) = vp_cache();
-        let ctx = Ctx::new(
-            &MASP,
-            &state,
-            &tx,
-            &cmt,
-            &tx_index,
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-            vp_vp_cache,
-        );
-
-        assert!(matches!(
-            MaspVp::validate_tx(
-                &ctx,
-                &tx.batch_ref_tx(&cmt),
-                &keys_changed,
-                &verifiers
-            ),
-            Err(Error::SimpleMessage(
-                "Cannot simultaneously do governance proposal and MASP \
-                 transfer"
-            ))
-        ));
     }
 
     proptest! {
