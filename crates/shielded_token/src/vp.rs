@@ -96,6 +96,14 @@ where
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
+        // Allow any changes to be done by a governance proposal
+        if Gov::is_proposal_accepted(
+            &ctx.pre(),
+            tx_data.tx.data(tx_data.cmt).unwrap_or_default().as_ref(),
+        )? {
+            return Ok(());
+        }
+
         let masp_keys_changed: Vec<&Key> =
             keys_changed.iter().filter(|key| is_masp_key(key)).collect();
         let non_allowed_changes = masp_keys_changed.iter().any(|key| {
@@ -108,21 +116,16 @@ where
                 "Found modifications to non-allowed masp keys",
             ));
         }
-        let masp_governance_changes = masp_keys_changed
-            .iter()
-            .any(|key| is_masp_governance_key(key));
         let masp_transfer_changes = masp_keys_changed
             .iter()
             .any(|key| is_masp_transfer_key(key));
-        if masp_governance_changes && masp_transfer_changes {
+        let masp_governance_changes = masp_keys_changed
+            .iter()
+            .any(|key| is_masp_governance_key(key));
+        if masp_governance_changes {
             Err(Error::new_const(
-                "Cannot simultaneously do governance proposal and MASP \
-                 transfer",
+                "Only governance proposal can change MASP parameters",
             ))
-        } else if masp_governance_changes {
-            // The token map or allowed conversions can only be changed by a
-            // successful governance proposal
-            Self::is_valid_parameter_change(ctx, tx_data)
         } else if masp_transfer_changes {
             // The MASP transfer keys can only be changed by a valid Transaction
             Self::is_valid_masp_transfer(ctx, tx_data, keys_changed, verifiers)
@@ -130,29 +133,6 @@ where
             // Changing no MASP keys at all is also fine
             Ok(())
         }
-    }
-
-    /// Return if the parameter change was done via a governance proposal
-    pub fn is_valid_parameter_change(
-        ctx: &'ctx CTX,
-        tx: &BatchedTxRef<'_>,
-    ) -> Result<()> {
-        tx.tx.data(tx.cmt).map_or_else(
-            || {
-                Err(Error::new_const(
-                    "MASP parameter changes require tx data to be present",
-                ))
-            },
-            |data| {
-                Gov::is_proposal_accepted(&ctx.pre(), data.as_ref())?
-                    .ok_or_else(|| {
-                        Error::new_const(
-                            "MASP parameter changes can only be performed by \
-                             a governance proposal that has been accepted",
-                        )
-                    })
-            },
-        )
     }
 
     // Check that the transaction correctly revealed the nullifiers, if needed
