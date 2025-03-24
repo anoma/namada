@@ -528,8 +528,8 @@ impl MaspClient for IndexerMaspClient {
             }
         }
 
-        let mut stream_of_fetches =
-            stream::iter(fetches).buffered(self.shared.max_concurrent_fetches);
+        let mut stream_of_fetches = stream::iter(fetches)
+            .buffer_unordered(self.shared.max_concurrent_fetches);
         let mut txs = vec![];
 
         while let Some(result) = stream_of_fetches.next().await {
