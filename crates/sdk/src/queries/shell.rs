@@ -579,8 +579,6 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    // FIXME: at this point it's probably better to add the tx hash to masp
-    // events too
     let matcher_applied = dumb_queries::QueryMatcher::applied(tx_hash);
     let applied_event = ctx
         .event_log

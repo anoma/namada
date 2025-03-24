@@ -11,7 +11,8 @@ use namada_sdk::chain::BlockHeight;
 use namada_sdk::collections::HashSet;
 use namada_sdk::events::EventLevel;
 use namada_sdk::events::extend::{
-    ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr, UserAccount,
+    ComposeEvent, Height as HeightAttr, InnerTxHash as InnerTxHashAttr,
+    TxHash as TxHashAttr, UserAccount,
 };
 use namada_sdk::gas::{self, Gas, GasMetering, TxGasMeter, VpGasMeter};
 use namada_sdk::hash::Hash;
@@ -401,6 +402,8 @@ where
                 )
                 .map_err(|e| Box::new(DispatchError::from(e)))?
                 {
+                    let inner_tx_hash =
+                        compute_inner_tx_hash(wrapper_hash, Either::Right(cmt));
                     batched_tx_result.events.insert(
                         MaspEvent {
                             tx_index: IndexedTx {
@@ -417,6 +420,12 @@ where
                             kind: MaspEventKind::Transfer,
                             data: masp_ref,
                         }
+                        .with(TxHashAttr(
+                            // Zero hash if the wrapper is not provided
+                            // (governance proposal)
+                            wrapper_hash.cloned().unwrap_or_default(),
+                        ))
+                        .with(InnerTxHashAttr(inner_tx_hash))
                         .into(),
                     );
                 }
@@ -512,6 +521,12 @@ where
 
     let batch_results =
         payment_result.map_or_else(TxResult::default, |mut masp_tx_result| {
+            let first_inner_tx_hash = compute_inner_tx_hash(
+                tx.wrapper_hash().as_ref(),
+                // Ok to unwrap cause if we have a batched result it means
+                // we've executed the first tx in the batch
+                Either::Right(tx.first_commitments().unwrap()),
+            );
             let mut batch = TxResult::default();
             // Generate Masp event if needed
             masp_tx_result.tx_result.events.insert(
@@ -524,14 +539,14 @@ where
                     kind: MaspEventKind::FeePayment,
                     data: masp_tx_result.masp_section_ref,
                 }
+                .with(TxHashAttr(tx.header_hash()))
+                .with(InnerTxHashAttr(first_inner_tx_hash))
                 .into(),
             );
 
             batch.insert_inner_tx_result(
-                // Ok to unwrap cause if we have a batched result it means
-                // we've executed the first tx in the batch
                 tx.wrapper_hash().as_ref(),
-                either::Right(tx.first_commitments().unwrap()),
+                either::Left(&first_inner_tx_hash),
                 Ok(masp_tx_result.tx_result),
             );
 
