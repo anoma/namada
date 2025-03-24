@@ -69,7 +69,7 @@ pub async fn query_tx_status(
     namada: &impl Namada,
     status: namada_sdk::rpc::TxEventQuery<'_>,
     deadline: Instant,
-) -> Event {
+) -> (Event, Vec<Event>) {
     rpc::query_tx_status(namada, status, deadline)
         .await
         .unwrap()
@@ -2273,7 +2273,7 @@ pub async fn query_has_storage_key<C: Client + Sync>(
 pub async fn query_tx_events<C: Client + Sync>(
     client: &C,
     tx_event_query: namada_sdk::rpc::TxEventQuery<'_>,
-) -> std::result::Result<Option<Event>, <C as Client>::Error> {
+) -> std::result::Result<Option<(Event, Vec<Event>)>, <C as Client>::Error> {
     namada_sdk::rpc::query_tx_events(client, tx_event_query).await
 }
 
@@ -2293,8 +2293,8 @@ pub async fn query_result(context: &impl Namada, args: args::QueryResult) {
     )
     .await
     {
-        Ok(resp) => {
-            let resp = match TxResponse::try_from(resp) {
+        Ok(events) => {
+            let resp = match TxResponse::try_from(events) {
                 Ok(resp) => resp,
                 Err(err) => {
                     edisplay_line!(context.io(), "{err}");

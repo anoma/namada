@@ -161,8 +161,9 @@ pub enum ProcessTxResponse {
 }
 
 impl ProcessTxResponse {
-    /// Returns a `TxResult` if the transaction was applied and accepted by
-    /// all VPs. Note that this always returns false for dry-run transactions.
+    /// Returns a `BatchedTxResult` if the transaction was applied and accepted
+    /// by all VPs. Note that this always returns false for dry-run
+    /// transactions.
     pub fn is_applied_and_valid(
         &self,
         wrapper_hash: Option<&Hash>,
@@ -430,8 +431,9 @@ pub async fn submit_tx(
 
     // The transaction is now on chain. We wait for it to be applied
     let tx_query = rpc::TxEventQuery::Applied(tx_hash.as_str());
-    let event = rpc::query_tx_status(context, tx_query, deadline).await?;
-    let response = TxResponse::from_event(event);
+    let (applied_event, tx_events) =
+        rpc::query_tx_status(context, tx_query, deadline).await?;
+    let response = TxResponse::from_events(applied_event, tx_events);
     display_batch_resp(context, &response);
     Ok(response)
 }
