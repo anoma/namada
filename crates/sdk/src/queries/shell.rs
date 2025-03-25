@@ -24,6 +24,7 @@ use namada_storage::{ResultExt, StorageRead};
 use namada_token::masp::MaspTokenRewardData;
 use namada_token::storage_key::masp_token_map_key;
 use namada_tx::data::DryRunResult;
+use namada_tx::event::types::APPLIED;
 
 use self::eth_bridge::{ETH_BRIDGE, EthBridge};
 use crate::borsh::BorshSerializeExt;
@@ -589,12 +590,15 @@ where
         .cloned();
 
     if let Some(applied_event) = tx_applied_event {
-        // Look for all the other events relative to this transaction
+        // Look for all the other events relative to this transaction (expect
+        // for the tx/applied one) FIXME: actually, instead of removing
+        // the applied event do a single query and extract it
         let matcher_events = dumb_queries::QueryMatcher::tx_events(tx_hash);
         let other_events = ctx
             .event_log
             .with_matcher(matcher_events)
             .iter()
+            .filter(|event| event.kind() != &APPLIED)
             .cloned()
             .collect();
 
