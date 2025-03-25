@@ -1447,6 +1447,331 @@ fn enable_rewards_after_shielding() -> Result<()> {
     Ok(())
 }
 
+/// In this test we verify that the results of auto-compounding are
+/// approximately equal to what is obtained by manually unshielding and
+/// reshielding each time.
+#[test]
+fn auto_compounding() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::setup()?;
+    // Wait till epoch boundary
+    node.next_masp_epoch();
+    // Send 0.1 BTC from Albert to Albert's payment address
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec![
+                "shield",
+                "--source",
+                ALBERT,
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                BTC,
+                "--amount",
+                "0.1",
+                "--signing-keys",
+                ALBERT_KEY,
+                "--node",
+                validator_one_rpc,
+            ]),
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // Send 0.1 BTC from Albert to Bertha's payment address
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec![
+                "shield",
+                "--source",
+                ALBERT,
+                "--target",
+                AB_PAYMENT_ADDRESS,
+                "--token",
+                BTC,
+                "--amount",
+                "0.1",
+                "--signing-keys",
+                ALBERT_KEY,
+                "--node",
+                validator_one_rpc,
+            ]),
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            AB_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+
+    // Assert that the actual and estimated balances are equal to the parameters
+    // of this closure. Also assert that the total MASP balance is equal to the
+    // last parameter. Then unshield, reshield, synchronize, and jump to the
+    // next epoch.
+    let mut check_balance_and_reshield =
+        |bal_a, bal_b, est_a, est_b, total| -> Result<()> {
+            // Assert BTC balance at ALbert's shielded key is still 0.1
+            let captured = CapturedOutput::of(|| {
+                run(
+                    &node,
+                    Bin::Client,
+                    vec![
+                        "balance",
+                        "--owner",
+                        AA_VIEWING_KEY,
+                        "--token",
+                        BTC,
+                        "--node",
+                        validator_one_rpc,
+                    ],
+                )
+            });
+            assert!(captured.result.is_ok());
+            assert!(captured.contains("btc: 0.1"));
+
+            // Assert BTC balance at Bertha's shielded key is still 0.1
+            let captured = CapturedOutput::of(|| {
+                run(
+                    &node,
+                    Bin::Client,
+                    vec![
+                        "balance",
+                        "--owner",
+                        AB_VIEWING_KEY,
+                        "--token",
+                        BTC,
+                        "--node",
+                        validator_one_rpc,
+                    ],
+                )
+            });
+            assert!(captured.result.is_ok());
+            assert!(captured.contains("btc: 0.1"));
+
+            // Assert NAM balance at Albert's shielded key is bal_a
+            let captured = CapturedOutput::of(|| {
+                run(
+                    &node,
+                    Bin::Client,
+                    vec![
+                        "balance",
+                        "--owner",
+                        AA_VIEWING_KEY,
+                        "--token",
+                        NAM,
+                        "--node",
+                        validator_one_rpc,
+                    ],
+                )
+            });
+
+            assert!(captured.result.is_ok());
+            assert!(captured.contains(&format!("nam: {}", bal_a)));
+
+            // Assert NAM balance at Bertha's shielded key is bal_b
+            let captured = CapturedOutput::of(|| {
+                run(
+                    &node,
+                    Bin::Client,
+                    vec![
+                        "balance",
+                        "--owner",
+                        AB_VIEWING_KEY,
+                        "--token",
+                        NAM,
+                        "--node",
+                        validator_one_rpc,
+                    ],
+                )
+            });
+
+            assert!(captured.result.is_ok());
+            assert!(captured.contains(&format!("nam: {}", bal_b)));
+
+            // Assert the rewards estimate at Albert's shielded key matches
+            // est_a
+            let captured = CapturedOutput::of(|| {
+                run(
+                    &node,
+                    Bin::Client,
+                    vec![
+                        "estimate-shielding-rewards",
+                        "--key",
+                        AA_VIEWING_KEY,
+                        "--node",
+                        validator_one_rpc,
+                    ],
+                )
+            });
+            assert!(captured.result.is_ok());
+            assert!(captured.contains(&format!(
+                "Estimated native token rewards for the next MASP epoch: {}",
+                est_a
+            )));
+
+            // Assert the rewards estimate at Bertha's shielded key matches
+            // est_b
+            let captured = CapturedOutput::of(|| {
+                run(
+                    &node,
+                    Bin::Client,
+                    vec![
+                        "estimate-shielding-rewards",
+                        "--key",
+                        AB_VIEWING_KEY,
+                        "--node",
+                        validator_one_rpc,
+                    ],
+                )
+            });
+            assert!(captured.result.is_ok());
+            assert!(captured.contains(&format!(
+                "Estimated native token rewards for the next MASP epoch: {}",
+                est_b
+            )));
+
+            // Assert NAM balance at MASP pool is exclusively the
+            // rewards from the shielded BTC
+            let captured = CapturedOutput::of(|| {
+                run(
+                    &node,
+                    Bin::Client,
+                    vec![
+                        "balance",
+                        "--owner",
+                        MASP,
+                        "--token",
+                        NAM,
+                        "--node",
+                        validator_one_rpc,
+                    ],
+                )
+            });
+            assert!(captured.result.is_ok());
+            assert!(captured.contains(&format!("nam: {}", total)));
+
+            // Send bal_b NAM from Bertha's shielded key to Albert
+            let captured = CapturedOutput::of(|| {
+                run(
+                    &node,
+                    Bin::Client,
+                    apply_use_device(vec![
+                        "unshield",
+                        "--source",
+                        B_SPENDING_KEY,
+                        "--target",
+                        ALBERT,
+                        "--token",
+                        NAM,
+                        "--amount",
+                        bal_b,
+                        "--gas-limit",
+                        "70000",
+                        "--signing-keys",
+                        ALBERT_KEY,
+                        "--node",
+                        validator_one_rpc,
+                    ]),
+                )
+            });
+            assert!(captured.result.is_ok());
+            assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+            // sync the shielded context
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "shielded-sync",
+                    "--viewing-keys",
+                    AA_VIEWING_KEY,
+                    AB_VIEWING_KEY,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )?;
+
+            // Send bal_b NAM from Albert to Bertha's shielded key
+            let captured = CapturedOutput::of(|| {
+                run(
+                    &node,
+                    Bin::Client,
+                    apply_use_device(vec![
+                        "shield",
+                        "--source",
+                        ALBERT,
+                        "--target",
+                        AB_PAYMENT_ADDRESS,
+                        "--token",
+                        NAM,
+                        "--amount",
+                        bal_b,
+                        "--signing-keys",
+                        ALBERT_KEY,
+                        "--node",
+                        validator_one_rpc,
+                    ]),
+                )
+            });
+            assert!(captured.result.is_ok());
+            assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+            // sync the shielded context
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "shielded-sync",
+                    "--viewing-keys",
+                    AA_VIEWING_KEY,
+                    AB_VIEWING_KEY,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )?;
+
+            // Wait till epoch boundary
+            node.next_masp_epoch();
+
+            Ok(())
+        };
+
+    // Now check that the principal amount compounds correctly over a few epochs
+    check_balance_and_reshield("0", "0", "0", "0", "0")?;
+    check_balance_and_reshield(
+        "0.0317", "0.0317", "0.0317", "0.0317", "0.0634",
+    )?;
+    check_balance_and_reshield(
+        "0.09534", "0.09533", "0.06491", "0.0649", "0.190688",
+    )?;
+    check_balance_and_reshield(
+        "0.191008", "0.190982", "0.09678", "0.096796", "0.382016",
+    )?;
+    check_balance_and_reshield(
+        "0.31854", "0.31851", "0.128528", "0.128524", "0.637092",
+    )?;
+    Ok(())
+}
+
 /// In this test we confirm that writing to the conversion update key is
 /// effective and changes rewards from their expected trajectory.
 #[test]
