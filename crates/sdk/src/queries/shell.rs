@@ -581,34 +581,27 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let matcher_applied = dumb_queries::QueryMatcher::applied(tx_hash);
-    let tx_applied_event = ctx
+    // Match all the events carrying the provided tx hash
+    let matcher_tx_events = dumb_queries::QueryMatcher::tx_events(tx_hash);
+    let mut tx_events: Vec<Event> = ctx
         .event_log
-        .with_matcher(matcher_applied)
+        .with_matcher(matcher_tx_events)
         .iter()
-        .next()
-        .cloned();
+        .cloned()
+        .collect();
 
-    if let Some(applied_event) = tx_applied_event {
-        // Look for all the other events relative to this transaction (expect
-        // for the tx/applied one) FIXME: actually, instead of removing
-        // the applied event do a single query and extract it
-        let matcher_events = dumb_queries::QueryMatcher::tx_events(tx_hash);
-        let other_events = ctx
-            .event_log
-            .with_matcher(matcher_events)
-            .iter()
-            .filter(|event| event.kind() != &APPLIED)
-            .cloned()
-            .collect();
+    Ok(tx_events
+        .iter()
+        .position(|event| event.kind() == &APPLIED)
+        .map(|applied_event_pos| {
+            // Reorganize the events for the output
+            let tx_applied_event = tx_events.swap_remove(applied_event_pos);
 
-        Ok(Some(TxAppliedEvents {
-            applied: applied_event,
-            other: other_events,
+            TxAppliedEvents {
+                applied: tx_applied_event,
+                other: tx_events,
+            }
         }))
-    } else {
-        Ok(None)
-    }
 }
 
 fn ibc_client_update<D, H, V, T>(
