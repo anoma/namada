@@ -753,7 +753,7 @@ impl TryFrom<TxAppliedEvents> for TxResponse {
                     .read_attribute::<InnerTxHash>()
                     .map_err(|e| e.to_string())?;
                 let inner_tx_result =
-                    batch.0.get_mut(&inner_tx_hash).ok_or_else(|| {
+                    batch.get_mut(&inner_tx_hash).ok_or_else(|| {
                         format!(
                             "MIssing result of inner transaction {}",
                             inner_tx_hash

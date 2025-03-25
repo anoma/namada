@@ -246,9 +246,8 @@ mod tests {
         for ev in [event_1, event_2, event_3] {
             assert!(matcher.matches(&ev))
         }
-        // FIXME: need a higher level test to check that we can reconstruct
-        // events for the specific inner txs Check that the event
-        // missing the transaction hash attribute is not captured by the matcher
+        // Check that the event missing the transaction hash attribute is not
+        // captured by the matcher
         assert!(!matcher.matches(&event_4))
     }
 
