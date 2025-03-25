@@ -354,7 +354,7 @@ where
         .filter(|cmt| {
             let inner_tx_hash =
                 compute_inner_tx_hash(wrapper_hash, Either::Right(cmt));
-            !tx_result.0.contains_key(&inner_tx_hash)
+            !tx_result.contains_key(&inner_tx_hash)
         })
         .collect::<HashSet<_>>()
         .into_iter();
