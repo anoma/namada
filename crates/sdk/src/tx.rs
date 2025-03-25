@@ -44,6 +44,7 @@ use namada_core::key::{self, *};
 use namada_core::masp::{AssetData, MaspEpoch, TransferSource, TransferTarget};
 use namada_core::storage;
 use namada_core::time::DateTimeUtc;
+use namada_events::extend::EventAttributeEntry;
 use namada_governance::cli::onchain::{
     DefaultProposal, OnChainProposal, PgfFundingProposal, PgfStewardProposal,
 };
@@ -91,7 +92,7 @@ use crate::signing::{
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::wallet::WalletIo;
-use crate::{Namada, args};
+use crate::{Namada, args, events};
 
 /// Initialize account transaction WASM
 pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
@@ -511,7 +512,15 @@ pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
                             event.level(),
                             event.kind(),
                         );
-                        for (k, v) in event.into_attributes() {
+                        for (k, v) in
+                            event.into_attributes().iter().filter(|(k, _v)| {
+                                // Filter out data that's already displayed
+                                // above
+                                *k != events::extend::TxHash::KEY
+                                    && *k != events::extend::Height::KEY
+                                    && *k != events::extend::InnerTxHash::KEY
+                            })
+                        {
                             display_line!(context.io(), "{:4} - {k}: {v}", "")
                         }
                     }
