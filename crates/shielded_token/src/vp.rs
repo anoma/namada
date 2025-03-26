@@ -30,10 +30,10 @@ use namada_tx::BatchedTxRef;
 use namada_vp_env::{Error, Result, VpEnv};
 
 use crate::storage_key::{
-    is_masp_key, is_masp_nullifier_key, is_masp_transfer_key,
-    is_masp_undated_balance_key, masp_commitment_anchor_key,
-    masp_commitment_tree_key, masp_convert_anchor_key, masp_nullifier_key,
-    masp_undated_balance_key,
+    is_masp_key, is_masp_nullifier_key, is_masp_token_map_key,
+    is_masp_transfer_key, is_masp_undated_balance_key,
+    masp_commitment_anchor_key, masp_commitment_tree_key,
+    masp_convert_anchor_key, masp_nullifier_key, masp_undated_balance_key,
 };
 use crate::validation::verify_shielded_tx;
 
@@ -104,8 +104,10 @@ where
             return Ok(());
         }
 
-        let masp_keys_changed: Vec<&Key> =
-            keys_changed.iter().filter(|key| is_masp_key(key)).collect();
+        let masp_keys_changed: Vec<&Key> = keys_changed
+            .iter()
+            .filter(|key| is_masp_key(key) || is_masp_token_map_key(key))
+            .collect();
         let masp_transfer_changes = masp_keys_changed
             .iter()
             .all(|key| is_masp_transfer_key(key));
