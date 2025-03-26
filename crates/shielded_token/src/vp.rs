@@ -30,7 +30,7 @@ use namada_tx::BatchedTxRef;
 use namada_vp_env::{Error, Result, VpEnv};
 
 use crate::storage_key::{
-    is_masp_governance_key, is_masp_key, is_masp_nullifier_key,
+    is_masp_key, is_masp_nullifier_key, is_masp_token_map_key,
     is_masp_transfer_key, is_masp_undated_balance_key,
     masp_commitment_anchor_key, masp_commitment_tree_key,
     masp_convert_anchor_key, masp_nullifier_key, masp_undated_balance_key,
@@ -96,63 +96,34 @@ where
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
-        let masp_keys_changed: Vec<&Key> =
-            keys_changed.iter().filter(|key| is_masp_key(key)).collect();
-        let non_allowed_changes = masp_keys_changed.iter().any(|key| {
-            !is_masp_transfer_key(key) && !is_masp_governance_key(key)
-        });
-
-        // Check that the transaction didn't write unallowed masp keys
-        if non_allowed_changes {
-            return Err(Error::new_const(
-                "Found modifications to non-allowed masp keys",
-            ));
+        // Allow any changes to be done by a governance proposal
+        if Gov::is_proposal_accepted(
+            &ctx.pre(),
+            tx_data.tx.data(tx_data.cmt).unwrap_or_default().as_ref(),
+        )? {
+            return Ok(());
         }
-        let masp_governance_changes = masp_keys_changed
+
+        let masp_keys_changed: Vec<&Key> = keys_changed
             .iter()
-            .any(|key| is_masp_governance_key(key));
+            .filter(|key| is_masp_key(key) || is_masp_token_map_key(key))
+            .collect();
         let masp_transfer_changes = masp_keys_changed
             .iter()
-            .any(|key| is_masp_transfer_key(key));
-        if masp_governance_changes && masp_transfer_changes {
-            Err(Error::new_const(
-                "Cannot simultaneously do governance proposal and MASP \
-                 transfer",
-            ))
-        } else if masp_governance_changes {
-            // The token map or allowed conversions can only be changed by a
-            // successful governance proposal
-            Self::is_valid_parameter_change(ctx, tx_data)
+            .all(|key| is_masp_transfer_key(key));
+
+        if masp_keys_changed.is_empty() {
+            // Changing no MASP keys at all is fine
+            Ok(())
         } else if masp_transfer_changes {
             // The MASP transfer keys can only be changed by a valid Transaction
             Self::is_valid_masp_transfer(ctx, tx_data, keys_changed, verifiers)
         } else {
-            // Changing no MASP keys at all is also fine
-            Ok(())
+            return Err(Error::new_const(
+                "A governance proposal is required to modify MASP \
+                 non-transfer keys",
+            ));
         }
-    }
-
-    /// Return if the parameter change was done via a governance proposal
-    pub fn is_valid_parameter_change(
-        ctx: &'ctx CTX,
-        tx: &BatchedTxRef<'_>,
-    ) -> Result<()> {
-        tx.tx.data(tx.cmt).map_or_else(
-            || {
-                Err(Error::new_const(
-                    "MASP parameter changes require tx data to be present",
-                ))
-            },
-            |data| {
-                Gov::is_proposal_accepted(&ctx.pre(), data.as_ref())?
-                    .ok_or_else(|| {
-                        Error::new_const(
-                            "MASP parameter changes can only be performed by \
-                             a governance proposal that has been accepted",
-                        )
-                    })
-            },
-        )
     }
 
     // Check that the transaction correctly revealed the nullifiers, if needed
@@ -988,7 +959,6 @@ mod shielded_token_tests {
     use namada_core::address::testing::nam;
     use namada_core::address::MASP;
     use namada_core::borsh::BorshSerializeExt;
-    use namada_core::masp::TokenMap;
     use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_state::testing::{arb_account_storage_key, arb_key, TestState};
     use namada_state::{StateRead, TxIndex};
@@ -1006,7 +976,6 @@ mod shielded_token_tests {
 
     use crate::storage_key::{
         is_masp_key, is_masp_token_map_key, is_masp_transfer_key,
-        masp_token_map_key,
     };
 
     type CA = WasmCacheRwAccess;
@@ -1090,67 +1059,6 @@ mod shielded_token_tests {
                 .is_err()
             );
         }
-    }
-
-    // Changing keys for both a transfer and a governance proposal is not
-    // allowed
-    #[test]
-    fn test_mixed_keys_rejected() {
-        let mut state = TestState::default();
-        namada_parameters::init_test_storage(&mut state).unwrap();
-        let balance_key = balance_key(&nam(), &MASP);
-        let token_map_key = masp_token_map_key();
-        let keys_changed =
-            BTreeSet::from([balance_key.clone(), token_map_key.clone()]);
-        let verifiers = Default::default();
-
-        let tx_index = TxIndex::default();
-        let mut tx = Tx::from_type(namada_tx::data::TxType::Raw);
-        tx.push_default_inner_tx();
-        let BatchedTx { tx, cmt } = tx.batch_first_tx();
-
-        // Write the conflicting keys
-        let amount = Amount::native_whole(100);
-        let _ = state
-            .write_log_mut()
-            .write(&balance_key, amount.serialize_to_vec())
-            .unwrap();
-        let token_map = TokenMap::new();
-        let _ = state
-            .write_log_mut()
-            .write(&token_map_key, token_map.serialize_to_vec())
-            .unwrap();
-
-        let gas_meter =
-            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
-                u64::MAX,
-                namada_parameters::get_gas_scale(&state).unwrap(),
-            )));
-        let (vp_vp_cache, _vp_cache_dir) = vp_cache();
-        let ctx = Ctx::new(
-            &MASP,
-            &state,
-            &tx,
-            &cmt,
-            &tx_index,
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-            vp_vp_cache,
-        );
-
-        assert!(matches!(
-            MaspVp::validate_tx(
-                &ctx,
-                &tx.batch_ref_tx(&cmt),
-                &keys_changed,
-                &verifiers
-            ),
-            Err(Error::SimpleMessage(
-                "Cannot simultaneously do governance proposal and MASP \
-                 transfer"
-            ))
-        ));
     }
 
     proptest! {
@@ -1246,7 +1154,8 @@ mod shielded_token_tests {
                     &verifiers
                 ),
                 Err(Error::SimpleMessage(
-                    "Found modifications to non-allowed masp keys"
+                    "A governance proposal is required to modify MASP \
+                    non-transfer keys"
                 ))
             ));
         }
