@@ -7,10 +7,10 @@ use namada_sdk::gas::{GasMetering, TxGasMeter};
 use namada_sdk::parameters;
 use namada_sdk::queries::{EncodedResponseQuery, RequestQuery};
 use namada_sdk::state::{
-    DBIter, Result, ResultExt, StorageHasher, TxIndex, DB,
+    DBIter, Error, Result, ResultExt, StorageHasher, TxIndex, DB,
 };
 use namada_sdk::tx::data::{DryRunResult, GasLimit, TxResult, TxType};
-use namada_sdk::tx::Tx;
+use namada_sdk::tx::{self, Tx};
 use namada_vm::wasm::{TxCache, VpCache};
 use namada_vm::WasmCacheAccess;
 
@@ -66,6 +66,22 @@ where
             (Some(tx.header_hash()), tx_result, tx_gas_meter)
         }
         _ => {
+            // Check allowlist as the wasm vm `fn check_tx_allowed` is only
+            // enforced for wrappers
+            for cmt in tx.commitments() {
+                let code_sec = tx
+                    .get_section(cmt.code_sechash())
+                    .and_then(|x| tx::Section::code_sec(&x))
+                    .ok_or_else(|| Error::new_const("Missing tx code"))?;
+                let code_hash = code_sec.code.hash();
+                if !parameters::is_tx_allowed(&state, &code_hash)? {
+                    return Err(Error::new_alloc(format!(
+                        "Tx code with hash {} is disallowed",
+                        code_hash.to_string().to_lowercase()
+                    )));
+                }
+            }
+
             // When dry running only the inner tx(s), use the max block gas
             // as the gas limit
             let max_block_gas = parameters::get_max_block_gas(&state)?;

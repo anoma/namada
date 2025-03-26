@@ -106,6 +106,13 @@ impl DB for MockDB {
         Self::default()
     }
 
+    fn open_read_only(
+        _db_path: impl AsRef<Path>,
+        _cache: Option<&Self::Cache>,
+    ) -> Self {
+        Self::default()
+    }
+
     fn restore_from(&mut self, source: MockDBRestoreSource) -> Result<()> {
         match source {}
     }

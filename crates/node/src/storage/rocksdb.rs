@@ -1086,6 +1086,13 @@ impl DB for RocksDB {
         open(db_path, false, cache).expect("cannot open the DB")
     }
 
+    fn open_read_only(
+        db_path: impl AsRef<std::path::Path>,
+        cache: Option<&Self::Cache>,
+    ) -> Self {
+        open(db_path, true, cache).expect("cannot open the DB")
+    }
+
     fn restore_from(
         &mut self,
         (cache, snapshot): Self::RestoreSource<'_>,
