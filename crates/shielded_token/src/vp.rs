@@ -106,32 +106,20 @@ where
 
         let masp_keys_changed: Vec<&Key> =
             keys_changed.iter().filter(|key| is_masp_key(key)).collect();
-        let non_allowed_changes = masp_keys_changed.iter().any(|key| {
-            !is_masp_transfer_key(key) && !is_masp_governance_key(key)
-        });
+        let masp_transfer_changes =
+            masp_keys_changed.iter().all(is_masp_transfer_key);
 
-        // Check that the transaction didn't write unallowed masp keys
-        if non_allowed_changes {
-            return Err(Error::new_const(
-                "Found modifications to non-allowed masp keys",
-            ));
-        }
-        let masp_transfer_changes = masp_keys_changed
-            .iter()
-            .any(|key| is_masp_transfer_key(key));
-        let masp_governance_changes = masp_keys_changed
-            .iter()
-            .any(|key| is_masp_governance_key(key));
-        if masp_governance_changes {
-            Err(Error::new_const(
-                "Only governance proposal can change MASP parameters",
-            ))
+        if masp_keys_changed.is_empty() {
+            // Changing no MASP keys at all is also fine
+            Ok(())
         } else if masp_transfer_changes {
             // The MASP transfer keys can only be changed by a valid Transaction
             Self::is_valid_masp_transfer(ctx, tx_data, keys_changed, verifiers)
         } else {
-            // Changing no MASP keys at all is also fine
-            Ok(())
+            return Err(Error::new_const(
+                "A governance proposal is required to modify MASP parameter \
+                 keys",
+            ));
         }
     }
 
