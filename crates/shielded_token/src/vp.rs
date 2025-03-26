@@ -120,8 +120,8 @@ where
             Self::is_valid_masp_transfer(ctx, tx_data, keys_changed, verifiers)
         } else {
             return Err(Error::new_const(
-                "A governance proposal is required to modify MASP parameter \
-                 keys",
+                "A governance proposal is required to modify MASP \
+                 non-transfer keys",
             ));
         }
     }
@@ -1154,7 +1154,8 @@ mod shielded_token_tests {
                     &verifiers
                 ),
                 Err(Error::SimpleMessage(
-                    "Found modifications to non-allowed masp keys"
+                    "A governance proposal is required to modify MASP \
+                    non-transfer keys"
                 ))
             ));
         }
