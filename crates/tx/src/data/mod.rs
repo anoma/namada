@@ -14,6 +14,7 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::fmt::{self, Display};
 use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
 use bitflags::bitflags;
@@ -228,7 +229,7 @@ pub struct DryRunResult(pub TxResult<String>, pub WholeGas);
 // strings
 // TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-pub struct TxResult<T>(pub HashMap<Hash, Result<BatchedTxResult, T>>);
+pub struct TxResult<T>(HashMap<Hash, Result<BatchedTxResult, T>>);
 
 impl<T> Default for TxResult<T> {
     fn default() -> Self {
@@ -316,6 +317,20 @@ impl<T: Display> TxResult<T> {
     }
 }
 
+impl<T> Deref for TxResult<T> {
+    type Target = HashMap<Hash, Result<BatchedTxResult, T>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for TxResult<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 impl<T> TxResult<T> {
     /// Return a new set of tx results.
     pub fn new() -> Self {
@@ -343,26 +358,6 @@ impl<T> TxResult<T> {
     ) -> Option<&Result<BatchedTxResult, T>> {
         self.0
             .get(&compute_inner_tx_hash(wrapper_hash, commitments))
-    }
-
-    /// Iterate over all the inner tx results.
-    #[inline]
-    pub fn iter(
-        &self,
-    ) -> impl Iterator<Item = (&Hash, &Result<BatchedTxResult, T>)> + '_ {
-        self.0.iter()
-    }
-
-    /// Return the length of the collection of inner tx results.
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    /// Check if the collection of inner tx results is empty.
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
     }
 
     /// Check if all the inner txs in the collection have been successfully

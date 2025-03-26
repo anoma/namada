@@ -4203,7 +4203,7 @@ fn expired_masp_tx() -> Result<()> {
 
         for result in results.iter() {
             // The batch should contain a single inner tx
-            assert_eq!(result.0.len(), 1);
+            assert_eq!(result.len(), 1);
 
             let inner_tx_result = result
                 .get_inner_tx_result(
@@ -6117,7 +6117,7 @@ fn identical_output_descriptions() -> Result<()> {
 
         for result in results.iter() {
             // The batch should contain two inner txs
-            assert_eq!(result.0.len(), 2);
+            assert_eq!(result.len(), 2);
 
             for inner_cmt in inner_cmts {
                 let inner_tx_result = result

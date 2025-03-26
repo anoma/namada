@@ -2009,8 +2009,8 @@ fn enforce_fee_payment() -> Result<()> {
     let second_result = &results[1];
 
     // The batches should contain a single inner tx each
-    assert_eq!(first_result.0.len(), 1);
-    assert_eq!(second_result.0.len(), 1);
+    assert_eq!(first_result.len(), 1);
+    assert_eq!(second_result.len(), 1);
 
     // First transaction pay fees but then fails on the token transfer because
     // of a lack of funds
