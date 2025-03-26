@@ -755,7 +755,7 @@ impl TryFrom<TxAppliedEvents> for TxResponse {
                 let inner_tx_result =
                     batch.get_mut(&inner_tx_hash).ok_or_else(|| {
                         format!(
-                            "MIssing result of inner transaction {}",
+                            "Missing result of inner transaction {}",
                             inner_tx_hash
                         )
                     })?;
