@@ -521,12 +521,9 @@ where
 
     let batch_results =
         payment_result.map_or_else(TxResult::default, |mut masp_tx_result| {
-            let first_inner_tx_hash = compute_inner_tx_hash(
-                tx.wrapper_hash().as_ref(),
-                // Ok to unwrap cause if we have a batched result it means
-                // we've executed the first tx in the batch
-                Either::Right(tx.first_commitments().unwrap()),
-            );
+            // Ok to unwrap cause if we have a batched result it means we've
+            // executed the first tx in the batch
+            let first_commitments = tx.first_commitments().unwrap();
             let mut batch = TxResult::default();
             // Generate Masp event if needed
             masp_tx_result.tx_result.events.insert(
@@ -540,13 +537,16 @@ where
                     data: masp_tx_result.masp_section_ref,
                 }
                 .with(TxHashAttr(tx.header_hash()))
-                .with(InnerTxHashAttr(first_inner_tx_hash))
+                .with(InnerTxHashAttr(compute_inner_tx_hash(
+                    tx.wrapper_hash().as_ref(),
+                    Either::Right(first_commitments),
+                )))
                 .into(),
             );
 
             batch.insert_inner_tx_result(
                 tx.wrapper_hash().as_ref(),
-                either::Left(&first_inner_tx_hash),
+                either::Right(first_commitments),
                 Ok(masp_tx_result.tx_result),
             );
 
