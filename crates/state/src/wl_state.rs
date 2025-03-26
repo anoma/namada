@@ -164,6 +164,33 @@ where
         state
     }
 
+    /// Instantiate a full-access state. Loads the last state from a DB, if any.
+    pub fn open_read_only(
+        db_path: impl AsRef<std::path::Path>,
+        cache: Option<&D::Cache>,
+        chain_id: ChainId,
+        native_token: Address,
+        storage_read_past_height_limit: Option<u64>,
+        diff_key_filter: fn(&storage::Key) -> bool,
+    ) -> WlState<D, H> {
+        let write_log = WriteLog::default();
+        let db = D::open_read_only(db_path, cache);
+        let in_mem = InMemory::new(
+            chain_id,
+            native_token,
+            storage_read_past_height_limit,
+        );
+        let mut state = Self(WlState {
+            write_log,
+            db,
+            in_mem,
+            diff_key_filter,
+        });
+        state.load_last_state();
+        let Self(read_only) = state;
+        read_only
+    }
+
     #[allow(dead_code)]
     /// Check if the given address exists on chain and return the gas cost.
     pub fn db_exists(&self, addr: &Address) -> Result<(bool, Gas)> {

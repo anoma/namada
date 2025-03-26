@@ -2502,6 +2502,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum NodeUtils {
         TestGenesis(TestGenesis),
+        DryRunProposal(DryRunProposal),
     }
 
     impl SubCmd for NodeUtils {
@@ -2509,7 +2510,11 @@ pub mod cmds {
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
-                SubCmd::parse(matches).map(Self::TestGenesis)
+                let test_genesis =
+                    SubCmd::parse(matches).map(Self::TestGenesis);
+                let dry_run_proposal =
+                    SubCmd::parse(matches).map(Self::DryRunProposal);
+                test_genesis.or(dry_run_proposal)
             })
         }
 
@@ -2517,6 +2522,7 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about(wrap!("Utilities."))
                 .subcommand(TestGenesis::def())
+                .subcommand(DryRunProposal::def())
                 .subcommand_required(true)
                 .arg_required_else_help(true)
         }
@@ -2851,6 +2857,25 @@ pub mod cmds {
                      may be found."
                 ))
                 .add_args::<args::TestGenesis>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct DryRunProposal(pub args::DryRunProposal);
+
+    impl SubCmd for DryRunProposal {
+        const CMD: &'static str = "dry-run-proposal";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::DryRunProposal::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!("Dry run a governance proposal code."))
+                .add_args::<args::DryRunProposal>()
         }
     }
 
@@ -3707,6 +3732,7 @@ pub mod args {
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
+    pub const WASM_PATH: ArgOpt<PathBuf> = arg_opt("wasm-path");
     pub const WEBSITE_OPT: ArgOpt<String> = arg_opt("website");
     pub const WINDOW_SECONDS: ArgOpt<u64> = arg_opt("window-seconds");
     pub const WITH_INDEXER: ArgOpt<String> = arg_opt("with-indexer");
@@ -8980,6 +9006,26 @@ pub mod args {
                  given keys and/or keys associated with the given addresses. \
                  A pre-genesis wallet must be present in the base directory."
             )))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct DryRunProposal {
+        pub wasm_path: PathBuf,
+    }
+
+    impl Args for DryRunProposal {
+        fn parse(matches: &ArgMatches) -> Self {
+            let wasm_path = WASM_PATH.parse(matches).unwrap_or_default();
+            Self { wasm_path }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                WASM_PATH
+                    .def()
+                    .help(wrap!("Path to the wasm file to execute.")),
+            )
         }
     }
 
