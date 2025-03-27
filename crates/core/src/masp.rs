@@ -294,6 +294,9 @@ pub fn encode_reward_asset_types(
 /// MASP token map
 pub type TokenMap = BTreeMap<String, Address>;
 
+/// MASP token precision
+pub type Precision = u128;
+
 // enough capacity to store the payment address
 const PAYMENT_ADDRESS_SIZE: usize = 43;
 
