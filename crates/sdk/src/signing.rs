@@ -25,7 +25,7 @@ use namada_core::tendermint::Time as TmTime;
 use namada_core::time::DateTimeUtc;
 use namada_core::token::{Amount, DenominatedAmount};
 use namada_governance::storage::proposal::{
-    InitProposalData, ProposalType, VoteProposalData,
+    ContPGFTarget, InitProposalData, ProposalType, VoteProposalData,
 };
 use namada_governance::storage::vote::ProposalVote;
 use namada_ibc::core::channel::types::timeout::{
@@ -981,9 +981,11 @@ fn proposal_type_to_ledger_vector(
             output.push("Proposal type : PGF Payment".to_string());
             for action in actions {
                 match action {
-                    PGFAction::Continuous(AddRemove::Add(
-                        PGFTarget::Internal(target),
-                    )) => {
+                    PGFAction::Continuous(AddRemove::Add(ContPGFTarget {
+                        target: PGFTarget::Internal(target),
+                        end_epoch,
+                        proposal_id: _,
+                    })) => {
                         output.push(
                             "PGF Action : Add Continuous Payment".to_string(),
                         );
@@ -994,10 +996,20 @@ fn proposal_type_to_ledger_vector(
                                 &target.amount.to_string_native()
                             )
                         ));
+                        output.push(format!(
+                            "End Epoch: {}",
+                            if let Some(end_epoch) = end_epoch {
+                                end_epoch.0.to_string()
+                            } else {
+                                "None".to_string()
+                            }
+                        ));
                     }
-                    PGFAction::Continuous(AddRemove::Add(PGFTarget::Ibc(
-                        target,
-                    ))) => {
+                    PGFAction::Continuous(AddRemove::Add(ContPGFTarget {
+                        target: PGFTarget::Ibc(target),
+                        end_epoch,
+                        proposal_id: _,
+                    })) => {
                         output.push(
                             "PGF Action : Add Continuous Payment".to_string(),
                         );
@@ -1007,18 +1019,31 @@ fn proposal_type_to_ledger_vector(
                             to_ledger_decimal_whitelisted_token(
                                 &target.amount.to_string_native()
                             )
+                        ));
+                        output.push(format!(
+                            "End Epoch: {}",
+                            if let Some(end_epoch) = end_epoch {
+                                end_epoch.0.to_string()
+                            } else {
+                                "None".to_string()
+                            }
                         ));
                         output.push(format!("Port ID: {}", target.port_id));
                         output
                             .push(format!("Channel ID: {}", target.channel_id));
                     }
                     PGFAction::Continuous(AddRemove::Remove(
-                        PGFTarget::Internal(target),
+                        ContPGFTarget {
+                            target: PGFTarget::Internal(target),
+                            end_epoch,
+                            proposal_id,
+                        },
                     )) => {
                         output.push(
                             "PGF Action : Remove Continuous Payment"
                                 .to_string(),
                         );
+                        output.push(format!("Proposal ID: {}", proposal_id));
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
                             "Amount: NAM {}",
@@ -1026,20 +1051,41 @@ fn proposal_type_to_ledger_vector(
                                 &target.amount.to_string_native()
                             )
                         ));
+                        output.push(format!(
+                            "End Epoch: {}",
+                            if let Some(end_epoch) = end_epoch {
+                                end_epoch.0.to_string()
+                            } else {
+                                "None".to_string()
+                            }
+                        ));
                     }
                     PGFAction::Continuous(AddRemove::Remove(
-                        PGFTarget::Ibc(target),
+                        ContPGFTarget {
+                            target: PGFTarget::Ibc(target),
+                            end_epoch,
+                            proposal_id,
+                        },
                     )) => {
                         output.push(
                             "PGF Action : Remove Continuous Payment"
                                 .to_string(),
                         );
+                        output.push(format!("Proposal ID: {}", proposal_id));
                         output.push(format!("Target: {}", target.target));
                         output.push(format!(
                             "Amount: NAM {}",
                             to_ledger_decimal_whitelisted_token(
                                 &target.amount.to_string_native()
                             )
+                        ));
+                        output.push(format!(
+                            "End Epoch: {}",
+                            if let Some(end_epoch) = end_epoch {
+                                end_epoch.0.to_string()
+                            } else {
+                                "None".to_string()
+                            }
                         ));
                         output.push(format!("Port ID: {}", target.port_id));
                         output
@@ -2238,6 +2284,7 @@ mod test_signing {
     use namada_core::token::{Denomination, MaspDigitPos};
     use namada_governance::storage::proposal::PGFInternalTarget;
     use namada_io::client::EncodedResponseQuery;
+    use namada_state::Epoch;
     use namada_tx::{Code, Data};
     use namada_wallet::test_utils::TestWalletUtils;
     use tendermint_rpc::SimpleRequest;
@@ -3007,10 +3054,14 @@ mod test_signing {
         // PGF payments
         proposal_type_to_ledger_vector(
             &ProposalType::PGFPayment(BTreeSet::from([PGFAction::Continuous(
-                AddRemove::Add(PGFTarget::Internal(PGFInternalTarget {
-                    target: addr.clone(),
-                    amount: Amount::zero(),
-                })),
+                AddRemove::Add(ContPGFTarget {
+                    target: PGFTarget::Internal(PGFInternalTarget {
+                        target: addr.clone(),
+                        amount: Amount::zero(),
+                    }),
+                    end_epoch: Some(Epoch::from(1)),
+                    proposal_id: 0,
+                }), // TODO: ask Murisi if this is ok
             )])),
             &tx,
             &mut output,
@@ -3021,17 +3072,23 @@ mod test_signing {
             vec![
                 "Proposal type : PGF Payment".to_string(),
                 "PGF Action : Add Continuous Payment".to_string(),
+                "Proposal ID: 0".to_string(),
                 format!("Target: {addr}"),
                 "Amount: NAM 0".to_string(),
+                "End Epoch: 1".to_string(),
             ],
         );
         output.clear();
         proposal_type_to_ledger_vector(
             &ProposalType::PGFPayment(BTreeSet::from([PGFAction::Continuous(
-                AddRemove::Remove(PGFTarget::Internal(PGFInternalTarget {
-                    target: addr.clone(),
-                    amount: Amount::zero(),
-                })),
+                AddRemove::Remove(ContPGFTarget {
+                    target: PGFTarget::Internal(PGFInternalTarget {
+                        target: addr.clone(),
+                        amount: Amount::zero(),
+                    }),
+                    end_epoch: Some(Epoch::from(1)),
+                    proposal_id: 0,
+                }), // TODO: ask Murisi if this is ok
             )])),
             &tx,
             &mut output,
@@ -3042,8 +3099,10 @@ mod test_signing {
             vec![
                 "Proposal type : PGF Payment".to_string(),
                 "PGF Action : Remove Continuous Payment".to_string(),
+                "Proposal ID: 0".to_string(),
                 format!("Target: {addr}"),
                 "Amount: NAM 0".to_string(),
+                "End Epoch: 1".to_string(),
             ],
         );
         output.clear();
@@ -3072,12 +3131,16 @@ mod test_signing {
 
         proposal_type_to_ledger_vector(
             &ProposalType::PGFPayment(BTreeSet::from([PGFAction::Continuous(
-                AddRemove::Add(PGFTarget::Ibc(PGFIbcTarget {
-                    target: "bloop".to_string(),
-                    amount: Default::default(),
-                    port_id: PortId::transfer(),
-                    channel_id: ChannelId::new(16),
-                })),
+                AddRemove::Add(ContPGFTarget {
+                    target: PGFTarget::Ibc(PGFIbcTarget {
+                        target: "bloop".to_string(),
+                        amount: Default::default(),
+                        port_id: PortId::transfer(),
+                        channel_id: ChannelId::new(16),
+                    }),
+                    end_epoch: None,
+                    proposal_id: 0,
+                }), // TODO: ask Murisi if this is ok
             )])),
             &tx,
             &mut output,
@@ -3090,6 +3153,7 @@ mod test_signing {
                 "PGF Action : Add Continuous Payment".to_string(),
                 "Target: bloop".to_string(),
                 "Amount: NAM 0".to_string(),
+                "End Epoch: None".to_string(),
                 "Port ID: transfer".to_string(),
                 "Channel ID: channel-16".to_string(),
             ],
@@ -3098,12 +3162,16 @@ mod test_signing {
 
         proposal_type_to_ledger_vector(
             &ProposalType::PGFPayment(BTreeSet::from([PGFAction::Continuous(
-                AddRemove::Remove(PGFTarget::Ibc(PGFIbcTarget {
-                    target: "bloop".to_string(),
-                    amount: Default::default(),
-                    port_id: PortId::transfer(),
-                    channel_id: ChannelId::new(16),
-                })),
+                AddRemove::Remove(ContPGFTarget {
+                    target: PGFTarget::Ibc(PGFIbcTarget {
+                        target: "bloop".to_string(),
+                        amount: Default::default(),
+                        port_id: PortId::transfer(),
+                        channel_id: ChannelId::new(16),
+                    }),
+                    end_epoch: None,
+                    proposal_id: 0,
+                }), // TODO: ask Murisi if this is ok
             )])),
             &tx,
             &mut output,
@@ -3114,8 +3182,10 @@ mod test_signing {
             vec![
                 "Proposal type : PGF Payment".to_string(),
                 "PGF Action : Remove Continuous Payment".to_string(),
+                "Proposal ID: 0".to_string(),
                 "Target: bloop".to_string(),
                 "Amount: NAM 0".to_string(),
+                "End Epoch: None".to_string(),
                 "Port ID: transfer".to_string(),
                 "Channel ID: channel-16".to_string(),
             ],
