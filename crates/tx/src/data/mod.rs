@@ -403,6 +403,8 @@ pub struct BatchedTxResult {
     /// New established addresses created by the transaction
     pub initialized_accounts: Vec<Address>,
     /// Events emitted by the transaction
+    #[serde(skip_serializing, skip_deserializing)]
+    #[borsh(skip)]
     pub events: BTreeSet<Event>,
 }
 
@@ -617,9 +619,14 @@ impl TxSentinel {
 #[cfg(test)]
 mod test_process_tx {
     use assert_matches::assert_matches;
-    use namada_core::address::testing::nam;
+    use namada_core::address::testing::{
+        established_address_1, established_address_3, nam,
+    };
+    use namada_core::address::{MASP, POS};
     use namada_core::key::*;
     use namada_core::token::{Amount, DenominatedAmount};
+    use namada_events::extend::{ComposeEvent, TxHash};
+    use namada_events::{EventLevel, EventType};
 
     use super::*;
     use crate::{Authorization, Code, Data, Section, Tx, TxError};
@@ -749,5 +756,62 @@ mod test_process_tx {
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         let result = tx.validate_tx().expect_err("Test failed");
         assert_matches!(result, TxError::SigError(_));
+    }
+
+    // Test that the serialization process for [`BatchedTxResult`] skips the
+    // events field
+    #[test]
+    fn batched_tx_result_ser() {
+        let event = Event::new(EventType::new("test-event"), EventLevel::Tx)
+            .with(TxHash(Hash::zero()))
+            .into();
+        let event2 =
+            Event::new(EventType::new("test-event-2"), EventLevel::Block)
+                .with(TxHash(Hash::zero()))
+                .into();
+
+        let batched_result = BatchedTxResult {
+            changed_keys: [
+                namada_account::Key::wasm_code_name("test-name".to_string()),
+                namada_account::Key::wasm_hash("test-name"),
+            ]
+            .into(),
+            vps_result: VpsResult {
+                accepted_vps: [MASP].into(),
+                rejected_vps: [POS].into(),
+                errors: vec![(POS, "Pos error".to_string())],
+                status_flags: VpStatusFlags::empty(),
+            },
+            initialized_accounts: vec![
+                established_address_1(),
+                established_address_3(),
+            ],
+            events: BTreeSet::from([event, event2]),
+        };
+
+        let serialized = serde_json::to_vec(&batched_result).unwrap();
+        let BatchedTxResult {
+            changed_keys,
+            vps_result,
+            initialized_accounts,
+            events,
+        } = serde_json::from_slice(&serialized).unwrap();
+
+        assert_eq!(changed_keys, batched_result.changed_keys);
+        assert_eq!(
+            vps_result.accepted_vps,
+            batched_result.vps_result.accepted_vps
+        );
+        assert_eq!(
+            vps_result.rejected_vps,
+            batched_result.vps_result.rejected_vps
+        );
+        assert_eq!(vps_result.errors, batched_result.vps_result.errors);
+        assert_eq!(
+            vps_result.status_flags,
+            batched_result.vps_result.status_flags
+        );
+        assert_eq!(initialized_accounts, batched_result.initialized_accounts);
+        assert!(events.is_empty());
     }
 }
