@@ -1031,7 +1031,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 Some(pre_asset_type)
                     if pre_asset_type
                         .epoch
-                        .map_or(true, |epoch| epoch <= target_epoch) =>
+                        .is_none_or(|epoch| epoch <= target_epoch) =>
                 {
                     let decoded_change = Change::from_masp_denominated(
                         *val,
@@ -1707,7 +1707,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             // there must be a demonstrated need for it.
             if decoded.token == token
                 && decoded.denom == denom
-                && decoded.epoch.map_or(true, |vbal_epoch| vbal_epoch <= epoch)
+                && decoded.epoch.is_none_or(|vbal_epoch| vbal_epoch <= epoch)
                 && *rem_amount > 0
             {
                 let val = u128::try_from(*val).expect(

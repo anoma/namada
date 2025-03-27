@@ -975,7 +975,7 @@ mod test {
 
         // Repeat the same PK - they don't have to be unique
         let pks: Vec<common::PublicKey> =
-            std::iter::repeat(pk.clone()).take(ABOVE_LIMIT).collect();
+            std::iter::repeat_n(pk.clone(), ABOVE_LIMIT).collect();
         let raw_auth = Authorization {
             targets: vec![],
             signer: Signer::PubKeys(pks),
