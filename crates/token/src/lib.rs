@@ -54,7 +54,8 @@ pub mod storage_key {
         is_masp_token_map_key, is_masp_transfer_key, masp_assets_hash_key,
         masp_commitment_anchor_key, masp_commitment_tree_key,
         masp_conversion_key, masp_convert_anchor_key, masp_nullifier_key,
-        masp_token_map_key, masp_total_rewards,
+        masp_scheduled_reward_precision_key, masp_token_map_key,
+        masp_total_rewards,
     };
     pub use namada_trans_token::storage_key::*;
 

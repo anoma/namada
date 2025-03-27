@@ -7,6 +7,7 @@ use masp_primitives::bls12_381::Scalar;
 use masp_primitives::sapling::{Node, Nullifier};
 use namada_core::address::{self, Address};
 use namada_core::hash::Hash;
+use namada_core::masp::MaspEpoch;
 use namada_core::storage::{self, DbKeySeg, KeySeg};
 use namada_systems::trans_token;
 
@@ -18,6 +19,9 @@ pub const MASP_NULLIFIERS_KEY: &str = "nullifiers";
 pub const MASP_UNDATED_BALANCE_KEY: &str = "undated_balance";
 /// Key segment prefix for the conversions
 pub const MASP_CONVERSIONS_KEY: &str = "conversions";
+/// Key segment prefix for the scheduled reward precisions
+pub const MASP_SCHEDULED_REWARD_PRECISION_KEY: &str =
+    "scheduled_reward_precision";
 /// Key segment prefix for the note commitment merkle tree
 pub const MASP_NOTE_COMMITMENT_TREE_KEY: &str = "commitment_tree";
 /// Key segment prefix for the note commitment anchor
@@ -102,6 +106,47 @@ pub fn masp_last_inflation_key<TransToken: trans_token::Keys>(
         .with_segment(MASP_LAST_INFLATION_KEY.to_owned())
 }
 
+/// Check if the given storage key is the scheduled reward precision of a token
+pub fn is_masp_scheduled_reward_precision_key(
+    key: &storage::Key,
+) -> Option<(MaspEpoch, Address)> {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(address::MASP),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(epoch),
+            DbKeySeg::StringSeg(token),
+        ] if prefix == MASP_SCHEDULED_REWARD_PRECISION_KEY => {
+            MaspEpoch::from_str(epoch)
+                .ok()
+                .zip(Address::from_str(token).ok())
+        }
+        _ => None,
+    }
+}
+
+/// Obtain the storage key for the scheduled reward precision of a token
+pub fn masp_scheduled_reward_precision_key(
+    epoch: &MaspEpoch,
+    token_address: &Address,
+) -> storage::Key {
+    storage::Key::from(address::MASP.to_db_key())
+        .with_segment(MASP_SCHEDULED_REWARD_PRECISION_KEY.to_owned())
+        .with_segment(epoch.to_string())
+        .with_segment(token_address.to_string().to_db_key())
+}
+
+/// Get the key prefix for scheduled masp reward precision at the given epoch
+pub fn masp_scheduled_reward_precision_key_prefix(
+    ep: &MaspEpoch,
+) -> storage::Key {
+    storage::Key::from(address::MASP.to_db_key())
+        .push(&MASP_SCHEDULED_REWARD_PRECISION_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&ep.to_string())
+        .expect("Cannot obtain a storage key")
+}
+
 /// Check if the given storage key is the undated balance of a token
 pub fn is_masp_undated_balance_key(key: &storage::Key) -> Option<Address> {
     match &key.segments[..] {
@@ -147,7 +192,9 @@ pub fn is_masp_key(key: &storage::Key) -> bool {
 /// Check if the given storage key is allowed to be touched by a governance
 /// proposal
 pub fn is_masp_governance_key(key: &storage::Key) -> bool {
-    is_masp_token_map_key(key) || is_masp_conversion_key(key).is_some()
+    is_masp_token_map_key(key)
+        || is_masp_conversion_key(key).is_some()
+        || is_masp_scheduled_reward_precision_key(key).is_some()
 }
 
 /// Check if the given storage key is allowed to be touched by a masp transfer
@@ -200,15 +247,18 @@ pub fn is_masp_token_map_key(key: &storage::Key) -> bool {
 }
 
 /// Check if the given storage key is a masp conversion key
-pub fn is_masp_conversion_key(key: &storage::Key) -> Option<AssetType> {
+pub fn is_masp_conversion_key(
+    key: &storage::Key,
+) -> Option<(MaspEpoch, AssetType)> {
     match &key.segments[..] {
         [
             DbKeySeg::AddressSeg(address::MASP),
             DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(epoch),
             DbKeySeg::StringSeg(asset_type),
-        ] if prefix == MASP_CONVERSIONS_KEY => {
-            AssetType::from_str(asset_type).ok()
-        }
+        ] if prefix == MASP_CONVERSIONS_KEY => MaspEpoch::from_str(epoch)
+            .ok()
+            .zip(AssetType::from_str(asset_type).ok()),
         _ => None,
     }
 }
@@ -222,19 +272,26 @@ pub fn masp_nullifier_key(nullifier: &Nullifier) -> storage::Key {
         .expect("Cannot obtain a storage key")
 }
 
-/// Get a key for a masp conversion
-pub fn masp_conversion_key(asset_type: &AssetType) -> storage::Key {
+/// Get a key for a masp conversion at the given epoch
+pub fn masp_conversion_key(
+    ep: &MaspEpoch,
+    asset_type: &AssetType,
+) -> storage::Key {
     storage::Key::from(address::MASP.to_db_key())
         .push(&MASP_CONVERSIONS_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&ep.to_string())
         .expect("Cannot obtain a storage key")
         .push(&asset_type.to_string())
         .expect("Cannot obtain a storage key")
 }
 
-/// Get the key prefix for masp conversions
-pub fn masp_conversion_key_prefix() -> storage::Key {
+/// Get the key prefix for masp conversions at the given epoch
+pub fn masp_conversion_key_prefix(ep: &MaspEpoch) -> storage::Key {
     storage::Key::from(address::MASP.to_db_key())
         .push(&MASP_CONVERSIONS_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+        .push(&ep.to_string())
         .expect("Cannot obtain a storage key")
 }
 
