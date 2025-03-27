@@ -35,6 +35,7 @@ use namada_apps_lib::wallet::{self, ValidatorData, ValidatorKeys};
 use namada_sdk::address::Address;
 use namada_sdk::borsh::{BorshDeserialize, BorshSerializeExt};
 use namada_sdk::chain::{BlockHeight, ChainId};
+use namada_sdk::collections::HashMap;
 use namada_sdk::eth_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
 use namada_sdk::eth_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
 use namada_sdk::eth_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
@@ -702,20 +703,27 @@ where
     /// any. This is returned when ABCI sends an `info` request.
     pub fn last_state(&self, namada_version: &str) -> response::Info {
         let version = namada_version.to_string();
+        let other_data: HashMap<&str, &str> =
+            HashMap::from_iter([("libs_version", env!("CARGO_PKG_VERSION"))]);
+        let data = serde_json::to_string(&other_data)
+            .expect("Must be able to display json");
+        let response = response::Info {
+            data,
+            version,
+            ..response::Info::default()
+        };
         if crate::migrating_state().is_some() {
             // When migrating state, return a height of 0, such
             // that CometBFT calls InitChain and subsequently
             // updates the apphash in its state.
             return response::Info {
                 last_block_height: 0u32.into(),
-                version,
-                ..response::Info::default()
+                ..response
             };
         }
         let mut response = response::Info {
             last_block_height: tendermint::block::Height::from(0_u32),
-            version,
-            ..Default::default()
+            ..response
         };
         let result = self.state.in_mem().get_state();
 
