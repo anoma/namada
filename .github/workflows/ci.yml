@@ -687,7 +687,7 @@ jobs:
             "e2e::ledger_tests::masp_txs_and_queries" \
             --exact --test-threads=1
         env:
-          NAMADA_SPECULOS_PATH: "/root/.local/pipx/venvs/speculos/bin/speculos"
+          NAMADA_SPECULOS_PATH: "/root/.local/bin/speculos"
           NAMADA_SPECULOS_APP_ELF: "/ledger-namada/app_s2.elf"
           NAMADA_DEVICE_AUTOMATION: "true"
           NAMADA_DEVICE_TRANSPORT: "tcp"
