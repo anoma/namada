@@ -27,4 +27,4 @@ pub mod shielded_token;
 pub mod trans_token;
 
 #[cfg(test)]
-pub mod test;
+mod test;

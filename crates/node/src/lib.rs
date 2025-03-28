@@ -45,7 +45,7 @@ pub use namada_apps_lib::{
 use namada_sdk::chain::BlockHeight;
 use namada_sdk::eth_bridge::ethers::providers::{Http, Provider};
 use namada_sdk::migrations::ScheduledMigration;
-use namada_sdk::state::{ProcessProposalCachedResult, StateRead, DB};
+use namada_sdk::state::{DB, ProcessProposalCachedResult, StateRead};
 use namada_sdk::storage::DbColFam;
 use namada_sdk::tendermint::abci::request::CheckTxKind;
 use namada_sdk::tendermint::abci::response::ProcessProposal;
@@ -59,16 +59,16 @@ use self::ethereum_oracle::last_processed_block;
 use self::shell::EthereumOracleChannels;
 use self::shims::abcipp_shim::AbciService;
 use crate::broadcaster::Broadcaster;
-use crate::config::{ethereum_bridge, TendermintMode};
+use crate::config::{TendermintMode, ethereum_bridge};
 use crate::ethereum_oracle as oracle;
 use crate::shell::{Error, MempoolTxType, Shell};
 use crate::shims::abcipp_shim::AbcippShim;
 use crate::shims::abcipp_shim_types::shim::{Request, Response};
 use crate::tendermint::abci::response;
-use crate::tower_abci::{split, Server};
+use crate::tower_abci::{Server, split};
 pub mod tower_abci {
-    pub use tower_abci::v037::*;
     pub use tower_abci::BoxError;
+    pub use tower_abci::v037::*;
 }
 
 /// Env. var to set a number of Tokio RT worker threads
@@ -632,10 +632,7 @@ fn start_abci_broadcaster_shell(
     let genesis_time = DateTimeUtc::try_from(config.genesis_time.clone())
         .expect("Should be able to parse genesis time");
     // Start broadcaster
-    if matches!(
-        config.shell.tendermint_mode,
-        TendermintMode::Validator { .. }
-    ) {
+    if matches!(config.shell.tendermint_mode, TendermintMode::Validator) {
         let (bc_abort_send, bc_abort_recv) =
             tokio::sync::oneshot::channel::<()>();
 
@@ -707,7 +704,7 @@ fn start_abci_broadcaster_shell(
         .abortable("Shell", move |_aborter| {
             tracing::info!("Namada ledger node started.");
             match tendermint_mode {
-                TendermintMode::Validator { .. } => {
+                TendermintMode::Validator => {
                     tracing::info!("This node is a validator");
                 }
                 TendermintMode::Full | TendermintMode::Seed => {
@@ -844,10 +841,7 @@ async fn maybe_start_ethereum_oracle(
     spawner: &mut AbortableSpawner,
     config: &config::Ledger,
 ) -> EthereumOracleTask {
-    if !matches!(
-        config.shell.tendermint_mode,
-        TendermintMode::Validator { .. }
-    ) {
+    if !matches!(config.shell.tendermint_mode, TendermintMode::Validator) {
         return EthereumOracleTask::NotEnabled;
     }
 

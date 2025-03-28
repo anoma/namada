@@ -2,8 +2,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use masp_primitives::transaction::components::ValueSum;
 use masp_primitives::transaction::TransparentAddress;
+use masp_primitives::transaction::components::ValueSum;
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
 use namada_core::masp::TAddrData;

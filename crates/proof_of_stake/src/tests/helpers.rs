@@ -23,7 +23,7 @@ use crate::validator_set_update::{
     copy_validator_sets_and_positions, validator_set_update_comet,
 };
 use crate::{
-    compute_and_store_total_consensus_stake, OwnedPosParams, PosParams,
+    OwnedPosParams, PosParams, compute_and_store_total_consensus_stake,
 };
 
 pub fn arb_params_and_genesis_validators(

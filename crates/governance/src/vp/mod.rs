@@ -12,17 +12,17 @@ use namada_core::booleans::{BoolResultUnitExt, ResultBoolExt};
 use namada_core::chain::Epoch;
 use namada_core::storage;
 use namada_systems::{proof_of_stake, trans_token as token};
-use namada_tx::action::{Action, GovAction};
 use namada_tx::BatchedTxRef;
+use namada_tx::action::{Action, GovAction};
 use namada_vp_env::{Error, Result, StorageRead, VpEnv};
 use thiserror::Error;
 
 use self::utils::ReadType;
+use crate::ProposalVote;
 use crate::address::{Address, InternalAddress};
 use crate::storage::proposal::{AddRemove, PGFAction, ProposalType};
 use crate::storage::{is_proposal_accepted, keys as gov_storage};
 use crate::utils::is_valid_validator_voting_period;
-use crate::ProposalVote;
 
 /// The governance internal address
 pub const ADDRESS: Address = Address::Internal(InternalAddress::Governance);
@@ -1162,14 +1162,14 @@ mod test {
     use std::collections::BTreeSet;
 
     use assert_matches::assert_matches;
+    use namada_core::address::Address;
     use namada_core::address::testing::{
         established_address_1, established_address_3, nam,
     };
-    use namada_core::address::Address;
     use namada_core::borsh::BorshSerializeExt;
     use namada_core::chain::testing::get_dummy_header;
-    use namada_core::key::testing::keypair_1;
     use namada_core::key::RefTo;
+    use namada_core::key::testing::keypair_1;
     use namada_core::parameters::Parameters;
     use namada_core::time::DateTimeUtc;
     use namada_gas::{TxGasMeter, VpGasMeter};
@@ -1186,9 +1186,9 @@ mod test {
     use namada_tx::action::{Action, GovAction, Write};
     use namada_tx::data::TxType;
     use namada_tx::{Authorization, Code, Data, Section, Tx};
-    use namada_vm::wasm::run::VpEvalWasm;
     use namada_vm::wasm::VpCache;
-    use namada_vm::{wasm, WasmCacheRwAccess};
+    use namada_vm::wasm::run::VpEvalWasm;
+    use namada_vm::{WasmCacheRwAccess, wasm};
     use namada_vp::native_vp::{self, CtxPreStorageRead};
 
     use crate::storage::keys::{
@@ -1197,7 +1197,7 @@ mod test {
         get_vote_proposal_key, get_voting_end_epoch_key,
         get_voting_start_epoch_key,
     };
-    use crate::{ProposalType, ProposalVote, ADDRESS};
+    use crate::{ADDRESS, ProposalType, ProposalVote};
 
     type CA = WasmCacheRwAccess;
     type Eval<S> = VpEvalWasm<<S as StateRead>::D, <S as StateRead>::H, CA>;

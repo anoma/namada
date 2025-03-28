@@ -18,21 +18,21 @@ use namada_sdk::chain::ChainId;
 use namada_sdk::collections::HashSet;
 use namada_sdk::dec::Dec;
 use namada_sdk::key::common::PublicKey;
-use namada_sdk::key::{common, ed25519, RefTo, SerializeWithBorsh, SigScheme};
+use namada_sdk::key::{RefTo, SerializeWithBorsh, SigScheme, common, ed25519};
 use namada_sdk::proof_of_stake::types::ValidatorMetaData;
-use namada_sdk::signing::{sign_tx, SigningTxData};
+use namada_sdk::signing::{SigningTxData, sign_tx};
 use namada_sdk::string_encoding::StringEncoded;
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token;
 use namada_sdk::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
-use namada_sdk::tx::data::{pos, Fee, TxType};
+use namada_sdk::tx::data::{Fee, TxType, pos};
 use namada_sdk::tx::{
-    verify_standalone_sig, Code, Commitment, Data, Section, SignatureIndex, Tx,
-    TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM,
+    Code, Commitment, Data, Section, SignatureIndex, TX_BECOME_VALIDATOR_WASM,
+    TX_BOND_WASM, Tx, verify_standalone_sig,
 };
+use namada_sdk::wallet::Wallet;
 use namada_sdk::wallet::alias::Alias;
 use namada_sdk::wallet::pre_genesis::ValidatorWallet;
-use namada_sdk::wallet::Wallet;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -41,7 +41,7 @@ use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::templates::{
     TemplateValidation, Unvalidated, Validated,
 };
-use crate::config::genesis::{utils, GenesisAddress};
+use crate::config::genesis::{GenesisAddress, utils};
 use crate::wallet::{CliWalletUtils, WalletTransport};
 
 /// Dummy chain id used to sign [`Tx`] objects at pre-genesis.

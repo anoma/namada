@@ -1,12 +1,12 @@
 use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
-use eyre::{eyre, Result};
+use eyre::{Result, eyre};
 use namada_core::address::Address;
 use namada_core::chain::BlockHeight;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::token;
-use namada_state::{DBIter, StorageHasher, StorageRead, WlState, DB};
+use namada_state::{DB, DBIter, StorageHasher, StorageRead, WlState};
 use namada_systems::governance;
 
 use super::{ChangedKeys, EpochedVotingPowerExt, Tally, Votes};
@@ -220,7 +220,7 @@ mod tests {
     use namada_core::voting_power::FractionalVotingPower;
     use namada_state::testing::TestState;
 
-    use self::helpers::{default_event, default_total_stake, TallyParams};
+    use self::helpers::{TallyParams, default_event, default_total_stake};
     use super::*;
     use crate::protocol::transactions::votes::{self, EpochedVotingPower};
     use crate::test_utils::{self, GovStore};

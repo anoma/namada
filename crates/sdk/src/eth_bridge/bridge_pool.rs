@@ -14,21 +14,21 @@ use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::eth_abi::Encode;
 use namada_core::eth_bridge_pool::{
-    erc20_token_address, GasFee, PendingTransfer, TransferToEthereum,
-    TransferToEthereumKind,
+    GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,
+    erc20_token_address,
 };
 use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;
 use namada_core::voting_power::FractionalVotingPower;
 use namada_ethereum_bridge::storage::bridge_pool::get_pending_key;
-use namada_io::{display, display_line, edisplay_line, Client, Io};
-use namada_token::storage_key::balance_key;
+use namada_io::{Client, Io, display, display_line, edisplay_line};
 use namada_token::Amount;
+use namada_token::storage_key::balance_key;
 use namada_tx::Tx;
 use owo_colors::OwoColorize;
 use serde::Serialize;
 
-use super::{block_on_eth_sync, eth_sync_or_exit, BlockOnEthSync};
+use super::{BlockOnEthSync, block_on_eth_sync, eth_sync_or_exit};
 use crate::borsh::BorshSerializeExt;
 use crate::control_flow::time::{Duration, Instant};
 use crate::error::{
@@ -37,13 +37,13 @@ use crate::error::{
 use crate::eth_bridge::ethers::abi::AbiDecode;
 use crate::internal_macros::echo_error;
 use crate::queries::{
-    GenBridgePoolProofReq, GenBridgePoolProofRsp, TransferToErcArgs,
-    TransferToEthereumStatus, RPC,
+    GenBridgePoolProofReq, GenBridgePoolProofRsp, RPC, TransferToErcArgs,
+    TransferToEthereumStatus,
 };
 use crate::rpc::{query_storage_value, query_wasm_code_hash, validate_amount};
 use crate::signing::{aux_signing_data, validate_transparent_fee};
 use crate::tx::prepare_tx;
-use crate::{args, MaybeSync, Namada, SigningTxData};
+use crate::{MaybeSync, Namada, SigningTxData, args};
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
 pub async fn build_bridge_pool_tx(
@@ -743,7 +743,7 @@ mod recommendations {
     use borsh::BorshDeserialize;
     use namada_core::chain::BlockHeight;
     use namada_core::ethereum_events::Uint as EthUint;
-    use namada_core::uint::{self, Uint, I256};
+    use namada_core::uint::{self, I256, Uint};
     use namada_ethereum_bridge::storage::proof::BridgePoolRootProof;
     use namada_io::edisplay_line;
     use namada_vote_ext::validator_set_update::{
@@ -1050,7 +1050,7 @@ mod recommendations {
                 let conversion_rate = conversion_table
                     .get(&pending.gas_fee.token)
                     .and_then(|entry| match entry.conversion_rate {
-                        r if r == 0.0f64 => {
+                        0.0f64 => {
                             edisplay_line!(
                                 io,
                                 "{}: Ignoring null conversion rate",

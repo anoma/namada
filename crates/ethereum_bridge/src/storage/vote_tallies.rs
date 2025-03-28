@@ -8,15 +8,15 @@ use namada_core::address::Address;
 use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::ethereum_events::{EthereumEvent, Uint};
 use namada_core::hash::Hash;
-use namada_core::keccak::{keccak_hash, KeccakHash};
+use namada_core::keccak::{KeccakHash, keccak_hash};
 use namada_core::storage::{DbKeySeg, Key};
 use namada_macros::{BorshDeserializer, StorageKeys};
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_vote_ext::validator_set_update::VotingPowersMap;
 
-use crate::storage::proof::{BridgePoolRootProof, EthereumProof};
 use crate::ADDRESS;
+use crate::storage::proof::{BridgePoolRootProof, EthereumProof};
 
 /// Storage sub-key space reserved to keeping track of the
 /// voting power assigned to Ethereum events.

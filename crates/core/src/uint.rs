@@ -5,6 +5,8 @@
 #![allow(clippy::assign_op_pattern)]
 // Missing in `construct_uint!`
 #![allow(missing_docs)]
+// Done in `construct_uint!`
+#![allow(clippy::manual_div_ceil)]
 
 use std::cmp::Ordering;
 use std::fmt;
@@ -21,8 +23,8 @@ use uint::construct_uint;
 
 use super::dec::{Dec, POS_DECIMAL_PRECISION};
 use crate::arith::{
-    self, checked, CheckedAdd, CheckedNeg, CheckedSub, OverflowingAdd,
-    OverflowingSub,
+    self, CheckedAdd, CheckedNeg, CheckedSub, OverflowingAdd, OverflowingSub,
+    checked,
 };
 use crate::token;
 use crate::token::{AmountParseError, MaspDigitPos};
@@ -952,7 +954,7 @@ where
     }
 }
 
-impl<'a, T> OverflowingAdd<T> for &'a I320
+impl<T> OverflowingAdd<T> for &I320
 where
     T: Into<I320>,
 {
@@ -976,7 +978,7 @@ where
     }
 }
 
-impl<'a, T> OverflowingSub<T> for &'a I320
+impl<T> OverflowingSub<T> for &I320
 where
     T: Into<I320>,
 {

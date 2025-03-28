@@ -65,13 +65,13 @@ use namada_sdk::state::merkle_tree::{
     tree_key_prefix_with_epoch, tree_key_prefix_with_height,
 };
 use namada_sdk::state::{
-    BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, DbError as Error,
-    DbResult as Result, MerkleTreeStoresRead, PatternIterator, PrefixIterator,
-    StoreType, DB,
+    BlockStateRead, BlockStateWrite, DB, DBIter, DBWriteBatch,
+    DbError as Error, DbResult as Result, MerkleTreeStoresRead,
+    PatternIterator, PrefixIterator, StoreType,
 };
 use namada_sdk::storage::{
-    BlockHeader, BlockHeight, DBUpdateVisitor, DbColFam, Epoch, Key, KeySeg,
-    BLOCK_CF, DIFFS_CF, REPLAY_PROTECTION_CF, ROLLBACK_CF, STATE_CF,
+    BLOCK_CF, BlockHeader, BlockHeight, DBUpdateVisitor, DIFFS_CF, DbColFam,
+    Epoch, Key, KeySeg, REPLAY_PROTECTION_CF, ROLLBACK_CF, STATE_CF,
     SUBSPACE_CF,
 };
 use namada_sdk::{decode, encode, ethereum_events};
@@ -2126,7 +2126,7 @@ pub struct PersistentPrefixIterator<'a>(
     PrefixIterator<rocksdb::DBIterator<'a>>,
 );
 
-impl<'a> Iterator for PersistentPrefixIterator<'a> {
+impl Iterator for PersistentPrefixIterator<'_> {
     type Item = (String, Vec<u8>, Gas);
 
     /// Returns the next pair and the gas cost
@@ -2164,7 +2164,7 @@ pub struct PersistentPatternIterator<'a> {
     inner: PatternIterator<PersistentPrefixIterator<'a>>,
 }
 
-impl<'a> Iterator for PersistentPatternIterator<'a> {
+impl Iterator for PersistentPatternIterator<'_> {
     type Item = (String, Vec<u8>, Gas);
 
     /// Returns the next pair and the gas cost

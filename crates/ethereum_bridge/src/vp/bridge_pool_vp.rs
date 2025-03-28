@@ -17,10 +17,10 @@ use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
 use namada_core::address::{Address, InternalAddress};
-use namada_core::arith::{checked, CheckedAdd, CheckedNeg, CheckedSub};
+use namada_core::arith::{CheckedAdd, CheckedNeg, CheckedSub, checked};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::eth_bridge_pool::{
-    erc20_token_address, PendingTransfer, TransferToEthereumKind,
+    PendingTransfer, TransferToEthereumKind, erc20_token_address,
 };
 use namada_core::ethereum_events::EthAddress;
 use namada_core::hints;
@@ -31,13 +31,13 @@ use namada_systems::trans_token::{self as token, Amount};
 use namada_tx::BatchedTxRef;
 use namada_vp_env::{Error, Result, StorageRead, VpEnv};
 
+use crate::ADDRESS as BRIDGE_ADDRESS;
 use crate::storage::bridge_pool::{
-    get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
+    BRIDGE_POOL_ADDRESS, get_pending_key, is_bridge_pool_key,
 };
 use crate::storage::eth_bridge_queries::is_bridge_active_at;
 use crate::storage::parameters::read_native_erc20_address;
 use crate::storage::whitelist;
-use crate::ADDRESS as BRIDGE_ADDRESS;
 
 /// An [`Amount`] that has been updated with some delta value.
 #[derive(Copy, Clone)]
@@ -638,11 +638,11 @@ mod test_bridge_pool_vp {
     use namada_state::write_log::WriteLog;
     use namada_state::{StateRead, StorageWrite, TxIndex};
     use namada_trans_token::storage_key::balance_key;
-    use namada_tx::data::TxType;
     use namada_tx::Tx;
-    use namada_vm::wasm::run::VpEvalWasm;
-    use namada_vm::wasm::VpCache;
+    use namada_tx::data::TxType;
     use namada_vm::WasmCacheRwAccess;
+    use namada_vm::wasm::VpCache;
+    use namada_vm::wasm::run::VpEvalWasm;
     use namada_vp::native_vp;
 
     use super::*;

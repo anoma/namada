@@ -237,7 +237,7 @@ mod tests {
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::tx::data::{self, TxType};
     use namada_tests::tx::{
-        self, tx_host_env, Authorization, Code, Data, TestTxEnv,
+        self, Authorization, Code, Data, TestTxEnv, tx_host_env,
     };
     use namada_tests::vp::vp_host_env::storage::Key;
     use namada_tests::vp::*;

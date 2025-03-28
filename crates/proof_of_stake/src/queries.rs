@@ -24,8 +24,8 @@ use crate::types::{
     DelegationEpochs, Slash, UnbondDetails,
 };
 use crate::{
-    iter_prefix_bytes, raw_bond_amount, storage_key, Error, PosParams, Result,
-    StorageRead,
+    Error, PosParams, Result, StorageRead, iter_prefix_bytes, raw_bond_amount,
+    storage_key,
 };
 
 /// Find all validators to which a given bond `owner` (or source) has a

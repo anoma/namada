@@ -13,8 +13,8 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use usize_set::vec::VecIndexSet;
 use usize_set::IndexSet;
+use usize_set::vec::VecIndexSet;
 
 use super::key::common;
 use crate::address::{self, Address, PARAMETERS};

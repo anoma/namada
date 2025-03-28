@@ -167,7 +167,10 @@ where
     EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
     CA: 'static + Clone,
 {
-    type PrefixIter<'iter> = PrefixIter<'iter,<S as StateRead>:: D> where Self: 'iter;
+    type PrefixIter<'iter>
+        = PrefixIter<'iter, <S as StateRead>::D>
+    where
+        Self: 'iter;
 
     fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         vp_host_fns::read_pre(self.ctx.gas_meter, self.ctx.state, key)
@@ -242,7 +245,10 @@ where
     EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
     CA: 'static + Clone,
 {
-    type PrefixIter<'iter> = PrefixIter<'iter, <S as StateRead>::D> where Self: 'iter;
+    type PrefixIter<'iter>
+        = PrefixIter<'iter, <S as StateRead>::D>
+    where
+        Self: 'iter;
 
     fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         vp_host_fns::read_post(self.ctx.gas_meter, self.ctx.state, key)
@@ -318,7 +324,10 @@ where
 {
     type Post = CtxPostStorageRead<'view, 'a, S, CA, EVAL>;
     type Pre = CtxPreStorageRead<'view, 'a, S, CA, EVAL>;
-    type PrefixIter<'iter> = PrefixIter<'iter, <S as StateRead>::D> where Self: 'iter;
+    type PrefixIter<'iter>
+        = PrefixIter<'iter, <S as StateRead>::D>
+    where
+        Self: 'iter;
 
     fn pre(&'view self) -> Self::Pre {
         CtxPreStorageRead { ctx: self }
@@ -428,30 +437,30 @@ where
         &self,
         key: &Key,
     ) -> Result<Option<T>> {
-        self.pre().read(key).map_err(Into::into)
+        self.pre().read(key)
     }
 
     fn read_bytes_pre(&self, key: &Key) -> Result<Option<Vec<u8>>> {
-        self.pre().read_bytes(key).map_err(Into::into)
+        self.pre().read_bytes(key)
     }
 
     fn read_post<T: borsh::BorshDeserialize>(
         &self,
         key: &Key,
     ) -> Result<Option<T>> {
-        self.post().read(key).map_err(Into::into)
+        self.post().read(key)
     }
 
     fn read_bytes_post(&self, key: &Key) -> Result<Option<Vec<u8>>> {
-        self.post().read_bytes(key).map_err(Into::into)
+        self.post().read_bytes(key)
     }
 
     fn has_key_pre(&self, key: &Key) -> Result<bool> {
-        self.pre().has_key(key).map_err(Into::into)
+        self.pre().has_key(key)
     }
 
     fn has_key_post(&self, key: &Key) -> Result<bool> {
-        self.post().has_key(key).map_err(Into::into)
+        self.post().has_key(key)
     }
 }
 
