@@ -17,13 +17,13 @@ use ibc::apps::transfer::module::{
     on_recv_packet_execute, on_timeout_packet_execute,
     on_timeout_packet_validate,
 };
-use ibc::apps::transfer::types::error::TokenTransferError;
 use ibc::apps::transfer::types::MODULE_ID_STR;
+use ibc::apps::transfer::types::error::TokenTransferError;
+use ibc::core::channel::types::Version;
 use ibc::core::channel::types::acknowledgement::Acknowledgement;
 use ibc::core::channel::types::channel::{Counterparty, Order};
 use ibc::core::channel::types::error::ChannelError;
 use ibc::core::channel::types::packet::Packet;
-use ibc::core::channel::types::Version;
 use ibc::core::host::types::identifiers::{ChannelId, ConnectionId, PortId};
 use ibc::core::router::module::Module;
 use ibc::core::router::types::module::{ModuleExtras, ModuleId};
@@ -342,7 +342,7 @@ fn into_channel_error(error: TokenTransferError) -> ChannelError {
 pub mod testing {
     use std::str::FromStr;
 
-    use ibc::apps::transfer::types::{ack_success_b64, PORT_ID_STR};
+    use ibc::apps::transfer::types::{PORT_ID_STR, ack_success_b64};
     use ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
 
     use super::*;

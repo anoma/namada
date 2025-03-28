@@ -4,12 +4,12 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::str::FromStr;
 
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
-use masp_primitives::sapling::redjubjub::PublicKey;
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use masp_primitives::sapling::Node;
-use masp_primitives::transaction::sighash::{signature_hash, SignableInput};
-use masp_primitives::transaction::txid::TxIdDigester;
+use masp_primitives::sapling::redjubjub::PublicKey;
 use masp_primitives::transaction::TransactionData;
+use masp_primitives::transaction::sighash::{SignableInput, signature_hash};
+use masp_primitives::transaction::txid::TxIdDigester;
 use masp_primitives::zip32::ExtendedSpendingKey;
 use masp_proofs::group::GroupEncoding;
 use masp_proofs::sapling::BatchValidator;
@@ -25,25 +25,25 @@ use namada_apps_lib::governance::storage::proposal::ProposalType;
 use namada_apps_lib::governance::storage::vote::ProposalVote;
 use namada_apps_lib::governance::{InitProposalData, VoteProposalData};
 use namada_apps_lib::ibc::context::middlewares::create_transfer_middlewares;
+use namada_apps_lib::ibc::core::channel::types::Version as ChannelVersion;
 use namada_apps_lib::ibc::core::channel::types::channel::Order;
 use namada_apps_lib::ibc::core::channel::types::msgs::MsgChannelOpenInit;
-use namada_apps_lib::ibc::core::channel::types::Version as ChannelVersion;
 use namada_apps_lib::ibc::core::commitment_types::commitment::CommitmentPrefix;
+use namada_apps_lib::ibc::core::connection::types::Counterparty;
 use namada_apps_lib::ibc::core::connection::types::msgs::MsgConnectionOpenInit;
 use namada_apps_lib::ibc::core::connection::types::version::Version;
-use namada_apps_lib::ibc::core::connection::types::Counterparty;
 use namada_apps_lib::ibc::core::host::types::identifiers::{
     ClientId, ConnectionId, PortId,
 };
 use namada_apps_lib::ibc::primitives::ToProto;
-use namada_apps_lib::ibc::{IbcActions, NftTransferModule, COMMITMENT_PREFIX};
+use namada_apps_lib::ibc::{COMMITMENT_PREFIX, IbcActions, NftTransferModule};
 use namada_apps_lib::masp_primitives::merkle_tree::CommitmentTree;
 use namada_apps_lib::masp_primitives::transaction::Transaction;
 use namada_apps_lib::masp_proofs::sapling::SaplingVerificationContextInner;
 use namada_apps_lib::proof_of_stake::KeySeg;
 use namada_apps_lib::state::{Epoch, StorageRead, StorageWrite, TxIndex};
 use namada_apps_lib::token::masp::{
-    partial_deauthorize, preload_verifying_keys, PVKs,
+    PVKs, partial_deauthorize, preload_verifying_keys,
 };
 use namada_apps_lib::token::{Amount, Transfer};
 use namada_apps_lib::tx::{BatchedTx, Code, Section, Tx};
@@ -53,17 +53,18 @@ use namada_apps_lib::validation::{
 };
 use namada_apps_lib::wallet::defaults;
 use namada_apps_lib::{
-    governance, parameters, proof_of_stake, storage, token, TransferSource,
-    TransferTarget,
+    TransferSource, TransferTarget, governance, parameters, proof_of_stake,
+    storage, token,
 };
 use namada_node::bench_utils::{
-    generate_foreign_key_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
-    TX_BRIDGE_POOL_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL_WASM, TX_RESIGN_STEWARD,
-    TX_TRANSFER_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM,
+    BenchShell, BenchShieldedCtx, TX_BRIDGE_POOL_WASM, TX_IBC_WASM,
+    TX_INIT_PROPOSAL_WASM, TX_RESIGN_STEWARD, TX_TRANSFER_WASM,
+    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM,
+    generate_foreign_key_tx,
 };
-use namada_vm::wasm::run::VpEvalWasm;
 use namada_vm::wasm::VpCache;
+use namada_vm::wasm::run::VpEvalWasm;
 use namada_vp::native_vp::{self, NativeVp};
 use rand_core::OsRng;
 

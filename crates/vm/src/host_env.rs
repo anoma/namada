@@ -16,24 +16,24 @@ use namada_core::collections::HashSet;
 use namada_core::decode;
 use namada_core::hash::Hash;
 use namada_core::internal::{HostEnvResult, KeyVal};
-use namada_core::storage::{Key, TxIndex, TX_INDEX_LENGTH};
+use namada_core::storage::{Key, TX_INDEX_LENGTH, TxIndex};
 use namada_events::{Event, EventTypeBuilder};
 use namada_gas::{
-    self as gas, Gas, GasMetering, TxGasMeter, VpGasMeter,
-    MEMORY_ACCESS_GAS_PER_BYTE,
+    self as gas, Gas, GasMetering, MEMORY_ACCESS_GAS_PER_BYTE, TxGasMeter,
+    VpGasMeter,
 };
 use namada_state::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use namada_state::write_log::{self, WriteLog};
 use namada_state::{
-    DBIter, InMemory, OptionExt, ResultExt, State, StateRead, StorageHasher,
-    StorageRead, StorageWrite, TxHostEnvState, VpHostEnvState, DB,
+    DB, DBIter, InMemory, OptionExt, ResultExt, State, StateRead,
+    StorageHasher, StorageRead, StorageWrite, TxHostEnvState, VpHostEnvState,
 };
 pub use namada_state::{Error, Result};
+use namada_token::MaspTransaction;
 use namada_token::storage_key::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
     is_any_token_parameter_key,
 };
-use namada_token::MaspTransaction;
 use namada_tx::data::{InnerTxId, TxSentinel};
 use namada_tx::{BatchedTx, BatchedTxRef, Tx, TxCommitments};
 use namada_vp::vp_host_fns;

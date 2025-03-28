@@ -6,8 +6,8 @@ use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use namada_sdk::events::extend::{ComposeEvent, Height, Info, TxHash};
 use namada_sdk::events::{EmitEvents, Event};
-use namada_sdk::gas::event::GasUsed;
 use namada_sdk::gas::GasMetering;
+use namada_sdk::gas::event::GasUsed;
 use namada_sdk::governance::pgf::inflation as pgf_inflation;
 use namada_sdk::hash::Hash;
 use namada_sdk::parameters::get_gas_scale;
@@ -16,11 +16,11 @@ use namada_sdk::proof_of_stake::storage::{
 };
 use namada_sdk::state::write_log::StorageModification;
 use namada_sdk::state::{
-    Result, ResultExt, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY,
+    EPOCH_SWITCH_BLOCKS_DELAY, Result, ResultExt, StorageWrite,
 };
 use namada_sdk::storage::{BlockHeader, BlockResults, Epoch};
 use namada_sdk::tx::data::protocol::ProtocolTxType;
-use namada_sdk::tx::data::{compute_inner_tx_hash, VpStatusFlags};
+use namada_sdk::tx::data::{VpStatusFlags, compute_inner_tx_hash};
 use namada_sdk::tx::event::{Batch, Code};
 use namada_sdk::tx::new_tx_event;
 use namada_sdk::{ibc, proof_of_stake};
@@ -340,7 +340,7 @@ where
         response: &mut shim::response::FinalizeBlock,
         extended_dispatch_result: std::result::Result<
             namada_sdk::tx::data::TxResult<protocol::Error>,
-            DispatchError,
+            Box<DispatchError>,
         >,
         tx_data: TxData<'_>,
         mut tx_logs: TxLogs<'_>,
@@ -397,70 +397,73 @@ where
                     &mut tx_logs,
                 ),
             },
-            Err(DispatchError {
-                error: protocol::Error::WrapperRunnerError(msg),
-                tx_result: _,
-            }) => {
-                tracing::info!(
-                    "Wrapper transaction {} failed with: {}",
+            Err(dispatch_error) => match *dispatch_error {
+                DispatchError {
+                    error: protocol::Error::WrapperRunnerError(msg),
+                    tx_result: _,
+                } => {
+                    tracing::info!(
+                        "Wrapper transaction {} failed with: {}",
+                        tx_logs
+                            .tx_event
+                            .raw_read_attribute::<TxHash>()
+                            .unwrap_or("<unknown>"),
+                        msg,
+                    );
+                    let gas_scale = tx_data.tx_gas_meter.get_gas_scale();
+                    let scaled_gas = tx_data
+                        .tx_gas_meter
+                        .get_tx_consumed_gas()
+                        .get_whole_gas_units(gas_scale);
                     tx_logs
                         .tx_event
-                        .raw_read_attribute::<TxHash>()
-                        .unwrap_or("<unknown>"),
-                    msg,
-                );
-                let gas_scale = tx_data.tx_gas_meter.get_gas_scale();
-                let scaled_gas = tx_data
-                    .tx_gas_meter
-                    .get_tx_consumed_gas()
-                    .get_whole_gas_units(gas_scale);
-                tx_logs
-                    .tx_event
-                    .extend(GasUsed(scaled_gas))
-                    .extend(Info(msg.to_string()))
-                    .extend(Code(ResultCode::InvalidTx));
-                // Drop the batch write log which could contain invalid data.
-                // Important data that could be valid (e.g. a valid fee payment)
-                // must have already been moved to the block write log by now
-                self.state.write_log_mut().drop_batch();
-            }
-            Err(dispatch_error) => {
-                // This branch represents an error that affects the entire
-                // batch
-                let (msg, tx_result) = (
-                    Error::TxApply(dispatch_error.error),
-                    // The tx result should always be present at this point
-                    dispatch_error.tx_result.unwrap_or_default(),
-                );
-                tracing::info!(
-                    "Transaction {} failed with: {}",
+                        .extend(GasUsed(scaled_gas))
+                        .extend(Info(msg.to_string()))
+                        .extend(Code(ResultCode::InvalidTx));
+                    // Drop the batch write log which could contain invalid
+                    // data. Important data that could be
+                    // valid (e.g. a valid fee payment) must
+                    // have already been moved to the block write log by now
+                    self.state.write_log_mut().drop_batch();
+                }
+                _ => {
+                    // This branch represents an error that affects the entire
+                    // batch
+                    let (msg, tx_result) = (
+                        Error::TxApply(dispatch_error.error),
+                        // The tx result should always be present at this point
+                        dispatch_error.tx_result.unwrap_or_default(),
+                    );
+                    tracing::info!(
+                        "Transaction {} failed with: {}",
+                        tx_logs
+                            .tx_event
+                            .raw_read_attribute::<TxHash>()
+                            .unwrap_or("<unknown>"),
+                        msg
+                    );
+
+                    let gas_scale = tx_data.tx_gas_meter.get_gas_scale();
+                    let scaled_gas = tx_data
+                        .tx_gas_meter
+                        .get_tx_consumed_gas()
+                        .get_whole_gas_units(gas_scale);
+
                     tx_logs
                         .tx_event
-                        .raw_read_attribute::<TxHash>()
-                        .unwrap_or("<unknown>"),
-                    msg
-                );
+                        .extend(GasUsed(scaled_gas))
+                        .extend(Info(msg.to_string()))
+                        .extend(Code(ResultCode::WasmRuntimeError));
 
-                let gas_scale = tx_data.tx_gas_meter.get_gas_scale();
-                let scaled_gas = tx_data
-                    .tx_gas_meter
-                    .get_tx_consumed_gas()
-                    .get_whole_gas_units(gas_scale);
-
-                tx_logs
-                    .tx_event
-                    .extend(GasUsed(scaled_gas))
-                    .extend(Info(msg.to_string()))
-                    .extend(Code(ResultCode::WasmRuntimeError));
-
-                self.handle_batch_error(
-                    response,
-                    &msg,
-                    tx_result,
-                    tx_data,
-                    &mut tx_logs,
-                );
-            }
+                    self.handle_batch_error(
+                        response,
+                        &msg,
+                        tx_result,
+                        tx_data,
+                        &mut tx_logs,
+                    );
+                }
+            },
         }
 
         response.events.emit(tx_logs.tx_event);
@@ -1287,6 +1290,7 @@ mod test_finalize_block {
     use namada_sdk::address;
     use namada_sdk::collections::{HashMap, HashSet};
     use namada_sdk::dec::{Dec, POS_DECIMAL_PRECISION};
+    use namada_sdk::eth_bridge::MinimumConfirmations;
     use namada_sdk::eth_bridge::storage::bridge_pool::{
         self, get_key_from_hash, get_nonce_key, get_signed_root_key,
     };
@@ -1295,10 +1299,9 @@ mod test_finalize_block {
     use namada_sdk::eth_bridge::storage::{
         min_confirmations_key, wrapped_erc20s,
     };
-    use namada_sdk::eth_bridge::MinimumConfirmations;
     use namada_sdk::ethereum_events::{EthAddress, Uint as ethUint};
-    use namada_sdk::events::extend::Log;
     use namada_sdk::events::Event;
+    use namada_sdk::events::extend::Log;
     use namada_sdk::gas::VpGasMeter;
     use namada_sdk::governance::storage::keys::get_proposal_execution_key;
     use namada_sdk::governance::storage::proposal::ProposalType;
@@ -1325,26 +1328,26 @@ mod test_finalize_block {
         BondId, SlashType, ValidatorState, WeightedValidator,
     };
     use namada_sdk::proof_of_stake::{
-        unjail_validator, ADDRESS as pos_address,
+        ADDRESS as pos_address, unjail_validator,
     };
     use namada_sdk::storage::KeySeg;
     use namada_sdk::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
     use namada_sdk::time::DurationSecs;
     use namada_sdk::token::{
-        read_balance, read_denom, update_balance, Amount, DenominatedAmount,
-        NATIVE_MAX_DECIMAL_PLACES,
+        Amount, DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES, read_balance,
+        read_denom, update_balance,
     };
     use namada_sdk::tx::data::Fee;
-    use namada_sdk::tx::event::types::APPLIED as APPLIED_TX;
     use namada_sdk::tx::event::Code as CodeAttr;
+    use namada_sdk::tx::event::types::APPLIED as APPLIED_TX;
     use namada_sdk::tx::{Authorization, Code, Data};
     use namada_sdk::uint::Uint;
     use namada_sdk::validation::ParametersVp;
-    use namada_test_utils::tx_data::TxWriteData;
     use namada_test_utils::TestWasms;
+    use namada_test_utils::tx_data::TxWriteData;
     use namada_vm::wasm::run::VpEvalWasm;
     use namada_vote_ext::ethereum_events;
-    use proof_of_stake::{bond_tokens, PosParams};
+    use proof_of_stake::{PosParams, bond_tokens};
     use test_log::test;
 
     use super::*;

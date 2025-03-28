@@ -112,11 +112,11 @@ mod test_nuts {
     use namada_state::testing::TestState;
     use namada_state::{StateRead, StorageWrite};
     use namada_trans_token::storage_key::balance_key;
-    use namada_tx::data::TxType;
     use namada_tx::Tx;
-    use namada_vm::wasm::run::VpEvalWasm;
-    use namada_vm::wasm::VpCache;
+    use namada_tx::data::TxType;
     use namada_vm::WasmCacheRwAccess;
+    use namada_vm::wasm::VpCache;
+    use namada_vm::wasm::run::VpEvalWasm;
     use namada_vp::native_vp;
     use proptest::prelude::*;
 

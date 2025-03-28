@@ -161,7 +161,7 @@ impl<'t> From<&'t PendingTransfer> for PendingTransferAppendix<'t> {
     }
 }
 
-impl<'transfer> PendingTransferAppendix<'transfer> {
+impl PendingTransferAppendix<'_> {
     /// Calculate the checksum of this [`PendingTransferAppendix`].
     pub fn checksum(&self) -> HashDigest {
         let serialized = self.serialize_to_vec();

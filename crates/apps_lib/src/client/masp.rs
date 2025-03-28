@@ -6,7 +6,7 @@ use namada_sdk::control_flow::install_shutdown_signal;
 use namada_sdk::error::Error;
 #[cfg(any(test, feature = "testing"))]
 use namada_sdk::io::DevNullProgressBar;
-use namada_sdk::io::{display, display_line, Client, Io, MaybeSend, MaybeSync};
+use namada_sdk::io::{Client, Io, MaybeSend, MaybeSync, display, display_line};
 use namada_sdk::masp::{
     IndexerMaspClient, LedgerMaspClient, MaspLocalTaskEnv, ShieldedContext,
     ShieldedSyncConfig, ShieldedUtils,

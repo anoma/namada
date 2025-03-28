@@ -9,7 +9,7 @@ use namada_core::storage;
 use namada_storage::collections::lazy_map::{LazyMap, NestedSubKey, SubKey};
 use namada_storage::collections::{Nested, Simple};
 
-use super::{read_data, Data, LazyCollectionExt};
+use super::{Data, LazyCollectionExt, read_data};
 use crate::VpEnv;
 
 /// Possible sub-keys of a [`LazyMap`], together with their [`Data`]

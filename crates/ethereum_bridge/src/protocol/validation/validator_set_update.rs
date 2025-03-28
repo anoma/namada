@@ -2,13 +2,13 @@
 
 use namada_core::chain::Epoch;
 use namada_proof_of_stake::queries::get_validator_eth_hot_key;
-use namada_state::{DBIter, StorageHasher, WlState, DB};
+use namada_state::{DB, DBIter, StorageHasher, WlState};
 use namada_systems::governance;
 use namada_vote_ext::validator_set_update;
 
 use super::VoteExtensionError;
 use crate::storage::eth_bridge_queries::{
-    is_bridge_comptime_enabled, EthBridgeQueries,
+    EthBridgeQueries, is_bridge_comptime_enabled,
 };
 
 /// Validates a validator set update vote extension issued at the
@@ -153,7 +153,7 @@ where
 mod tests {
     use assert_matches::assert_matches;
     use namada_core::ethereum_events::EthAddress;
-    use namada_core::key::{common, RefTo};
+    use namada_core::key::{RefTo, common};
     use namada_vote_ext::validator_set_update::{EthAddrBook, VotingPowersMap};
 
     use super::*;

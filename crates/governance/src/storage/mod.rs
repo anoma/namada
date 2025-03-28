@@ -15,9 +15,10 @@ use namada_core::chain::Epoch;
 use namada_core::collections::HashSet;
 use namada_core::hash::Hash;
 use namada_core::token;
-use namada_state::{iter_prefix, Error, Result, StorageRead, StorageWrite};
+use namada_state::{Error, Result, StorageRead, StorageWrite, iter_prefix};
 use namada_systems::trans_token;
 
+use crate::ADDRESS as governance_address;
 use crate::parameters::GovernanceParameters;
 use crate::storage::keys as governance_keys;
 use crate::storage::proposal::{
@@ -25,7 +26,6 @@ use crate::storage::proposal::{
 };
 use crate::storage::vote::ProposalVote;
 use crate::utils::{ProposalResult, Vote};
-use crate::ADDRESS as governance_address;
 
 /// A proposal creation transaction.
 pub fn init_proposal<S, TransToken>(

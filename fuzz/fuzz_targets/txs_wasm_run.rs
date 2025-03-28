@@ -13,11 +13,11 @@ use namada_apps_lib::wallet;
 use namada_core::key::PublicKeyTmRawHash;
 use namada_node::shell;
 use namada_node::shell::test_utils::TestShell;
+use namada_node::shims::abcipp_shim_types::shim::TxBytes;
 use namada_node::shims::abcipp_shim_types::shim::request::{
     FinalizeBlock, ProcessedTx,
 };
 use namada_node::shims::abcipp_shim_types::shim::response::TxResult;
-use namada_node::shims::abcipp_shim_types::shim::TxBytes;
 use namada_sdk::address::Address;
 use namada_sdk::eth_bridge_pool::PendingTransfer;
 use namada_sdk::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;

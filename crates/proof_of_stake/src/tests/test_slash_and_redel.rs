@@ -11,8 +11,8 @@ use namada_core::address::testing::{
 use namada_core::address::{self, Address};
 use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::dec::Dec;
-use namada_core::key::testing::{keypair_1, keypair_2, keypair_3};
 use namada_core::key::RefTo;
+use namada_core::key::testing::{keypair_1, keypair_2, keypair_3};
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_state::testing::TestState;
 use namada_trans_token::{self as token, credit_tokens, read_balance};
@@ -44,7 +44,7 @@ use crate::tests::{
 };
 use crate::types::{BondId, GenesisValidator, Slash, SlashType};
 use crate::{
-    staking_token_address, OwnedPosParams, RedelegationError, StorageRead,
+    OwnedPosParams, RedelegationError, StorageRead, staking_token_address,
 };
 
 proptest! {

@@ -20,7 +20,7 @@ pub use namada_ibc::{
 };
 use namada_tx_env::TxEnv;
 
-use crate::{parameters, token, Ctx, Result};
+use crate::{Ctx, Result, parameters, token};
 
 /// IBC actions to handle an IBC message. The `verifiers` inserted into the set
 /// must be inserted into the tx context with `Ctx::insert_verifier` after tx

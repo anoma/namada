@@ -11,10 +11,10 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 use super::validation::{
-    is_valid_activation_epoch, is_valid_author_balance, is_valid_content,
-    is_valid_default_proposal_data, is_valid_end_epoch,
+    ProposalValidation, is_valid_activation_epoch, is_valid_author_balance,
+    is_valid_content, is_valid_default_proposal_data, is_valid_end_epoch,
     is_valid_pgf_funding_data, is_valid_pgf_stewards_data,
-    is_valid_proposal_period, is_valid_start_epoch, ProposalValidation,
+    is_valid_proposal_period, is_valid_start_epoch,
 };
 use crate::parameters::GovernanceParameters;
 use crate::storage::proposal::PGFTarget;

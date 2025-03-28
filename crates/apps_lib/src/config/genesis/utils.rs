@@ -6,8 +6,8 @@ use namada_sdk::key::common;
 use namada_sdk::tx::Tx;
 use namada_sdk::wallet::Wallet;
 use namada_sdk::{error, signing};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tokio::sync::RwLock;
 
 use crate::wallet::CliWalletUtils;
@@ -48,7 +48,7 @@ pub fn write_toml<T: Serialize>(
     })
 }
 
-pub(super) async fn with_hardware_wallet<'a, T>(
+pub(super) async fn with_hardware_wallet<T>(
     tx: Tx,
     pubkey: common::PublicKey,
     parts: signing::Signable,

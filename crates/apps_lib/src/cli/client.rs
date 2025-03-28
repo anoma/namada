@@ -1,7 +1,7 @@
 use std::io::Read;
 
 use color_eyre::eyre::Result;
-use namada_sdk::io::{display_line, Io, NamadaIo};
+use namada_sdk::io::{Io, NamadaIo, display_line};
 use namada_sdk::masp::ShieldedContext;
 use namada_sdk::wallet::DatedViewingKey;
 use namada_sdk::{Namada, NamadaImpl};
@@ -113,7 +113,8 @@ impl CliApi {
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_ibc_transfer(&namada, args).await?;
                     }
-                    Sub::TxOsmosisSwap(TxOsmosisSwap(args)) => {
+                    Sub::TxOsmosisSwap(args) => {
+                        let TxOsmosisSwap(args) = *args;
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
                         let ledger_address =
                             chain_ctx.get(&args.transfer.tx.ledger_address);

@@ -59,10 +59,10 @@ mod test_bp_vote_extensions {
     use namada_sdk::eth_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
     use namada_sdk::eth_bridge::storage::bridge_pool::get_key_from_hash;
     use namada_sdk::eth_bridge::storage::eth_bridge_queries::{
-        is_bridge_comptime_enabled, EthBridgeQueries,
+        EthBridgeQueries, is_bridge_comptime_enabled,
     };
     use namada_sdk::ethereum_events::Uint;
-    use namada_sdk::keccak::{keccak_hash, KeccakHash};
+    use namada_sdk::keccak::{KeccakHash, keccak_hash};
     use namada_sdk::key::*;
     use namada_sdk::proof_of_stake::storage::{
         consensus_validator_set_handle,
@@ -72,7 +72,7 @@ mod test_bp_vote_extensions {
         Position as ValidatorPosition, WeightedValidator,
     };
     use namada_sdk::proof_of_stake::{
-        become_validator, BecomeValidator, Epoch,
+        BecomeValidator, Epoch, become_validator,
     };
     use namada_sdk::state::StorageWrite;
     use namada_sdk::tendermint::abci::types::VoteInfo;

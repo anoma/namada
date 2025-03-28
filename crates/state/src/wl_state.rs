@@ -24,10 +24,10 @@ use namada_storage::{
 use crate::in_memory::InMemory;
 use crate::write_log::{StorageModification, WriteLog};
 use crate::{
-    is_pending_transfer_key, DBIter, Epoch, Error, Hash, Key, KeySeg,
+    DB, DBIter, EPOCH_SWITCH_BLOCKS_DELAY, Epoch, Error, Hash, Key, KeySeg,
     LastBlock, MembershipProof, MerkleTree, MerkleTreeError, ProofOps, Result,
-    State, StateError, StateRead, StorageHasher, StoreType, TxWrites, DB,
-    EPOCH_SWITCH_BLOCKS_DELAY, STORAGE_ACCESS_GAS_PER_BYTE,
+    STORAGE_ACCESS_GAS_PER_BYTE, State, StateError, StateRead, StorageHasher,
+    StoreType, TxWrites, is_pending_transfer_key,
 };
 
 /// Owned state with full R/W access.

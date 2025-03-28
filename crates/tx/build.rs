@@ -5,7 +5,7 @@ const PROTO_SRC: &str = "./proto";
 
 fn main() {
     if let Ok(val) = env::var("COMPILE_PROTO") {
-        if val.to_ascii_lowercase() == "false" {
+        if val.eq_ignore_ascii_case("false") {
             // Skip compiling proto files
             return;
         }

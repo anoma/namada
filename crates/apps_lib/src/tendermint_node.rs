@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use base64::prelude::{Engine, BASE64_STANDARD};
+use base64::prelude::{BASE64_STANDARD, Engine};
 use namada_sdk::borsh::BorshSerializeExt;
 use namada_sdk::key::*;
 use rand_core::OsRng;

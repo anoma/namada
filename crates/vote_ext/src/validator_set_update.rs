@@ -421,7 +421,7 @@ mod tag {
     use serde::{Deserialize, Serialize};
 
     use super::{
-        epoch_to_token, Vext, VotingPowersMapExt, GOVERNANCE_CONTRACT_VERSION,
+        GOVERNANCE_CONTRACT_VERSION, Vext, VotingPowersMapExt, epoch_to_token,
     };
 
     /// Tag type that indicates we should use [`AbiEncode`]
