@@ -36,9 +36,9 @@ pull_request_rules:
       - label != "do-not-merge"
       - "#approved-reviews-by >= 1"
       - or:
-        - base = main
-        - base = maint-1.1
-        - base = maint-libs-0.48
+          - base = main
+          - base = maint-1.1
+          - base = maint-libs-0.48
     actions:
       queue:
 
@@ -70,3 +70,12 @@ pull_request_rules:
       backport:
         branches:
           - "maint-libs-0.48"
+priority_rules:
+  - name: priority for queue `main-queue`
+    conditions:
+      - base = main
+    priority: 2500
+  - name: priority for queue `backport-apps-1.1-queue`
+    conditions:
+      - base = maint-1.1
+    priority: 2250
