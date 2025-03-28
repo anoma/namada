@@ -21,15 +21,15 @@ use namada_trans_token::{self as token, read_balance};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 use proptest_state_machine::{
-    prop_state_machine, ReferenceStateMachine, StateMachineTest,
+    ReferenceStateMachine, StateMachineTest, prop_state_machine,
 };
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
 // `tracing` logs from tests
 use test_log::test;
 
 use crate::lazy_map::{Collectable, NestedSubKey, SubKey};
-use crate::parameters::testing::arb_rate;
 use crate::parameters::PosParams;
+use crate::parameters::testing::arb_rate;
 use crate::storage::{
     enqueued_slashes_handle, read_all_validator_addresses,
     read_below_capacity_validator_set_addresses,
@@ -48,11 +48,11 @@ use crate::types::{
     Slash, SlashType, ValidatorState, WeightedValidator,
 };
 use crate::{
+    BondsForRemovalRes, EagerRedelegatedUnbonds, FoldRedelegatedBondsResult,
+    ModifiedRedelegation, RedelegationError, ResultSlashing, StorageRead,
     below_capacity_validator_set_handle, consensus_validator_set_handle,
     is_validator_frozen, validator_deltas_handle, validator_slashes_handle,
-    validator_state_handle, BondsForRemovalRes, EagerRedelegatedUnbonds,
-    FoldRedelegatedBondsResult, ModifiedRedelegation, RedelegationError,
-    ResultSlashing, StorageRead,
+    validator_state_handle,
 };
 
 prop_state_machine! {

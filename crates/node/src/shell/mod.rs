@@ -52,8 +52,8 @@ use namada_sdk::proof_of_stake::types::{
 };
 use namada_sdk::state::tx_queue::ExpiredTx;
 use namada_sdk::state::{
-    DBIter, FullAccessState, Sha256Hasher, StorageHasher, StorageRead,
-    TempWlState, WlState, DB, EPOCH_SWITCH_BLOCKS_DELAY,
+    DB, DBIter, EPOCH_SWITCH_BLOCKS_DELAY, FullAccessState, Sha256Hasher,
+    StorageHasher, StorageRead, TempWlState, WlState,
 };
 use namada_sdk::storage::{Key, TxIndex};
 use namada_sdk::tendermint::AppHash;
@@ -72,11 +72,11 @@ use thiserror::Error;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
 use super::ethereum_oracle::{self as oracle, last_processed_block};
-use crate::config::{self, genesis, TendermintMode, ValidatorLocalConfig};
+use crate::config::{self, TendermintMode, ValidatorLocalConfig, genesis};
 use crate::protocol::ShellParams;
 use crate::shims::abcipp_shim_types::shim;
-use crate::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::shims::abcipp_shim_types::shim::TakeSnapshot;
+use crate::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::tendermint::abci::{request, response};
 use crate::tendermint::{self, validator};
 use crate::tendermint_proto::crypto::public_key;
@@ -748,10 +748,7 @@ where
 
         match result {
             Ok((bytes, _gas)) => match bytes {
-                Some(bytes) => match T::try_from_slice(&bytes) {
-                    Ok(value) => Some(value),
-                    Err(_) => None,
-                },
+                Some(bytes) => T::try_from_slice(&bytes).ok(),
                 None => None,
             },
             Err(_) => None,
@@ -2102,8 +2099,8 @@ mod shell_tests {
     use namada_sdk::address;
     use namada_sdk::chain::Epoch;
     use namada_sdk::token::read_denom;
-    use namada_sdk::tx::data::protocol::{ProtocolTx, ProtocolTxType};
     use namada_sdk::tx::data::Fee;
+    use namada_sdk::tx::data::protocol::{ProtocolTx, ProtocolTxType};
     use namada_sdk::tx::{Code, Data, Signed};
     use namada_vote_ext::{
         bridge_pool_roots, ethereum_events, ethereum_tx_data_variants,

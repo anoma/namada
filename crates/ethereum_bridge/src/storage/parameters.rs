@@ -9,7 +9,7 @@ use namada_core::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use namada_state::{DBIter, StorageHasher, WlState, DB};
+use namada_state::{DB, DBIter, StorageHasher, WlState};
 use namada_storage::{Error, Result, StorageRead, StorageWrite};
 use serde::{Deserialize, Serialize};
 

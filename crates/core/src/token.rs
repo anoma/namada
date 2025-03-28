@@ -14,11 +14,11 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::arith::{self, checked, CheckedAdd, CheckedSub};
+use crate::arith::{self, CheckedAdd, CheckedSub, checked};
 use crate::dec::{Dec, POS_DECIMAL_PRECISION};
 use crate::storage;
 use crate::storage::{DbKeySeg, KeySeg};
-use crate::uint::{self, Uint, I256};
+use crate::uint::{self, I256, Uint};
 
 /// Amount in micro units. For different granularity another representation
 /// might be more appropriate.

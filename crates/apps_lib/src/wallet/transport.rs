@@ -4,11 +4,11 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::ops::Deref;
 use std::str::FromStr;
 
-use ledger_lib::transport::TcpInfo;
 use ledger_lib::Transport;
+use ledger_lib::transport::TcpInfo;
 use ledger_transport::{APDUAnswer, APDUCommand};
-use ledger_transport_hid::hidapi::HidApi;
 use ledger_transport_hid::TransportNativeHID;
+use ledger_transport_hid::hidapi::HidApi;
 use namada_sdk::args;
 
 /// Hardware wallet transport
@@ -47,13 +47,13 @@ impl ledger_transport::Exchange for WalletTransport {
         I: Deref<Target = [u8]> + Send + Sync,
     {
         match self {
-            WalletTransport::HID(transport) => transport
-                .exchange(command)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
+            WalletTransport::HID(transport) => {
+                transport.exchange(command).map_err(std::io::Error::other)
+            }
             WalletTransport::TCP(transport) => transport
                 .exchange(command)
                 .await
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
+                .map_err(std::io::Error::other),
         }
     }
 }

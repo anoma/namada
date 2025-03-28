@@ -1312,7 +1312,7 @@ pub mod testing {
     use namada_core::hash::HASH_LENGTH;
     use namada_core::storage::testing::arb_key;
     use proptest::collection;
-    use proptest::prelude::{any, prop_oneof, Just, Strategy};
+    use proptest::prelude::{Just, Strategy, any, prop_oneof};
 
     use super::*;
 

@@ -5,8 +5,8 @@ use std::borrow::Cow;
 use namada_core::address::Address;
 pub use namada_core::token::*;
 use namada_core::{storage, token};
-pub use namada_events::extend::UserAccount;
 pub use namada_events::EventLevel;
+pub use namada_events::extend::UserAccount;
 pub use namada_storage::Result;
 
 /// Abstract token keys interface

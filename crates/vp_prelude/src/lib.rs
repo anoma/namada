@@ -31,10 +31,10 @@ pub use namada_core::borsh::{
     BorshDeserialize, BorshSerialize, BorshSerializeExt,
 };
 use namada_core::chain::{
-    BlockHeader, BlockHeight, Epoch, Epochs, CHAIN_ID_LENGTH,
+    BlockHeader, BlockHeight, CHAIN_ID_LENGTH, Epoch, Epochs,
 };
 pub use namada_core::collections::HashSet;
-use namada_core::hash::{Hash, HASH_LENGTH};
+use namada_core::hash::{HASH_LENGTH, Hash};
 use namada_core::internal::HostEnvResult;
 use namada_core::storage::TxIndex;
 pub use namada_core::validity_predicate::{VpError, VpErrorExtResult};
@@ -45,12 +45,12 @@ pub use namada_governance::pgf::storage as pgf_storage;
 pub use namada_governance::storage as gov_storage;
 pub use namada_macros::validity_predicate;
 pub use namada_storage::{
-    iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt, StorageRead,
+    Error, OptionExt, ResultExt, StorageRead, iter_prefix, iter_prefix_bytes,
 };
 pub use namada_tx::{BatchedTx, Section, Tx};
 use namada_vm_env::vp::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
-pub use namada_vp_env::{collection_validation, VpEnv};
+pub use namada_vp_env::{VpEnv, collection_validation};
 pub use sha2::{Digest, Sha256, Sha384, Sha512};
 use tx::{BatchedTxRef, TxCommitments};
 pub use {
@@ -428,7 +428,10 @@ impl namada_tx::action::Read for Ctx {
 }
 
 impl StorageRead for CtxPreStorageRead<'_> {
-    type PrefixIter<'iter> = KeyValIterator<(String, Vec<u8>)> where Self: 'iter;
+    type PrefixIter<'iter>
+        = KeyValIterator<(String, Vec<u8>)>
+    where
+        Self: 'iter;
 
     fn read_bytes(&self, key: &storage::Key) -> Result<Option<Vec<u8>>, Error> {
         let key = key.to_string();
@@ -497,7 +500,10 @@ impl StorageRead for CtxPreStorageRead<'_> {
 }
 
 impl StorageRead for CtxPostStorageRead<'_> {
-    type PrefixIter<'iter> = KeyValIterator<(String, Vec<u8>)> where Self:'iter;
+    type PrefixIter<'iter>
+        = KeyValIterator<(String, Vec<u8>)>
+    where
+        Self: 'iter;
 
     fn read_bytes(&self, key: &storage::Key) -> Result<Option<Vec<u8>>, Error> {
         let key = key.to_string();

@@ -34,14 +34,14 @@ use namada_core::address::Address;
 use namada_core::arith::checked;
 use namada_core::chain::ChainId;
 pub use namada_core::chain::{
-    BlockHash, BlockHeader, BlockHeight, Epoch, Epochs, BLOCK_HASH_LENGTH,
-    BLOCK_HEIGHT_LENGTH,
+    BLOCK_HASH_LENGTH, BLOCK_HEIGHT_LENGTH, BlockHash, BlockHeader,
+    BlockHeight, Epoch, Epochs,
 };
 use namada_core::eth_bridge_pool::is_pending_transfer_key;
 use namada_core::hash::Hash;
 pub use namada_core::hash::Sha256Hasher;
 pub use namada_core::storage::{
-    BlockResults, EthEventsQueue, Key, KeySeg, TxIndex, EPOCH_TYPE_LENGTH,
+    BlockResults, EPOCH_TYPE_LENGTH, EthEventsQueue, Key, KeySeg, TxIndex,
 };
 use namada_core::tendermint::merkle::proof::ProofOps;
 use namada_gas::{
@@ -49,8 +49,8 @@ use namada_gas::{
 };
 use namada_merkle_tree::Error as MerkleTreeError;
 pub use namada_merkle_tree::{
-    self as merkle_tree, ics23_specs, MembershipProof, MerkleTree,
-    MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreRef, StoreType,
+    self as merkle_tree, MembershipProof, MerkleTree, MerkleTreeStoresRead,
+    MerkleTreeStoresWrite, StoreRef, StoreType, ics23_specs,
 };
 pub use namada_storage as storage;
 pub use namada_storage::conversion_state::{
@@ -58,10 +58,10 @@ pub use namada_storage::conversion_state::{
 };
 pub use namada_storage::types::{KVBytes, PatternIterator, PrefixIterator};
 pub use namada_storage::{
-    collections, iter_prefix, iter_prefix_bytes, iter_prefix_with_filter,
-    iter_prefix_with_filter_map, mockdb, tx_queue, BlockStateRead,
-    BlockStateWrite, DBIter, DBWriteBatch, DbError, DbResult, Error, OptionExt,
-    Result, ResultExt, StorageHasher, StorageRead, StorageWrite, DB,
+    BlockStateRead, BlockStateWrite, DB, DBIter, DBWriteBatch, DbError,
+    DbResult, Error, OptionExt, Result, ResultExt, StorageHasher, StorageRead,
+    StorageWrite, collections, iter_prefix, iter_prefix_bytes,
+    iter_prefix_with_filter, iter_prefix_with_filter_map, mockdb, tx_queue,
 };
 use namada_systems::parameters;
 use thiserror::Error;

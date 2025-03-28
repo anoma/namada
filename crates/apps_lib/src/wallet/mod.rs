@@ -251,9 +251,7 @@ where
 
 /// Save the wallet store to a file.
 pub fn save(wallet: &Wallet<CliWalletUtils>) -> std::io::Result<()> {
-    wallet
-        .save()
-        .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+    wallet.save().map_err(std::io::Error::other)
 }
 
 /// Load a wallet from the store file.

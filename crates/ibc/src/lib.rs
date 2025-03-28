@@ -36,9 +36,11 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 pub use actions::transfer_over_ibc;
-use apps::transfer::types::packet::PacketData;
 use apps::transfer::types::PORT_ID_STR;
+use apps::transfer::types::packet::PacketData;
 use borsh::BorshDeserialize;
+use context::IbcContext;
+pub use context::ValidationParams;
 pub use context::common::IbcCommonContext;
 pub use context::nft_transfer::NftTransferContext;
 pub use context::nft_transfer_mod::NftTransferModule;
@@ -46,17 +48,15 @@ use context::router::IbcRouter;
 pub use context::storage::{IbcStorageContext, ProofSpec};
 pub use context::token_transfer::TokenTransferContext;
 pub use context::transfer_mod::{ModuleWrapper, TransferModule};
-use context::IbcContext;
-pub use context::ValidationParams;
 use ibc::apps::nft_transfer::handler::{
     send_nft_transfer_execute, send_nft_transfer_validate,
 };
 use ibc::apps::nft_transfer::types::error::NftTransferError;
 use ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
 use ibc::apps::nft_transfer::types::{
-    ack_success_b64, is_receiver_chain_source as is_nft_receiver_chain_source,
-    PrefixedClassId, TokenId, TracePrefix as NftTracePrefix,
-    PORT_ID_STR as NFT_PORT_ID_STR,
+    PORT_ID_STR as NFT_PORT_ID_STR, PrefixedClassId, TokenId,
+    TracePrefix as NftTracePrefix, ack_success_b64,
+    is_receiver_chain_source as is_nft_receiver_chain_source,
 };
 use ibc::apps::transfer::handler::{
     send_transfer_execute, send_transfer_validate,
@@ -64,7 +64,7 @@ use ibc::apps::transfer::handler::{
 use ibc::apps::transfer::types::error::TokenTransferError;
 use ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use ibc::apps::transfer::types::{
-    is_receiver_chain_source, TracePrefix, PORT_ID_STR as FT_PORT_ID_STR,
+    PORT_ID_STR as FT_PORT_ID_STR, TracePrefix, is_receiver_chain_source,
 };
 use ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
 use ibc::core::channel::types::commitment::compute_ack_commitment;
@@ -86,19 +86,19 @@ use ibc_middleware_packet_forward::PacketMetadata;
 use masp_primitives::transaction::Transaction as MaspTransaction;
 pub use msg::*;
 use namada_core::address::{self, Address};
-use namada_core::arith::{checked, CheckedAdd, CheckedSub};
+use namada_core::arith::{CheckedAdd, CheckedSub, checked};
 use namada_core::ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
 use namada_core::ibc::core::channel::types::commitment::{
-    compute_packet_commitment, AcknowledgementCommitment, PacketCommitment,
+    AcknowledgementCommitment, PacketCommitment, compute_packet_commitment,
 };
 pub use namada_core::ibc::*;
-use namada_core::masp::{addr_taddr, ibc_taddr, TAddrData};
+use namada_core::masp::{TAddrData, addr_taddr, ibc_taddr};
 use namada_core::masp_primitives::transaction::components::ValueSum;
 use namada_core::token::Amount;
 use namada_events::EmitEvents;
 use namada_state::{
-    DBIter, Error as StorageError, Key, Result as StorageResult, ResultExt,
-    State, StorageHasher, StorageRead, StorageWrite, WlState, DB,
+    DB, DBIter, Error as StorageError, Key, Result as StorageResult, ResultExt,
+    State, StorageHasher, StorageRead, StorageWrite, WlState,
 };
 use namada_systems::ibc::ChangedBalances;
 use namada_systems::trans_token;

@@ -16,9 +16,9 @@ use namada_sdk::collections::HashMap;
 use namada_sdk::control_flow::time::Duration;
 use namada_sdk::eth_bridge::oracle::config::Config as OracleConfig;
 use namada_sdk::ethereum_events::EthereumEvent;
+use namada_sdk::events::Event;
 use namada_sdk::events::extend::Height as HeightAttr;
 use namada_sdk::events::log::dumb_queries;
-use namada_sdk::events::Event;
 use namada_sdk::hash::Hash;
 use namada_sdk::io::Client;
 use namada_sdk::key::tm_consensus_key_raw_hash;
@@ -28,10 +28,10 @@ use namada_sdk::proof_of_stake::storage::{
 };
 use namada_sdk::proof_of_stake::types::WeightedValidator;
 use namada_sdk::queries::{
-    EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
+    EncodedResponseQuery, RPC, RequestCtx, RequestQuery, Router,
 };
 use namada_sdk::state::{
-    LastBlock, Sha256Hasher, StorageRead, DB, EPOCH_SWITCH_BLOCKS_DELAY,
+    DB, EPOCH_SWITCH_BLOCKS_DELAY, LastBlock, Sha256Hasher, StorageRead,
 };
 use namada_sdk::tendermint::abci::response::Info;
 use namada_sdk::tendermint::abci::types::VoteInfo;
@@ -59,9 +59,9 @@ use crate::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::tendermint_proto::abci::{
     RequestPrepareProposal, RequestProcessProposal,
 };
+use crate::tendermint_rpc::SimpleRequest;
 use crate::tendermint_rpc::endpoint::block;
 use crate::tendermint_rpc::error::Error as RpcError;
-use crate::tendermint_rpc::SimpleRequest;
 use crate::{dry_run_tx, storage, tendermint, tendermint_rpc};
 
 /// Mock Ethereum oracle used for testing purposes.

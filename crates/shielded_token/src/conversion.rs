@@ -11,18 +11,18 @@ use masp_primitives::convert::{AllowedConversion, UncheckedAllowedConversion};
 use masp_primitives::transaction::components::I128Sum as MaspAmount;
 use namada_controller::PDController;
 use namada_core::address::{Address, MASP};
-use namada_core::arith::checked;
 #[cfg(any(feature = "multicore", test))]
 use namada_core::arith::CheckedAdd;
+use namada_core::arith::checked;
 #[cfg(any(feature = "multicore", test))]
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::dec::Dec;
 #[cfg(any(feature = "multicore", test))]
 use namada_core::hash::Hash;
 #[cfg(any(feature = "multicore", test))]
-use namada_core::masp::encode_asset_type;
-#[cfg(any(feature = "multicore", test))]
 use namada_core::masp::MaspEpoch;
+#[cfg(any(feature = "multicore", test))]
+use namada_core::masp::encode_asset_type;
 #[cfg(any(feature = "multicore", test))]
 use namada_core::token::MaspDigitPos;
 use namada_core::token::{Amount, DenominatedAmount, Denomination};
@@ -729,7 +729,7 @@ where
         .collect();
 
     #[allow(clippy::arithmetic_side_effects)]
-    let notes_per_thread_max = (assets.len() + num_threads - 1) / num_threads;
+    let notes_per_thread_max = assets.len().div_ceil(num_threads);
     // floor(assets.len() / num_threads)
     #[allow(clippy::arithmetic_side_effects)]
     let notes_per_thread_min = assets.len() / num_threads;

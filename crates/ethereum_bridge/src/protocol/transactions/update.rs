@@ -3,7 +3,7 @@ use eyre::Result;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::hash::StorageHasher;
 use namada_core::storage;
-use namada_state::{DBIter, WlState, DB};
+use namada_state::{DB, DBIter, WlState};
 use namada_storage::StorageWrite;
 
 #[allow(dead_code)]

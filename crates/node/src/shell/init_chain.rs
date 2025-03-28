@@ -147,7 +147,7 @@ where
         };
 
         let mut validation = InitChainValidation::new(self, false);
-        validation.run(
+        let _ = validation.run(
             init,
             genesis,
             #[cfg(any(test, feature = "testing"))]
@@ -195,7 +195,7 @@ where
     }
 }
 
-impl<'shell, D, H> InitChainValidation<'shell, D, H>
+impl<D, H> InitChainValidation<'_, D, H>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -269,9 +269,10 @@ where
         // Loaded VP code cache to avoid loading the same files multiple times
         let mut vp_cache: HashMap<String, Vec<u8>> = HashMap::default();
         self.init_token_accounts(&genesis);
-        self.init_token_balances(&genesis);
-        self.apply_genesis_txs_established_account(&genesis, &mut vp_cache);
-        self.apply_genesis_txs_validator_account(
+        let _ = self.init_token_balances(&genesis);
+        let _ =
+            self.apply_genesis_txs_established_account(&genesis, &mut vp_cache);
+        let _ = self.apply_genesis_txs_validator_account(
             &genesis,
             &mut vp_cache,
             &pos_params,
@@ -729,7 +730,7 @@ where
     shell: &'shell mut Shell<D, H>,
 }
 
-impl<'shell, D, H> std::ops::Deref for InitChainValidation<'shell, D, H>
+impl<D, H> std::ops::Deref for InitChainValidation<'_, D, H>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -741,7 +742,7 @@ where
     }
 }
 
-impl<'shell, D, H> std::ops::DerefMut for InitChainValidation<'shell, D, H>
+impl<D, H> std::ops::DerefMut for InitChainValidation<'_, D, H>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -775,8 +776,8 @@ where
         genesis: config::genesis::chain::Finalized,
     ) {
         use crate::tendermint::block::Size;
-        use crate::tendermint::consensus::params::ValidatorParams;
         use crate::tendermint::consensus::Params;
+        use crate::tendermint::consensus::params::ValidatorParams;
         use crate::tendermint::evidence::{Duration, Params as Evidence};
         use crate::tendermint::time::Time;
 
@@ -805,7 +806,7 @@ where
             app_state_bytes: Default::default(),
             initial_height: 0u32.into(),
         };
-        self.run(
+        let _ = self.run(
             init,
             genesis,
             #[cfg(any(test, feature = "testing"))]
@@ -975,7 +976,7 @@ mod test {
     use namada_sdk::wallet::alias::Alias;
 
     use super::*;
-    use crate::config::genesis::{transactions, GenesisAddress};
+    use crate::config::genesis::{GenesisAddress, transactions};
     use crate::shell::test_utils::TestShell;
 
     /// Test that the init-chain handler never commits changes directly to the

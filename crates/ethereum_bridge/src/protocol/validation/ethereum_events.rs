@@ -2,7 +2,7 @@
 
 use namada_core::chain::BlockHeight;
 use namada_proof_of_stake::queries::get_validator_protocol_key;
-use namada_state::{DBIter, StorageHasher, StorageRead, WlState, DB};
+use namada_state::{DB, DBIter, StorageHasher, StorageRead, WlState};
 use namada_systems::governance;
 use namada_tx::Signed;
 use namada_vote_ext::ethereum_events;

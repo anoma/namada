@@ -11,7 +11,7 @@ use namada_apps_lib::wallet::defaults::{
 };
 use namada_core::address::Address;
 use namada_core::dec::Dec;
-use namada_core::masp::{encode_asset_type, MaspTxId, TokenMap};
+use namada_core::masp::{MaspTxId, TokenMap, encode_asset_type};
 use namada_node::shell::testing::client::run;
 use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
@@ -25,16 +25,16 @@ use namada_sdk::token::storage_key::{
 };
 use namada_sdk::token::{self, Amount, DenominatedAmount, MaspEpoch};
 use namada_sdk::tx::{Section, Tx};
-use namada_sdk::{tx, DEFAULT_GAS_LIMIT};
+use namada_sdk::{DEFAULT_GAS_LIMIT, tx};
 use test_log::test;
 
 use super::{helpers, setup};
 use crate::e2e::setup::apply_use_device;
 use crate::e2e::setup::constants::{
-    AA_PAYMENT_ADDRESS, AA_VIEWING_KEY, AB_PAYMENT_ADDRESS, AB_VIEWING_KEY,
-    AC_PAYMENT_ADDRESS, AC_VIEWING_KEY, ALBERT, ALBERT_KEY, A_SPENDING_KEY,
-    BB_PAYMENT_ADDRESS, BERTHA, BERTHA_KEY, BTC, B_SPENDING_KEY, CHRISTEL,
-    CHRISTEL_KEY, C_SPENDING_KEY, ETH, FRANK_KEY, MASP, NAM,
+    A_SPENDING_KEY, AA_PAYMENT_ADDRESS, AA_VIEWING_KEY, AB_PAYMENT_ADDRESS,
+    AB_VIEWING_KEY, AC_PAYMENT_ADDRESS, AC_VIEWING_KEY, ALBERT, ALBERT_KEY,
+    B_SPENDING_KEY, BB_PAYMENT_ADDRESS, BERTHA, BERTHA_KEY, BTC,
+    C_SPENDING_KEY, CHRISTEL, CHRISTEL_KEY, ETH, FRANK_KEY, MASP, NAM,
 };
 use crate::integration::helpers::make_temp_account;
 use crate::strings::TX_APPLIED_SUCCESS;

@@ -2,17 +2,17 @@
 
 use std::collections::BTreeMap;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use namada_apps_lib::collections::HashSet;
-use namada_apps_lib::key::{common, ed25519, RefTo, SigScheme};
+use namada_apps_lib::key::{RefTo, SigScheme, common, ed25519};
 use namada_apps_lib::time::DateTimeUtc;
 use namada_apps_lib::tx::data::{Fee, GasLimit, TxType, WrapperTx};
 use namada_apps_lib::tx::{self, Signer, Tx};
 use namada_apps_lib::{address, token};
 use namada_node::bench_utils::BenchShell;
 use namada_node::shell::{MempoolTxType, ResultCode};
-use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
 
 /// The value of namada-mainnet-genesis `max_tx_bytes` protocol parameter
 const MAX_TX_BYTES: usize = 1048576;

@@ -16,7 +16,7 @@ use namada_core::storage::{Key, TxIndex};
 use namada_core::validity_predicate::VpError;
 use namada_gas::{GasMetering, TxGasMeter, VpGasMeter, WASM_MEMORY_PAGE_GAS};
 use namada_state::prefix_iter::PrefixIterators;
-use namada_state::{DBIter, State, StateRead, StorageHasher, StorageRead, DB};
+use namada_state::{DB, DBIter, State, StateRead, StorageHasher, StorageRead};
 use namada_tx::data::{TxSentinel, TxType};
 use namada_tx::{BatchedTxRef, Commitment, Section, Tx, TxCommitments};
 use namada_vp::vp_host_fns;
@@ -26,15 +26,15 @@ use thiserror::Error;
 use wasmer::sys::{BaseTunables, Features};
 use wasmer::{Engine, Module, NativeEngineExt, Store, Target};
 
-use super::memory::{Limit, WasmMemory};
 use super::TxCache;
+use super::memory::{Limit, WasmMemory};
 use crate::host_env::{TxVmEnv, VpCtx, VpEvaluator, VpVmEnv};
 use crate::types::VpInput;
 use crate::wasm::host_env::{tx_imports, vp_imports};
-use crate::wasm::{memory, Cache, CacheName, VpCache};
+use crate::wasm::{Cache, CacheName, VpCache, memory};
 use crate::{
-    validate_untrusted_wasm, HostRef, RwAccess, WasmCacheAccess,
-    WasmValidationError,
+    HostRef, RwAccess, WasmCacheAccess, WasmValidationError,
+    validate_untrusted_wasm,
 };
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
@@ -1015,8 +1015,8 @@ mod tests {
     use itertools::Either;
     use namada_core::arith::checked;
     use namada_core::borsh::BorshSerializeExt;
-    use namada_state::testing::TestState;
     use namada_state::StorageWrite;
+    use namada_state::testing::TestState;
     use namada_test_utils::TestWasms;
     use namada_token::DenominatedAmount;
     use namada_tx::data::eval_vp::EvalVp;

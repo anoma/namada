@@ -6,12 +6,12 @@ use std::collections::BTreeSet;
 
 use namada_sdk::address::Address;
 use namada_sdk::gas::VpGasMeter;
-use namada_sdk::state::testing::TestState;
 use namada_sdk::state::StateRead;
+use namada_sdk::state::testing::TestState;
 use namada_sdk::storage;
-use namada_vm::wasm::run::VpEvalWasm;
-use namada_vm::wasm::VpCache;
 use namada_vm::WasmCacheRwAccess;
+use namada_vm::wasm::VpCache;
+use namada_vm::wasm::run::VpEvalWasm;
 use namada_vp::native_vp::{self, Ctx, NativeVp};
 
 use crate::tx::TestTxEnv;

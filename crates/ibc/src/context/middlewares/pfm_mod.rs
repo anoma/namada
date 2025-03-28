@@ -10,16 +10,16 @@ use ibc::apps::transfer::handler::{
 };
 use ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use ibc::apps::transfer::types::packet::PacketData;
-use ibc::apps::transfer::types::{is_receiver_chain_source, TracePrefix};
+use ibc::apps::transfer::types::{TracePrefix, is_receiver_chain_source};
 use ibc::core::channel::handler::{
     commit_packet_acknowledgment, emit_packet_acknowledgement_event,
 };
+use ibc::core::channel::types::Version;
 use ibc::core::channel::types::acknowledgement::Acknowledgement;
 use ibc::core::channel::types::channel::{Counterparty, Order};
 use ibc::core::channel::types::error::ChannelError;
 use ibc::core::channel::types::packet::Packet;
 use ibc::core::channel::types::timeout::TimeoutTimestamp;
-use ibc::core::channel::types::Version;
 use ibc::core::host::types::identifiers::{
     ChannelId, ConnectionId, PortId, Sequence,
 };
@@ -34,8 +34,8 @@ use ibc_middleware_packet_forward::{
 use namada_core::address::{IBC as IBC_ADDRESS, MULTITOKEN};
 use namada_state::{StorageRead, StorageWrite};
 
-use crate::context::transfer_mod::TransferModule;
 use crate::context::IbcContext;
+use crate::context::transfer_mod::TransferModule;
 use crate::storage::inflight_packet_key;
 use crate::{Error, IbcCommonContext, IbcStorageContext, TokenTransferContext};
 

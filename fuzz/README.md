@@ -24,7 +24,7 @@
   - The full command is e.g.:
 
   ```bash
-  /home/ubuntu/.rustup/toolchains/nightly-2024-09-08-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-cov \
+  /home/ubuntu/.rustup/toolchains/nightly-2025-03-27-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-cov \
     show \
     target/x86_64-unknown-linux-gnu/coverage/x86_64-unknown-linux-gnu/debug/txs_mempool \
     --format=html \

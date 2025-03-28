@@ -17,10 +17,10 @@ use namada_core::arith::checked;
 use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::hash::Hash;
+use namada_core::ibc::IbcTokenHash;
 use namada_core::ibc::apps::nft_transfer::types::TracePrefix;
 use namada_core::ibc::apps::transfer::types::PrefixedDenom;
 use namada_core::ibc::core::host::types::identifiers::ChannelId;
-use namada_core::ibc::IbcTokenHash;
 use namada_core::key::common;
 use namada_core::masp::MaspEpoch;
 use namada_core::storage::{BlockResults, Key, PrefixValue};
@@ -29,8 +29,8 @@ use namada_core::token::{
     Amount, DenominatedAmount, Denomination, MaspDigitPos,
 };
 use namada_core::{storage, token};
-use namada_gas::event::GasUsed as GasUsedAttr;
 use namada_gas::WholeGas;
+use namada_gas::event::GasUsed as GasUsedAttr;
 use namada_governance::parameters::GovernanceParameters;
 use namada_governance::pgf::parameters::PgfParameters;
 use namada_governance::pgf::storage::steward::StewardDetail;
@@ -38,7 +38,7 @@ use namada_governance::storage::proposal::{
     StoragePgfFunding, StorageProposal,
 };
 use namada_governance::utils::{
-    compute_proposal_result, ProposalResult, ProposalVotes, Vote,
+    ProposalResult, ProposalVotes, Vote, compute_proposal_result,
 };
 use namada_ibc::core::host::types::identifiers::PortId;
 use namada_ibc::parameters::{IbcParameters, IbcTokenRateLimits};
@@ -47,8 +47,8 @@ use namada_ibc::storage::{
     throughput_limit_key,
 };
 use namada_ibc::trace::calc_ibc_token_hash;
-use namada_io::{display_line, edisplay_line, Client, Io};
-use namada_parameters::{storage as params_storage, EpochDuration};
+use namada_io::{Client, Io, display_line, edisplay_line};
+use namada_parameters::{EpochDuration, storage as params_storage};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::rewards::PosRewardsRates;
 use namada_proof_of_stake::types::{
@@ -64,17 +64,17 @@ use serde::{Deserialize, Serialize};
 use crate::args::{InputAmount, OsmosisPoolHop};
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, TxSubmitError};
-use crate::events::{extend, Event};
+use crate::events::{Event, extend};
 use crate::internal_macros::echo_error;
+use crate::queries::RPC;
 use crate::queries::vp::pos::{
     EnrichedBondsAndUnbondsDetails, ValidatorStateInfo,
 };
-use crate::queries::RPC;
 use crate::tendermint::block::Height;
 use crate::tendermint::merkle::proof::ProofOps;
 use crate::tendermint_rpc::query::Query;
 use crate::tx::get_ibc_src_port_channel;
-use crate::{error, Namada, Tx};
+use crate::{Namada, Tx, error};
 
 /// Query an estimate of the maximum block time.
 pub async fn query_max_block_time_estimate<C: Client + Sync>(
@@ -503,10 +503,10 @@ pub async fn query_storage_value_bytes<C: namada_io::Client + Sync>(
 /// Query a range of storage values with a matching prefix and decode them with
 /// [`BorshDeserialize`]. Returns an iterator of the storage keys paired with
 /// their associated values.
-pub async fn query_storage_prefix<'a, 'b, N: Namada, T>(
-    context: &'b N,
+pub async fn query_storage_prefix<'a, N: Namada, T>(
+    context: &'a N,
     key: &storage::Key,
-) -> Result<Option<impl 'b + Iterator<Item = (storage::Key, T)>>, error::Error>
+) -> Result<Option<impl 'a + Iterator<Item = (storage::Key, T)>>, error::Error>
 where
     T: BorshDeserialize,
 {

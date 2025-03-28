@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 pub use namada_io::client::{EncodedResponseQuery, Error, ResponseQuery};
-use namada_state::{DBIter, StorageHasher, WlState, DB};
+use namada_state::{DB, DBIter, StorageHasher, WlState};
 
 use crate::events::log::EventLog;
 pub use crate::tendermint::abci::request::Query as RequestQuery;

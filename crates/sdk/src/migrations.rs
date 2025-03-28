@@ -14,7 +14,7 @@ use namada_macros::{derive_borshdeserializer, typehash};
 use namada_migrations::{TypeHash, *};
 use namada_state::merkle_tree::NO_DIFF_KEY_PREFIX;
 use namada_state::{DBIter, FullAccessState, KeySeg, StorageHasher};
-use namada_storage::{DBUpdateVisitor, DbColFam, DB};
+use namada_storage::{DB, DBUpdateVisitor, DbColFam};
 use regex::Regex;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -120,7 +120,7 @@ impl<T: TypeHash + BorshSerialize + BorshDeserialize> From<T> for UpdateValue {
 #[derive(Default)]
 struct UpdateValueVisitor;
 
-impl<'de> Visitor<'de> for UpdateValueVisitor {
+impl Visitor<'_> for UpdateValueVisitor {
     type Value = UpdateValue;
 
     fn expecting(&self, formatter: &mut Formatter<'_>) -> core::fmt::Result {

@@ -5747,6 +5747,7 @@ version = "0.48.0"
 dependencies = [
  "borsh",
  "data-encoding",
+ "linkme",
  "masp_primitives",
  "masp_proofs",
  "namada_apps_lib",

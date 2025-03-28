@@ -3,28 +3,28 @@
 #![allow(clippy::cast_possible_wrap, clippy::arithmetic_side_effects)]
 
 use std::cell::RefCell;
-use std::collections::{btree_map, BTreeMap};
+use std::collections::{BTreeMap, btree_map};
 use std::path::Path;
 
 use itertools::Either;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::chain::{BlockHeader, BlockHeight, Epoch};
 use namada_core::hash::Hash;
-use namada_core::storage::{DbColFam, Key, KeySeg, KEY_SEGMENT_SEPARATOR};
+use namada_core::storage::{DbColFam, KEY_SEGMENT_SEPARATOR, Key, KeySeg};
 use namada_core::{decode, encode, ethereum_events};
 use namada_gas::Gas;
 use namada_merkle_tree::{
-    tree_key_prefix_with_epoch, tree_key_prefix_with_height,
     MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreType,
+    tree_key_prefix_with_epoch, tree_key_prefix_with_height,
 };
 use namada_replay_protection as replay_protection;
 use regex::Regex;
 
+use crate::DBUpdateVisitor;
 use crate::db::{
-    BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error, Result, DB,
+    BlockStateRead, BlockStateWrite, DB, DBIter, DBWriteBatch, Error, Result,
 };
 use crate::types::{KVBytes, PatternIterator, PrefixIterator};
-use crate::DBUpdateVisitor;
 
 const SUBSPACE_CF: &str = "subspace";
 
@@ -639,7 +639,7 @@ impl DB for MockDB {
             if key.starts_with(&current_key_prefix.to_string()) {
                 let hash = key
                     .rsplit(KEY_SEGMENT_SEPARATOR)
-                    .last()
+                    .next_back()
                     .unwrap()
                     .to_string();
                 target_hashes.push(hash);

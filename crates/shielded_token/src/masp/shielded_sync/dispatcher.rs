@@ -3,21 +3,21 @@ use std::collections::BTreeMap;
 use std::future::Future;
 use std::ops::ControlFlow;
 use std::pin::Pin;
-use std::sync::atomic::{self, AtomicBool, AtomicUsize};
 use std::sync::Arc;
+use std::sync::atomic::{self, AtomicBool, AtomicUsize};
 use std::task::{Context, Poll};
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use eyre::{eyre, WrapErr};
-use futures::future::{select, Either};
+use eyre::{WrapErr, eyre};
+use futures::future::{Either, select};
 use futures::task::AtomicWaker;
 use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
 use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::transaction::Transaction;
 use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
-use namada_core::control_flow::time::{Duration, LinearBackoff, Sleep};
 use namada_core::control_flow::ShutdownSignal;
+use namada_core::control_flow::time::{Duration, LinearBackoff, Sleep};
 use namada_core::hints;
 use namada_core::task_env::TaskSpawner;
 use namada_io::{MaybeSend, MaybeSync, ProgressBar};
@@ -27,11 +27,11 @@ use namada_wallet::{DatedKeypair, DatedSpendingKey};
 use super::utils::{IndexedNoteEntry, MaspClient, MaspIndexedTx, MaspTxKind};
 use crate::masp::shielded_sync::trial_decrypt;
 use crate::masp::utils::{
-    blocks_left_to_fetch, DecryptedData, Fetched, RetryStrategy, TrialDecrypted,
+    DecryptedData, Fetched, RetryStrategy, TrialDecrypted, blocks_left_to_fetch,
 };
 use crate::masp::{
-    to_viewing_key, MaspExtendedSpendingKey, NoteIndex, ShieldedUtils,
-    ShieldedWallet, WitnessMap,
+    MaspExtendedSpendingKey, NoteIndex, ShieldedUtils, ShieldedWallet,
+    WitnessMap, to_viewing_key,
 };
 
 struct AsyncCounterInner {
@@ -892,8 +892,9 @@ mod dispatcher_tests {
     use super::*;
     use crate::masp::fs::FsShieldedUtils;
     use crate::masp::test_utils::{
-        arbitrary_masp_tx, arbitrary_masp_tx_with_fee_unshielding,
-        arbitrary_vk, dated_arbitrary_vk, TestingMaspClient,
+        TestingMaspClient, arbitrary_masp_tx,
+        arbitrary_masp_tx_with_fee_unshielding, arbitrary_vk,
+        dated_arbitrary_vk,
     };
     use crate::masp::utils::MaspIndexedTx;
     use crate::masp::{MaspLocalTaskEnv, ShieldedSyncConfig};

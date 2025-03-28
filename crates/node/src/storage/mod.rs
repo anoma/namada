@@ -5,14 +5,14 @@ mod rocksdb;
 
 use std::fmt;
 
+use arse_merkle_tree::H256;
 use arse_merkle_tree::blake2b::Blake2bHasher;
 use arse_merkle_tree::traits::Hasher;
-use arse_merkle_tree::H256;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use namada_sdk::state::{FullAccessState, StorageHasher};
 #[cfg(test)]
 pub use rocksdb::SnapshotPath;
-pub use rocksdb::{open, DbSnapshot, DbSnapshotMeta, RocksDBUpdateVisitor};
+pub use rocksdb::{DbSnapshot, DbSnapshotMeta, RocksDBUpdateVisitor, open};
 
 #[derive(Default)]
 pub struct PersistentStorageHasher(Blake2bHasher);
@@ -69,7 +69,7 @@ mod tests {
     use namada_sdk::parameters::Parameters;
     use namada_sdk::state::merkle_tree::NO_DIFF_KEY_PREFIX;
     use namada_sdk::state::{
-        self, StateRead, StorageRead, StorageWrite, StoreType, DB,
+        self, DB, StateRead, StorageRead, StorageWrite, StoreType,
     };
     use namada_sdk::storage::{Key, KeySeg};
     use namada_sdk::token::conversion::update_allowed_conversions;
@@ -356,7 +356,7 @@ mod tests {
         // 1. For each `blocks_write_value`, write the current block height if
         // true or delete otherwise.
         // We `.enumerate()` height (starting from `0`)
-        let blocks_write_value = blocks_write_value
+        let mut blocks_write_value = blocks_write_value
             .into_iter()
             .enumerate()
             .map(|(height, write_value)| {
@@ -409,7 +409,7 @@ mod tests {
         // value, if any.
 
         // If height is >= storage.last_height, it should read the latest state.
-        let is_last_write = blocks_write_value.last().unwrap().1;
+        let is_last_write = blocks_write_value.next_back().unwrap().1;
 
         // The upper bound is arbitrary.
         for height in state.in_mem().get_last_block_height().0

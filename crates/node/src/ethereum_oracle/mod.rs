@@ -6,18 +6,18 @@ use std::ops::ControlFlow;
 
 use async_trait::async_trait;
 use ethabi::Address;
-use ethbridge_events::{event_codecs, EventKind};
+use ethbridge_events::{EventKind, event_codecs};
 use itertools::Either;
 use namada_sdk::control_flow::time::{Constant, Duration, Instant, Sleep};
 use namada_sdk::eth_bridge::ethers::providers::{Http, Middleware, Provider};
 use namada_sdk::eth_bridge::oracle::config::Config;
-use namada_sdk::eth_bridge::{eth_syncing_status_timeout, ethers, SyncStatus};
+use namada_sdk::eth_bridge::{SyncStatus, eth_syncing_status_timeout, ethers};
 use namada_sdk::ethereum_events::EthereumEvent;
 use namada_sdk::{ethereum_structs, hints};
 use num256::Uint256;
 use thiserror::Error;
-use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::Sender as BoundedSender;
+use tokio::sync::mpsc::error::TryRecvError;
 use tokio::task::LocalSet;
 
 use self::events::PendingEvent;
@@ -633,7 +633,7 @@ mod test_oracle {
     use super::*;
     use crate::ethereum_oracle::test_tools::event_log::GetLog;
     use crate::ethereum_oracle::test_tools::mock_web3_client::{
-        event_signature, TestCmd, TestOracle, Web3Client, Web3Controller,
+        TestCmd, TestOracle, Web3Client, Web3Controller, event_signature,
     };
 
     /// The data returned from setting up a test

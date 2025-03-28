@@ -21,15 +21,15 @@ use namada_sdk::ethereum_events::EthAddress;
 use namada_sdk::ibc::trace::{ibc_token, is_ibc_denom, is_nft_trace};
 use namada_sdk::io::Io;
 use namada_sdk::key::*;
-use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_sdk::masp::ShieldedWallet;
+use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_sdk::wallet::{DatedSpendingKey, DatedViewingKey, Wallet};
 use namada_sdk::{Namada, NamadaImpl};
 
 use super::args;
 use crate::cli::utils;
 use crate::config::global::GlobalConfig;
-use crate::config::{genesis, Config};
+use crate::config::{Config, genesis};
 use crate::wallet::CliWalletUtils;
 use crate::{wallet, wasm_loader};
 
@@ -445,15 +445,17 @@ impl ArgFromContext for Address {
         FromStr::from_str(raw)
             // An Ethereum address
             .or_else(|_| {
-                (raw.len() == 42 && raw.starts_with("0x"))
-                    .then(|| {
+                if raw.len() == 42 && raw.starts_with("0x") {
+                    {
                         raw.parse::<EthAddress>()
                             .map(|addr| {
                                 Address::Internal(InternalAddress::Erc20(addr))
                             })
                             .map_err(|_| SkipErr)
-                    })
-                    .unwrap_or(Err(SkipErr))
+                    }
+                } else {
+                    Err(SkipErr)
+                }
             })
             // An IBC token
             .or_else(|_| {

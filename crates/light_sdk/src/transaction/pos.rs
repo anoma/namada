@@ -4,11 +4,11 @@ use namada_sdk::hash::Hash;
 use namada_sdk::key::{common, secp256k1};
 use namada_sdk::token;
 use namada_sdk::token::{Amount, DenominatedAmount};
-use namada_sdk::tx::data::pos::Redelegation;
 use namada_sdk::tx::data::GasLimit;
+use namada_sdk::tx::data::pos::Redelegation;
 use namada_sdk::tx::{Authorization, Tx, TxError};
 
-use super::{attach_fee, attach_fee_signature, GlobalArgs};
+use super::{GlobalArgs, attach_fee, attach_fee_signature};
 use crate::transaction;
 
 const TX_BOND_WASM: &str = "tx_bond.wasm";

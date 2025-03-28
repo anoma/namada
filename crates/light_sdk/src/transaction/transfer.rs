@@ -5,9 +5,9 @@ pub use namada_sdk::token::{
     DenominatedAmount, MaspTransaction, MaspTxId, Transfer,
 };
 use namada_sdk::tx::data::GasLimit;
-use namada_sdk::tx::{Authorization, Tx, TxError, TX_TRANSFER_WASM};
+use namada_sdk::tx::{Authorization, TX_TRANSFER_WASM, Tx, TxError};
 
-use super::{attach_fee, attach_fee_signature, GlobalArgs};
+use super::{GlobalArgs, attach_fee, attach_fee_signature};
 use crate::transaction;
 
 /// A transfer transaction

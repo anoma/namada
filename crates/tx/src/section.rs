@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 use std::hash::Hash;
 
+use masp_primitives::transaction::Transaction;
 use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
-use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_account::AccountPublicKeysMap;
 use namada_core::address::Address;
@@ -23,9 +23,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::data::protocol::ProtocolTx;
-use crate::data::{hash_tx, TxType, WrapperTx};
+use crate::data::{TxType, WrapperTx, hash_tx};
 use crate::sign::VerifySigError;
-use crate::{hex_data_serde, hex_salt_serde, Tx, SALT_LENGTH};
+use crate::{SALT_LENGTH, Tx, hex_data_serde, hex_salt_serde};
 
 /// A section of a transaction. Carries an independent piece of information
 /// necessary for the processing of a transaction.
@@ -975,7 +975,7 @@ mod test {
 
         // Repeat the same PK - they don't have to be unique
         let pks: Vec<common::PublicKey> =
-            std::iter::repeat(pk.clone()).take(ABOVE_LIMIT).collect();
+            std::iter::repeat_n(pk.clone(), ABOVE_LIMIT).collect();
         let raw_auth = Authorization {
             targets: vec![],
             signer: Signer::PubKeys(pks),

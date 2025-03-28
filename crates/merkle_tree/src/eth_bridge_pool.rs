@@ -400,8 +400,8 @@ mod test_bridge_pool_tree {
 
     use assert_matches::assert_matches;
     use itertools::Itertools;
-    use namada_core::address::testing::nam;
     use namada_core::address::Address;
+    use namada_core::address::testing::nam;
     use namada_core::eth_bridge_pool::{
         GasFee, TransferToEthereum, TransferToEthereumKind,
     };

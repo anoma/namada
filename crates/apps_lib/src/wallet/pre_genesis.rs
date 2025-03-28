@@ -7,12 +7,12 @@ use namada_sdk::key::SchemeType;
 use namada_sdk::wallet::pre_genesis::{
     ReadError, ValidatorStore, ValidatorWallet,
 };
-use namada_sdk::wallet::{gen_key_to_store, WalletIo};
+use namada_sdk::wallet::{WalletIo, gen_key_to_store};
 use rand::rngs::OsRng;
 use zeroize::Zeroizing;
 
 use crate::wallet::store::gen_validator_keys;
-use crate::wallet::{read_and_confirm_encryption_password, CliWalletUtils};
+use crate::wallet::{CliWalletUtils, read_and_confirm_encryption_password};
 
 /// Validator pre-genesis wallet file name
 const VALIDATOR_FILE_NAME: &str = "validator-wallet.toml";

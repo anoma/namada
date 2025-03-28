@@ -2,13 +2,13 @@
 
 use namada_core::collections::HashSet;
 use namada_core::masp_primitives::transaction::Transaction;
+use namada_token::TransparentTransfersRef;
 #[cfg(any(test, feature = "testing"))]
 pub use namada_token::testing;
 pub use namada_token::tx::apply_shielded_transfer;
-use namada_token::TransparentTransfersRef;
 pub use namada_token::{
-    storage_key, utils, Amount, DenominatedAmount, Denomination, MaspDigitPos,
-    Store, Transfer,
+    Amount, DenominatedAmount, Denomination, MaspDigitPos, Store, Transfer,
+    storage_key, utils,
 };
 use namada_tx::BatchedTx;
 use namada_tx_env::Address;

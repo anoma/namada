@@ -20,10 +20,10 @@ use masp_primitives::convert::AllowedConversion;
 use masp_primitives::merkle_tree::{IncrementalWitness, MerklePath};
 use masp_primitives::sapling::keys::FullViewingKey;
 use masp_primitives::sapling::{Diversifier, Node, ViewingKey};
+use masp_primitives::transaction::Transaction;
 use masp_primitives::transaction::builder::{self, *};
 use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
 use masp_primitives::transaction::components::{I128Sum, ValueSum};
-use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{
     ExtendedFullViewingKey, ExtendedKey,
     ExtendedSpendingKey as MaspExtendedSpendingKey, PseudoExtendedKey,
@@ -45,15 +45,15 @@ pub use shielded_wallet::ShieldedWallet;
 use thiserror::Error;
 
 use self::utils::MaspIndexedTx;
-pub use crate::masp::shielded_sync::dispatcher::{Dispatcher, DispatcherCache};
 #[cfg(not(target_family = "wasm"))]
 pub use crate::masp::shielded_sync::MaspLocalTaskEnv;
+pub use crate::masp::shielded_sync::dispatcher::{Dispatcher, DispatcherCache};
 pub use crate::masp::shielded_sync::{
-    utils, ShieldedSyncConfig, ShieldedSyncConfigBuilder,
+    ShieldedSyncConfig, ShieldedSyncConfigBuilder, utils,
 };
 pub use crate::validation::{
-    partial_deauthorize, preload_verifying_keys, PVKs, CONVERT_NAME,
-    ENV_VAR_MASP_PARAMS_DIR, OUTPUT_NAME, SPEND_NAME,
+    CONVERT_NAME, ENV_VAR_MASP_PARAMS_DIR, OUTPUT_NAME, PVKs, SPEND_NAME,
+    partial_deauthorize, preload_verifying_keys,
 };
 
 /// Randomness seed for MASP integration tests to build proofs with
@@ -365,7 +365,7 @@ mod tests {
     fn test_wrong_masp_params_hash() {
         use masp_primitives::ff::PrimeField;
         use masp_proofs::bellman::groth16::{
-            generate_random_parameters, Parameters,
+            Parameters, generate_random_parameters,
         };
         use masp_proofs::bellman::{Circuit, ConstraintSystem, SynthesisError};
         use masp_proofs::bls12_381::Scalar;
@@ -441,8 +441,8 @@ pub mod testing {
     use std::ops::AddAssign;
     use std::sync::Mutex;
 
-    use masp_primitives::consensus::testing::arb_height;
     use masp_primitives::consensus::BranchId;
+    use masp_primitives::consensus::testing::arb_height;
     use masp_primitives::constants::{
         SPENDING_KEY_GENERATOR, VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
     };
@@ -452,7 +452,7 @@ pub mod testing {
     use masp_primitives::keys::OutgoingViewingKey;
     use masp_primitives::memo::MemoBytes;
     use masp_primitives::sapling::note_encryption::{
-        try_sapling_note_decryption, PreparedIncomingViewingKey,
+        PreparedIncomingViewingKey, try_sapling_note_decryption,
     };
     use masp_primitives::sapling::prover::TxProver;
     use masp_primitives::sapling::redjubjub::{
@@ -462,7 +462,7 @@ pub mod testing {
     use masp_primitives::transaction::components::sapling::builder::RngBuildParams;
     use masp_primitives::transaction::components::transparent::testing::arb_transparent_address;
     use masp_primitives::transaction::components::{
-        OutputDescription, TxOut, U64Sum, GROTH_PROOF_SIZE,
+        GROTH_PROOF_SIZE, OutputDescription, TxOut, U64Sum,
     };
     use masp_primitives::transaction::fees::fixed::FeeRule;
     use masp_primitives::transaction::{
@@ -472,8 +472,8 @@ pub mod testing {
     use masp_proofs::bls12_381;
     use masp_proofs::bls12_381::{Bls12, G1Affine, G2Affine};
     use namada_core::address::testing::arb_address;
-    use namada_core::token::testing::arb_denomination;
     use namada_core::token::MaspDigitPos;
+    use namada_core::token::testing::arb_denomination;
     use proptest::prelude::*;
     use proptest::test_runner::TestRng;
     use proptest::{collection, option, prop_compose};
@@ -973,8 +973,8 @@ pub mod fs {
 
     use super::*;
     use crate::validation::{
-        get_params_dir, CONVERT_NAME, ENV_VAR_MASP_PARAMS_DIR, OUTPUT_NAME,
-        SPEND_NAME,
+        CONVERT_NAME, ENV_VAR_MASP_PARAMS_DIR, OUTPUT_NAME, SPEND_NAME,
+        get_params_dir,
     };
 
     /// Shielded context file name

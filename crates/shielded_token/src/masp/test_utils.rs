@@ -9,8 +9,8 @@ use masp_primitives::merkle_tree::{
     CommitmentTree, IncrementalWitness, MerklePath,
 };
 use masp_primitives::sapling::{Node, Note, Rseed, ViewingKey};
-use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::Transaction;
+use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_core::address::Address;
 use namada_core::borsh::BorshSerializeExt;
@@ -25,16 +25,16 @@ use namada_io::client::EncodedResponseQuery;
 use namada_io::{Client, MaybeSend, MaybeSync, NamadaIo, NullIo};
 use namada_wallet::DatedKeypair;
 use thiserror::Error;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use super::utils::MaspIndexedTx;
+use crate::ShieldedWallet;
+use crate::masp::ShieldedUtils;
 use crate::masp::shielded_wallet::ShieldedQueries;
 use crate::masp::utils::{
     IndexedNoteEntry, MaspClient, MaspClientCapabilities,
 };
-use crate::masp::ShieldedUtils;
-use crate::ShieldedWallet;
 
 /// A viewing key derived from A_SPENDING_KEY
 pub const AA_VIEWING_KEY: &str = "zvknam1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu6x74w9gjpw856zcu826qesdre628y6tjc26uhgj6d9zqur9l5u3p99d9ggc74ald6s8y3sdtka74qmheyqvdrasqpwyv2fsmxlz57lj4grm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxcpjdve6";

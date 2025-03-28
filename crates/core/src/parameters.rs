@@ -155,7 +155,7 @@ impl<'de> Deserialize<'de> for ProposalBytes {
     {
         struct Visitor;
 
-        impl<'de> serde::de::Visitor<'de> for Visitor {
+        impl serde::de::Visitor<'_> for Visitor {
             type Value = ProposalBytes;
 
             fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -252,11 +252,7 @@ impl ProposalBytes {
     /// overhead, evidence and header data. For P2P safety
     /// reasons (i.e. DoS protection) we hardcap the size of
     /// tx data to 6 MiB.
-    const RAW_MAX: NonZeroU64 = unsafe {
-        // SAFETY: We are constructing a greater than zero
-        // value, so the API contract is never violated.
-        NonZeroU64::new_unchecked(6 * 1024 * 1024)
-    };
+    const RAW_MAX: NonZeroU64 = NonZeroU64::new(6 * 1024 * 1024).unwrap();
 }
 
 impl ProposalBytes {

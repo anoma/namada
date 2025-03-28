@@ -18,8 +18,8 @@ use namada_sdk::tx::data::TxType;
 use namada_sdk::tx::{self, Tx};
 use namada_sdk::wallet::FindKeyError;
 use namada_sdk::{encode, governance, parameters};
-use namada_vm::wasm::{TxCache, VpCache};
 use namada_vm::WasmCacheRwAccess;
+use namada_vm::wasm::{TxCache, VpCache};
 use tracing::info;
 
 use crate::tendermint::Timeout;

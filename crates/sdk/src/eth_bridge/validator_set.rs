@@ -14,12 +14,12 @@ use namada_core::eth_abi::EncodeCell;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::hints;
 use namada_ethereum_bridge::storage::proof::EthereumProof;
-use namada_io::{display_line, edisplay_line, Client, Io};
+use namada_io::{Client, Io, display_line, edisplay_line};
 use namada_vote_ext::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
 };
 
-use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit, BlockOnEthSync};
+use super::{BlockOnEthSync, block_on_eth_sync, eth_sync_or, eth_sync_or_exit};
 use crate::args;
 use crate::control_flow::time::{self, Duration, Instant};
 use crate::error::{Error as SdkError, EthereumBridgeError, QueryError};
@@ -236,6 +236,7 @@ impl ShouldRelay for CheckNonce {
 }
 
 /// Relay result for [`CheckNonce`].
+#[allow(clippy::large_enum_variant)] // TODO Box Receipt's TransactionReceipt
 enum RelayResult {
     /// The call to Bridge failed.
     BridgeCallError(String),
@@ -389,7 +390,7 @@ fn display_validator_set<IO: Io>(io: &IO, args: ValidatorSetArgs) {
 }
 
 /// Relay a validator set update, signed off for a given epoch.
-pub async fn relay_validator_set_update<'a, E>(
+pub async fn relay_validator_set_update<E>(
     eth_client: Arc<E>,
     client: &(impl Client + Sync),
     io: &impl Io,
@@ -468,7 +469,7 @@ where
     .or_else(|err| err.handle())
 }
 
-async fn relay_validator_set_update_daemon<'a, E>(
+async fn relay_validator_set_update_daemon<E>(
     mut args: args::ValidatorSetUpdateRelay,
     eth_client: Arc<E>,
     client: &(impl Client + Sync),

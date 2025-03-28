@@ -26,7 +26,7 @@ use crate::config;
 use crate::config::{Action, ActionAtHeight};
 use crate::shell::{EthereumOracleChannels, Shell};
 use crate::storage::DbSnapshot;
-use crate::tendermint::abci::{request, Request as Req, Response as Resp};
+use crate::tendermint::abci::{Request as Req, Response as Resp, request};
 use crate::tower_abci::BoxError;
 
 /// The shim wraps the shell, which implements ABCI++.
