@@ -22,7 +22,11 @@ queue_rules:
     batch_size: 3
     queue_conditions:
       - "#approved-reviews-by >= 1"
+<<<<<<< HEAD
       - base = maint-libs-0.47
+=======
+      - base = maint-libs-0.48
+>>>>>>> c357d5a02 (Revert "mergify: merge and update with rebase to allow auto-squash")
     merge_method: merge
     autosquash: true   
 
