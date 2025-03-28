@@ -25,7 +25,7 @@ use crate::borsh::BorshSerializeExt;
 const PRINTLN_CUTOFF: usize = 300;
 
 /// For migrations involving the conversion state
-const CONVERSION_STATE_KEY: &str = "conversion_state";
+pub const CONVERSION_STATE_KEY: &str = "conversion_state";
 
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 enum UpdateBytes {
