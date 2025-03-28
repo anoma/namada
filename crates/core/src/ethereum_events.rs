@@ -5,9 +5,9 @@ use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use ethabi::ethereum_types::{H160, U256 as ethUint};
 use ethabi::Token;
-use eyre::{eyre, Context};
+use ethabi::ethereum_types::{H160, U256 as ethUint};
+use eyre::{Context, eyre};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -377,7 +377,7 @@ impl From<Erc20Transfer> for TransferToEthereum {
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
 
     use super::*;
 

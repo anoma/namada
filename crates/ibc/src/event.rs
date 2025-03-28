@@ -7,10 +7,10 @@ use ibc::core::channel::types::packet::Packet;
 use ibc::core::channel::types::timeout::{
     TimeoutHeight as IbcTimeoutHeight, TimeoutTimestamp as IbcTimeoutTimestamp,
 };
+use ibc::core::client::types::Height as IbcHeight;
 use ibc::core::client::types::events::{
     CLIENT_ID_ATTRIBUTE_KEY, CONSENSUS_HEIGHTS_ATTRIBUTE_KEY,
 };
-use ibc::core::client::types::Height as IbcHeight;
 use ibc::core::handler::types::events::IbcEvent as RawIbcEvent;
 use ibc::core::host::types::error::DecodingError;
 use ibc::core::host::types::identifiers::{
@@ -22,8 +22,8 @@ use namada_core::borsh::*;
 use namada_core::collections::HashMap;
 use namada_core::tendermint::abci::Event as AbciEvent;
 use namada_events::extend::{
-    event_domain_of, AttributesMap, EventAttributeEntry,
-    ReadFromEventAttributes as _,
+    AttributesMap, EventAttributeEntry, ReadFromEventAttributes as _,
+    event_domain_of,
 };
 use namada_events::{
     Event, EventError, EventLevel, EventToEmit, EventTypeBuilder,
@@ -40,7 +40,7 @@ pub mod types {
     //! IBC event types.
 
     use ibc::core::client::types::events::UPDATE_CLIENT_EVENT;
-    use namada_events::{event_type, EventType};
+    use namada_events::{EventType, event_type};
 
     use super::IbcEvent;
 

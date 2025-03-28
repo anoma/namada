@@ -3,12 +3,12 @@
 //! Here, we expose the host functions into wasm's
 //! imports, so they can be called from inside the wasm.
 
-use namada_state::{DBIter, StorageHasher, DB};
+use namada_state::{DB, DBIter, StorageHasher};
 use wasmer::{Function, FunctionEnv, Imports};
 
 use crate::host_env::{TxVmEnv, VpEvaluator, VpVmEnv};
 use crate::wasm::memory::WasmMemory;
-use crate::{host_env, WasmCacheAccess};
+use crate::{WasmCacheAccess, host_env};
 
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// transaction code
@@ -112,13 +112,14 @@ mod wrap_tx {
     //! that can be passed to [`wasmer`], to be used by the guest wasm code.
 
     #![allow(missing_docs)]
+    #![allow(clippy::type_complexity)]
 
-    use namada_state::{DBIter, StorageHasher, DB};
+    use namada_state::{DB, DBIter, StorageHasher};
     use wasmer::FunctionEnvMut;
 
+    use crate::WasmCacheAccess;
     use crate::host_env::TxVmEnv;
     use crate::wasm::memory::WasmMemory;
-    use crate::WasmCacheAccess;
 
     pub(super) fn _0<F, RET, D, H, CA>(
         f: F,
@@ -293,13 +294,14 @@ mod wrap_vp {
     //! that can be passed to [`wasmer`], to be used by the guest wasm code.
 
     #![allow(missing_docs)]
+    #![allow(clippy::type_complexity)]
 
-    use namada_state::{DBIter, StorageHasher, DB};
+    use namada_state::{DB, DBIter, StorageHasher};
     use wasmer::FunctionEnvMut;
 
+    use crate::WasmCacheAccess;
     use crate::host_env::{VpEvaluator, VpVmEnv};
     use crate::wasm::memory::WasmMemory;
-    use crate::WasmCacheAccess;
 
     pub(super) fn _0<F, RET, D, H, EVAL, CA>(
         f: F,

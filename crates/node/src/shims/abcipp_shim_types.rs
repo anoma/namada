@@ -16,6 +16,7 @@ pub mod shim {
     pub type TxBytes = prost::bytes::Bytes;
 
     #[derive(Error, Debug)]
+    #[allow(clippy::large_enum_variant)]
     pub enum Error {
         #[error("Error converting Request from ABCI to ABCI++: {0:?}")]
         ConvertReq(Req),
@@ -286,6 +287,7 @@ pub mod shim {
         }
 
         impl FinalizeBlock {
+            #[allow(clippy::result_large_err)]
             pub(crate) fn cast_to_process_proposal_req(
                 self,
             ) -> Result<tm_request::ProcessProposal, super::Error> {

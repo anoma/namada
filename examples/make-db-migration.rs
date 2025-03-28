@@ -5,6 +5,7 @@ use masp_primitives::convert::AllowedConversion;
 use masp_primitives::transaction::components::I128Sum;
 use namada_core::masp::encode_asset_type;
 use namada_macros::BorshDeserializer;
+use namada_migrations::REGISTER_DESERIALIZERS;
 use namada_sdk::address::Address;
 use namada_sdk::ibc::trace::ibc_token;
 use namada_sdk::masp_primitives::asset_type::AssetType;

@@ -13,8 +13,8 @@ use namada_tx::BatchedTxRef;
 use thiserror::Error;
 use wasmer::sys::BaseTunables;
 use wasmer::{
-    vm, Memory, MemoryError, MemoryType, Pages, Store, TableType, Target,
-    Tunables, WASM_PAGE_SIZE,
+    Memory, MemoryError, MemoryType, Pages, Store, TableType, Target, Tunables,
+    WASM_PAGE_SIZE, vm,
 };
 use wasmer_vm::{
     MemoryStyle, TableStyle, VMMemoryDefinition, VMTableDefinition,
@@ -548,11 +548,11 @@ impl<T: Tunables> Tunables for Limit<T> {
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use wasmer::sys::Features;
     use wasmer::{
-        wat2wasm, Cranelift, Engine, Instance, Module, NativeEngineExt, Store,
-        Target,
+        Cranelift, Engine, Instance, Module, NativeEngineExt, Store, Target,
+        wat2wasm,
     };
 
     use super::*;

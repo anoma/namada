@@ -2,7 +2,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 use namada_sdk::control_flow::{
-    install_shutdown_signal, ShutdownSignal, ShutdownSignalChan,
+    ShutdownSignal, ShutdownSignalChan, install_shutdown_signal,
 };
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
@@ -195,7 +195,7 @@ impl AbortableSpawner {
     }
 }
 
-impl<'a, A> AbortableTaskBuilder<'a, A> {
+impl<A> AbortableTaskBuilder<'_, A> {
     /// Spawn the built abortable task into the runtime.
     #[inline]
     pub fn spawn<F>(self)

@@ -35,8 +35,8 @@ pub use section::{
     MaspBuilder, Memo, Section, Signer, TxCommitments,
 };
 pub use sign::{
-    standalone_signature, verify_standalone_sig, SignatureIndex, Signed,
-    VerifySigError,
+    SignatureIndex, Signed, VerifySigError, standalone_signature,
+    verify_standalone_sig,
 };
 pub use types::{
     BatchedTx, BatchedTxRef, DecodeError, IndexedTx, IndexedTxRange, Tx,
@@ -49,7 +49,7 @@ pub const SALT_LENGTH: usize = 8;
 #[allow(missing_docs)]
 mod hex_salt_serde {
     use data_encoding::HEXUPPER;
-    use serde::{de, Deserializer, Serializer};
+    use serde::{Deserializer, Serializer, de};
 
     use super::*;
 
@@ -99,7 +99,7 @@ mod hex_salt_serde {
 #[allow(missing_docs)]
 mod hex_data_serde {
     use data_encoding::HEXUPPER;
-    use serde::{de, Deserializer, Serializer};
+    use serde::{Deserializer, Serializer, de};
 
     pub fn serialize<S>(
         #[allow(clippy::ptr_arg)] data: &Vec<u8>,

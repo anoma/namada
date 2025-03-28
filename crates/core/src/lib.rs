@@ -32,7 +32,7 @@ pub mod tendermint {
     pub mod abci {
         pub use tendermint::abci::response::ApplySnapshotChunkResult;
         pub use tendermint::abci::{
-            types, Code, Event, EventAttribute, MethodKind,
+            Code, Event, EventAttribute, MethodKind, types,
         };
         pub use tendermint::v0_37::abci::*;
     }

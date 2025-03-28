@@ -3,7 +3,7 @@ use eyre::Report;
 use namada_apps_lib::cli::api::{CliApi, CliClient};
 use namada_apps_lib::cli::args::Global;
 use namada_apps_lib::cli::{
-    args, cmds, Cmd, Context, NamadaClient, NamadaRelayer,
+    Cmd, Context, NamadaClient, NamadaRelayer, args, cmds,
 };
 use namada_sdk::error::Error as SdkError;
 use namada_sdk::io::Io;

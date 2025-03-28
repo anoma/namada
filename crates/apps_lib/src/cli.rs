@@ -17,7 +17,7 @@ use clap::{ArgGroup, ArgMatches, ColorChoice};
 use color_eyre::eyre::Result;
 use namada_sdk::io::StdIo;
 use utils::*;
-pub use utils::{safe_exit, Cmd};
+pub use utils::{Cmd, safe_exit};
 
 pub use self::context::Context;
 use crate::cli::api::CliIo;
@@ -34,7 +34,7 @@ pub mod cmds {
     use super::args::CliTypes;
     use super::utils::*;
     use super::{
-        args, ArgMatches, CLIENT_CMD, NODE_CMD, RELAYER_CMD, WALLET_CMD,
+        ArgMatches, CLIENT_CMD, NODE_CMD, RELAYER_CMD, WALLET_CMD, args,
     };
     use crate::wrap;
 
@@ -319,7 +319,9 @@ pub mod cmds {
             let tx_unshielding_transfer =
                 Self::parse_with_ctx(matches, TxUnshieldingTransfer);
             let tx_ibc_transfer = Self::parse_with_ctx(matches, TxIbcTransfer);
-            let tx_osmosis_swap = Self::parse_with_ctx(matches, TxOsmosisSwap);
+            let tx_osmosis_swap = Self::parse_with_ctx(matches, |cmd| {
+                TxOsmosisSwap(Box::new(cmd))
+            });
             let tx_update_account =
                 Self::parse_with_ctx(matches, TxUpdateAccount);
             let tx_init_account = Self::parse_with_ctx(matches, TxInitAccount);
@@ -506,7 +508,7 @@ pub mod cmds {
         TxShieldingTransfer(TxShieldingTransfer),
         TxUnshieldingTransfer(TxUnshieldingTransfer),
         TxIbcTransfer(TxIbcTransfer),
-        TxOsmosisSwap(TxOsmosisSwap),
+        TxOsmosisSwap(Box<TxOsmosisSwap>),
         QueryResult(QueryResult),
         TxUpdateAccount(TxUpdateAccount),
         TxInitAccount(TxInitAccount),
@@ -3426,7 +3428,7 @@ pub mod args {
         TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
         VP_USER_WASM,
     };
-    use namada_sdk::{token, DEFAULT_GAS_LIMIT};
+    use namada_sdk::{DEFAULT_GAS_LIMIT, token};
 
     use super::context::*;
     use super::utils::*;

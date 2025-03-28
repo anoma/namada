@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use super::token::NATIVE_MAX_DECIMAL_PLACES;
 use crate::arith::{self, checked};
 use crate::token;
-use crate::uint::{Uint, I256};
+use crate::uint::{I256, Uint};
 
 /// The number of Dec places for PoS rational calculations
 pub const POS_DECIMAL_PRECISION: u8 = 12;

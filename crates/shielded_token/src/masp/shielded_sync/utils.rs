@@ -11,8 +11,8 @@ use masp_primitives::transaction::Transaction;
 use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
 use namada_state::TxIndex;
-use namada_tx::event::MaspEventKind;
 use namada_tx::IndexedTx;
+use namada_tx::event::MaspEventKind;
 use serde::{Deserialize, Serialize};
 
 /// The type of a MASP transaction

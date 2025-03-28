@@ -507,17 +507,13 @@ impl TryFrom<&[u8; 65]> for Signature {
 
     fn try_from(sig: &[u8; 65]) -> Result<Self, Self::Error> {
         let recovery_id = RecoveryId::from_byte(sig[64]).ok_or_else(|| {
-            ParseSignatureError::InvalidEncoding(std::io::Error::new(
-                ErrorKind::Other,
+            ParseSignatureError::InvalidEncoding(std::io::Error::other(
                 "Invalid recovery byte",
             ))
         })?;
         let sig =
             k256::ecdsa::Signature::from_slice(&sig[..64]).map_err(|err| {
-                ParseSignatureError::InvalidEncoding(std::io::Error::new(
-                    ErrorKind::Other,
-                    err,
-                ))
+                ParseSignatureError::InvalidEncoding(std::io::Error::other(err))
             })?;
         Ok(Self(sig, recovery_id))
     }

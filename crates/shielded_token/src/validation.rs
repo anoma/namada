@@ -6,12 +6,12 @@ use std::path::PathBuf;
 
 use lazy_static::lazy_static;
 use masp_primitives::bls12_381::Bls12;
+use masp_primitives::transaction::components::TxOut;
 use masp_primitives::transaction::components::sapling::{
     Authorized as SaplingAuthorized, Bundle as SaplingBundle,
 };
 use masp_primitives::transaction::components::transparent::builder::TransparentBuilder;
-use masp_primitives::transaction::components::TxOut;
-use masp_primitives::transaction::sighash::{signature_hash, SignableInput};
+use masp_primitives::transaction::sighash::{SignableInput, signature_hash};
 use masp_primitives::transaction::txid::TxIdDigester;
 use masp_primitives::transaction::{
     Authorization, Authorized, Transaction, TransactionData, Unauthorized,

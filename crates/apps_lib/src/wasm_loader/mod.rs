@@ -3,7 +3,7 @@ use std::fs;
 use std::path::Path;
 
 use data_encoding::HEXLOWER;
-use eyre::{eyre, WrapErr};
+use eyre::{WrapErr, eyre};
 use futures::future::join_all;
 use namada_sdk::collections::HashMap;
 use serde::{Deserialize, Serialize};
