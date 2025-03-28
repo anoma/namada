@@ -4,26 +4,26 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
-use color_eyre::eyre::{eyre, Result};
+use color_eyre::eyre::{Result, eyre};
 use namada_apps_lib::cli::args;
 use namada_apps_lib::client::utils::PRE_GENESIS_DIR;
 use namada_apps_lib::config;
+use namada_apps_lib::config::TendermintMode;
 use namada_apps_lib::config::genesis::chain::Finalized;
 use namada_apps_lib::config::genesis::templates;
 use namada_apps_lib::config::genesis::templates::load_and_validate;
-use namada_apps_lib::config::TendermintMode;
 use namada_apps_lib::tendermint::Timeout;
 use namada_apps_lib::tendermint_proto::google::protobuf::Timestamp;
 use namada_apps_lib::wallet::defaults::derive_template_dir;
 use namada_apps_lib::wallet::pre_genesis;
 use namada_core::chain::ChainIdPrefix;
 use namada_core::collections::HashMap;
+use namada_node::shell::Shell;
 use namada_node::shell::testing::node::{
-    mock_services, InnerMockNode, MockNode, MockServicesCfg,
-    MockServicesController, MockServicesPackage, SalvageableTestDir,
+    InnerMockNode, MockNode, MockServicesCfg, MockServicesController,
+    MockServicesPackage, SalvageableTestDir, mock_services,
 };
 use namada_node::shell::testing::utils::TestDir;
-use namada_node::shell::Shell;
 use namada_sdk::dec::Dec;
 use namada_sdk::token;
 use namada_sdk::wallet::alias::Alias;
@@ -46,7 +46,7 @@ pub fn initialize_genesis(
 ) -> Result<(MockNode, MockServicesController)> {
     let working_dir = std::fs::canonicalize("../..").unwrap();
     let keep_temp = match std::env::var(ENV_VAR_KEEP_TEMP) {
-        Ok(val) => val.to_ascii_lowercase() != "false",
+        Ok(val) => !val.eq_ignore_ascii_case("false"),
         _ => false,
     };
     let test_dir = TestDir::new();

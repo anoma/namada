@@ -3,7 +3,7 @@
 
 use namada_core::collections::HashMap;
 
-use crate::{DBIter, PrefixIter, DB};
+use crate::{DB, DBIter, PrefixIter};
 
 /// A temporary iterators storage, used during a wasm run after which it's
 /// dropped. Each iterator is assigned a [`PrefixIteratorId`].

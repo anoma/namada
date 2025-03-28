@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 use clru::CLruCache;
 use namada_core::address::{Address, EstablishedAddressGen, InternalAddress};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::chain::{ChainId, BLOCK_HEIGHT_LENGTH, CHAIN_ID_LENGTH};
+use namada_core::chain::{BLOCK_HEIGHT_LENGTH, CHAIN_ID_LENGTH, ChainId};
 use namada_core::hash::Hash;
 use namada_core::parameters::{EpochDuration, Parameters};
 use namada_core::time::DateTimeUtc;
@@ -17,8 +17,8 @@ use namada_storage::conversion_state::ConversionState;
 use namada_storage::tx_queue::ExpiredTxsQueue;
 use namada_storage::types::CommitOnlyData;
 use namada_storage::{
-    BlockHeader, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue, Key,
-    KeySeg, StorageHasher, TxIndex, EPOCH_TYPE_LENGTH,
+    BlockHeader, BlockHeight, BlockResults, EPOCH_TYPE_LENGTH, Epoch, Epochs,
+    EthEventsQueue, Key, KeySeg, StorageHasher, TxIndex,
 };
 
 use crate::Result;

@@ -12,12 +12,12 @@ use namada_core::uint::I320;
 use namada_core::{masp, token};
 use namada_events::EmitEvents;
 use namada_shielded_token::storage_key::masp_undated_balance_key;
-use namada_shielded_token::{read_undated_balance, utils, MaspTxId};
+use namada_shielded_token::{MaspTxId, read_undated_balance, utils};
 use namada_storage::{Error, OptionExt, ResultExt};
 use namada_trans_token::read_denom;
 pub use namada_trans_token::tx::transfer;
-use namada_tx::action::{self, Action, MaspAction};
 use namada_tx::BatchedTx;
+use namada_tx::action::{self, Action, MaspAction};
 use namada_tx_env::{Address, Result, TxEnv};
 
 use crate::{Transfer, TransparentTransfersRef};
@@ -222,7 +222,7 @@ mod test {
     use namada_core::token;
     use namada_tests::tx::{ctx, tx_host_env};
     use namada_trans_token::testing::arb_amount;
-    use namada_trans_token::{read_balance, Amount, DenominatedAmount};
+    use namada_trans_token::{Amount, DenominatedAmount, read_balance};
     use namada_tx::{Tx, TxCommitments};
     use proptest::prelude::*;
 

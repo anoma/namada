@@ -35,7 +35,7 @@ impl<'a> IbcRouter<'a> {
     }
 }
 
-impl<'a> Router for IbcRouter<'a> {
+impl Router for IbcRouter<'_> {
     fn get_route(&self, module_id: &ModuleId) -> Option<&dyn Module> {
         self.modules.get(module_id).map(|b| b.as_module())
     }

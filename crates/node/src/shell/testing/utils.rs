@@ -5,7 +5,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use lazy_static::lazy_static;
-use namada_sdk::io::{prompt_aux, read_aux, Io};
+use namada_sdk::io::{Io, prompt_aux, read_aux};
 use tempfile::tempdir;
 use tokio::io::{AsyncRead, ReadBuf};
 
@@ -257,7 +257,7 @@ impl Deref for AtomicBuffer {
     }
 }
 
-impl<'a> AsyncRead for &'a AtomicBuffer {
+impl AsyncRead for &AtomicBuffer {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,

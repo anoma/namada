@@ -8,8 +8,8 @@ use ibc::apps::nft_transfer::context::{
     NftTransferExecutionContext, NftTransferValidationContext,
 };
 use ibc::apps::nft_transfer::types::{
-    ClassData, ClassUri, Memo, PrefixedClassId, TokenData, TokenId, TokenUri,
-    PORT_ID_STR,
+    ClassData, ClassUri, Memo, PORT_ID_STR, PrefixedClassId, TokenData,
+    TokenId, TokenUri,
 };
 use ibc::core::host::types::error::HostError;
 use ibc::core::host::types::identifiers::{ChannelId, PortId};
@@ -19,7 +19,7 @@ use namada_core::token::Amount;
 use namada_systems::trans_token;
 
 use super::common::IbcCommonContext;
-use crate::{trace, NftClass, NftMetadata, IBC_ESCROW_ADDRESS};
+use crate::{IBC_ESCROW_ADDRESS, NftClass, NftMetadata, trace};
 
 /// NFT transfer context to handle tokens
 #[derive(Debug)]

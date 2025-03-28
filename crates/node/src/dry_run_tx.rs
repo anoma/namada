@@ -7,12 +7,12 @@ use namada_sdk::gas::{GasMetering, TxGasMeter};
 use namada_sdk::parameters;
 use namada_sdk::queries::{EncodedResponseQuery, RequestQuery};
 use namada_sdk::state::{
-    DBIter, Error, Result, ResultExt, StorageHasher, TxIndex, DB,
+    DB, DBIter, Error, Result, ResultExt, StorageHasher, TxIndex,
 };
 use namada_sdk::tx::data::{DryRunResult, GasLimit, TxResult, TxType};
 use namada_sdk::tx::{self, Tx};
-use namada_vm::wasm::{TxCache, VpCache};
 use namada_vm::WasmCacheAccess;
+use namada_vm::wasm::{TxCache, VpCache};
 
 use crate::protocol;
 use crate::protocol::ShellParams;
@@ -134,10 +134,10 @@ mod test {
     use namada_sdk::hash::Hash;
     use namada_sdk::io::Client;
     use namada_sdk::queries::{
-        EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
+        EncodedResponseQuery, RPC, RequestCtx, RequestQuery, Router,
     };
-    use namada_sdk::state::testing::TestState;
     use namada_sdk::state::StorageWrite;
+    use namada_sdk::state::testing::TestState;
     use namada_sdk::storage::Key;
     use namada_sdk::tendermint_rpc::{Error as RpcError, Response};
     use namada_sdk::tx::data::TxType;
@@ -145,7 +145,7 @@ mod test {
     use namada_sdk::{address, token};
     use namada_test_utils::TestWasms;
     use namada_vm::wasm::{TxCache, VpCache};
-    use namada_vm::{wasm, WasmCacheRoAccess};
+    use namada_vm::{WasmCacheRoAccess, wasm};
     use tempfile::TempDir;
 
     use super::*;
@@ -263,9 +263,7 @@ mod test {
                 };
                 self.rpc.handle(ctx, &request)
             }
-            .map_err(|err| {
-                std::io::Error::new(std::io::ErrorKind::Other, err.to_string())
-            })
+            .map_err(|err| std::io::Error::other(err.to_string()))
         }
 
         async fn perform<R>(

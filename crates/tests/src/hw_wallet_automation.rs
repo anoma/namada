@@ -27,7 +27,7 @@ const BUTTON_NUM_RIGHT: u8 = 2;
 
 pub fn uses_automation() -> bool {
     if let Ok(val) = std::env::var(ENV_VAR_NAMADA_DEVICE_AUTOMATION) {
-        return val.trim().to_ascii_lowercase() == "true";
+        return val.trim().eq_ignore_ascii_case("true");
     }
     false
 }

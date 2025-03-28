@@ -1,10 +1,10 @@
 //! Validity predictates dependency injection soup. In here, we're assigning
 //! concrete types for generic type params of native VPs.
 
-use namada_vm::wasm::run::VpEvalWasm;
 use namada_vm::wasm::VpCache;
-use namada_vp::native_vp::{self, CtxPostStorageRead, CtxPreStorageRead};
+use namada_vm::wasm::run::VpEvalWasm;
 use namada_vp::VpEnv;
+use namada_vp::native_vp::{self, CtxPostStorageRead, CtxPreStorageRead};
 
 use crate::state::StateRead;
 use crate::{eth_bridge, governance, ibc, parameters, proof_of_stake, token};

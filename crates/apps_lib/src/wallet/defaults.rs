@@ -15,16 +15,16 @@ mod dev {
     use std::path::{Path, PathBuf};
 
     use lazy_static::lazy_static;
+    use namada_sdk::address::Address;
     use namada_sdk::address::testing::{
         apfel, btc, dot, eth, kartoffel, nam, schnitzel,
     };
-    use namada_sdk::address::Address;
     use namada_sdk::collections::HashMap;
     use namada_sdk::governance::pgf;
     use namada_sdk::key::*;
+    use namada_sdk::wallet::Wallet;
     use namada_sdk::wallet::alias::Alias;
     use namada_sdk::wallet::pre_genesis::ValidatorWallet;
-    use namada_sdk::wallet::Wallet;
     use namada_sdk::{governance, proof_of_stake};
 
     use crate::wallet::CliWalletUtils;
@@ -198,7 +198,7 @@ mod dev {
     /// Check whether the ENV_VAR_USE_DEVICE environment variable is set
     pub fn is_use_device() -> bool {
         match std::env::var(ENV_VAR_USE_DEVICE) {
-            Ok(val) => val.to_ascii_lowercase() != "false",
+            Ok(val) => !val.eq_ignore_ascii_case("false"),
             _ => false,
         }
     }

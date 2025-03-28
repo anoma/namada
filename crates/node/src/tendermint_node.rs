@@ -16,7 +16,7 @@ use tokio::sync::oneshot::error::RecvError;
 use tokio::sync::oneshot::{Receiver, Sender};
 
 use crate::tendermint::validator::Info;
-use crate::tendermint::{block, Genesis, Moniker, PublicKey};
+use crate::tendermint::{Genesis, Moniker, PublicKey, block};
 use crate::tendermint_config::{Error as TendermintError, TendermintConfig};
 
 /// Env. var to output Tendermint log to stdout

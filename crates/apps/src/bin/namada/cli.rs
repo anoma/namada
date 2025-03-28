@@ -158,7 +158,7 @@ mod imp {
     use std::os::unix::process::CommandExt;
     use std::process::Command;
 
-    use eyre::{eyre, Result};
+    use eyre::{Result, eyre};
 
     pub fn exec_subcommand(program: &str, mut cmd: Command) -> Result<()> {
         let error = cmd.exec();
@@ -169,7 +169,7 @@ mod imp {
 mod imp {
     use std::process::Command;
 
-    use eyre::{eyre, Result, WrapErr};
+    use eyre::{Result, WrapErr, eyre};
     use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE};
     use winapi::um::consoleapi::SetConsoleCtrlHandler;
 
