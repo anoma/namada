@@ -158,12 +158,15 @@ where
     H: 'static + StorageHasher + Sync,
     Gov: governance::Read<WlState<D, H>>,
 {
-    // TODO(namada#1305): remove the clone here
-    let mut voting_power_post = tally.voting_power.clone();
-    let mut seen_by_post = tally.seen_by.clone();
-    for (validator, vote_height, voting_power) in vote_info {
+    let mut voting_power = HashMap::default();
+    let mut seen_by = BTreeMap::default();
+    
+    voting_power.extend(tally.voting_power.iter().map(|(k, v)| (*k, v.clone())));
+    seen_by.extend(tally.seen_by.iter().map(|(k, v)| (k.clone(), *v)));
+    
+    for (validator, vote_height, voting_power_amount) in vote_info {
         if let Some(already_voted_height) =
-            seen_by_post.insert(validator.clone(), vote_height)
+            seen_by.insert(validator.clone(), vote_height)
         {
             return Err(eyre!(
                 "Validator {validator} had already voted at height \
@@ -174,20 +177,20 @@ where
             .get_epoch_at_height(vote_height)
             .unwrap()
             .expect("The queried epoch should be known");
-        let aggregated = voting_power_post
+        let aggregated = voting_power
             .entry(epoch)
             .or_insert_with(token::Amount::zero);
         *aggregated = aggregated
-            .checked_add(voting_power)
+            .checked_add(voting_power_amount)
             .ok_or_else(|| eyre!("Aggregated voting power overflow"))?;
     }
 
-    let seen_post = voting_power_post.has_majority_quorum::<D, H, Gov>(state);
+    let seen = voting_power.has_majority_quorum::<D, H, Gov>(state);
 
     Ok(Tally {
-        voting_power: voting_power_post,
-        seen_by: seen_by_post,
-        seen: seen_post,
+        voting_power,
+        seen_by,
+        seen,
     })
 }
 
