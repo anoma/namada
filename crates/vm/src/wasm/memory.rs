@@ -517,8 +517,10 @@ impl<T: Tunables> Tunables for Limit<T> {
     ) -> std::result::Result<vm::VMMemory, MemoryError> {
         let adjusted = self.adjust_memory(ty);
         self.validate_memory(&adjusted)?;
-        self.base
-            .create_vm_memory(&adjusted, style, vm_definition_location)
+        unsafe {
+            self.base
+                .create_vm_memory(&adjusted, style, vm_definition_location)
+        }
     }
 
     /// Create a table owned by the host given a [`TableType`] and a
@@ -543,7 +545,7 @@ impl<T: Tunables> Tunables for Limit<T> {
         style: &TableStyle,
         vm_definition_location: NonNull<VMTableDefinition>,
     ) -> std::result::Result<vm::VMTable, String> {
-        self.base.create_vm_table(ty, style, vm_definition_location)
+        unsafe { self.base.create_vm_table(ty, style, vm_definition_location) }
     }
 }
 

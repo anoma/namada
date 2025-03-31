@@ -378,7 +378,7 @@ where
                 tx_wasm_cache,
             },
         ) {
-            Err(Error::GasError(ref msg)) => {
+            Err(Error::GasError(msg)) => {
                 // Gas error aborts the execution of the entire batch
                 tx_result.insert_inner_tx_result(
                     wrapper_hash,

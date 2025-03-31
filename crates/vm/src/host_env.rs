@@ -546,8 +546,7 @@ where
 
     /// Use gas meter
     pub fn gas_meter(&self) -> &RefCell<VpGasMeter> {
-        let gas_meter = unsafe { self.gas_meter.get() };
-        gas_meter
+        unsafe { self.gas_meter.get() }
     }
 }
 
@@ -1572,8 +1571,8 @@ where
         .map_err(|e| TxRuntimeError::InvalidVpCodeHash(e.to_string()))?;
     let mut state = env.state();
     let (write_log, in_mem, _db) = state.split_borrow();
-    let gen = &in_mem.address_gen;
-    let (addr, gas) = write_log.init_account(gen, code_hash, &entropy_source);
+    let r#gen = &in_mem.address_gen;
+    let (addr, gas) = write_log.init_account(r#gen, code_hash, &entropy_source);
     let addr_bytes = addr.serialize_to_vec();
     consume_tx_gas::<MEM, D, H, CA>(env, gas)?;
     let gas = env

@@ -534,7 +534,7 @@ where
     // Read conversion updates from storage and store them in a map
     for conv_result in iter_prefix_with_filter_map(
         storage,
-        &conversion_key_prefix,
+        conversion_key_prefix.clone(),
         is_masp_conversion_key,
     )? {
         match conv_result {
