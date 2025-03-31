@@ -34,8 +34,8 @@ use namada_systems::{parameters, trans_token};
 use crate::storage_key::{
     is_masp_conversion_key, is_masp_scheduled_reward_precision_key,
     masp_assets_hash_key, masp_base_native_precision_key,
-    masp_conversion_key_prefix, masp_scheduled_reward_precision_key_prefix,
-    masp_token_map_key,
+    masp_conversion_key_prefix, masp_scheduled_base_native_precision_key,
+    masp_scheduled_reward_precision_key_prefix, masp_token_map_key,
 };
 use crate::storage_key::{
     masp_kd_gain_key, masp_kp_gain_key, masp_last_inflation_key,
@@ -565,6 +565,14 @@ where
     TransToken:
         trans_token::Keys + trans_token::Read<S> + trans_token::Write<S>,
 {
+    // Read and apply any scheduled base native precisions
+    let scheduled_base_precision_key =
+        masp_scheduled_base_native_precision_key(ep);
+    if let Some(precision) = storage.read(&scheduled_base_precision_key)? {
+        let base_precision_key = masp_base_native_precision_key();
+        storage.write::<Precision>(&base_precision_key, precision)?;
+    }
+
     let scheduled_reward_precision_key_prefix =
         masp_scheduled_reward_precision_key_prefix(ep);
     let mut precision_updates = BTreeMap::<_, Precision>::new();
@@ -625,6 +633,7 @@ where
     // Delete the updates now that they have been applied
     storage.delete_prefix(&conversion_key_prefix)?;
     storage.delete_prefix(&scheduled_reward_precision_key_prefix)?;
+    storage.delete(&scheduled_base_precision_key)?;
     Ok(())
 }
 
