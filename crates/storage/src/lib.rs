@@ -419,7 +419,10 @@ pub mod testing {
     }
 
     impl StorageRead for TestStorage {
-        type PrefixIter<'iter> = PrefixIter<'iter> where Self: 'iter;
+        type PrefixIter<'iter>
+            = PrefixIter<'iter>
+        where
+            Self: 'iter;
 
         fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
             self.db.read_subspace_val(key).into_storage_result()
@@ -519,7 +522,7 @@ pub mod testing {
         pub db_iter: <MockDB as DBIter<'iter>>::PrefixIter,
     }
 
-    impl<'iter> Iterator for PrefixIter<'iter> {
+    impl Iterator for PrefixIter<'_> {
         type Item = (String, Vec<u8>);
 
         fn next(&mut self) -> Option<Self::Item> {

@@ -22,7 +22,7 @@ use thiserror::Error;
 use crate::address;
 use crate::borsh::BorshSerializeExt;
 use crate::hash::{KeccakHasher, Sha256Hasher, StorageHasher};
-use crate::keccak::{keccak_hash, KeccakHash};
+use crate::keccak::{KeccakHash, keccak_hash};
 
 /// Represents an error in signature verification
 #[allow(missing_docs)]
@@ -84,7 +84,6 @@ pub trait RefTo<T> {
 
 /// Simple and safe type conversions that may fail in a controlled
 /// way under some circumstances.
-
 pub trait TryFromRef<T: ?Sized>: Sized {
     /// The type returned in the event of a conversion error.
     type Error;
@@ -117,7 +116,6 @@ impl FromStr for SchemeType {
 }
 
 /// Represents a signature
-
 pub trait Signature:
     Hash + PartialOrd + Serialize + BorshSerialize + BorshDeserialize + BorshSchema
 {
@@ -142,7 +140,6 @@ pub trait Signature:
 }
 
 /// Represents a public key
-
 pub trait PublicKey:
     BorshSerialize
     + BorshDeserialize
@@ -177,7 +174,6 @@ pub trait PublicKey:
 }
 
 /// Represents a secret key
-
 pub trait SecretKey:
     BorshSerialize
     + BorshDeserialize
@@ -492,7 +488,7 @@ impl SignableBytes for &crate::keccak::KeccakHash {
 pub mod testing {
     use proptest::prelude::*;
     use rand::prelude::{StdRng, ThreadRng};
-    use rand::{thread_rng, SeedableRng};
+    use rand::{SeedableRng, thread_rng};
 
     use super::*;
 
@@ -603,7 +599,7 @@ pub mod testing {
 #[cfg(test)]
 macro_rules! sigscheme_test {
     ($name:ident, $type:ty) => {
-        pub mod $name {
+        mod $name {
             use super::*;
 
             /// Run `cargo test gen_keypair -- --nocapture` to generate a

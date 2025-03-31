@@ -5,8 +5,8 @@ use std::marker::PhantomData;
 
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::storage::Key;
-use namada_tx::action::{Action, PgfAction};
 use namada_tx::BatchedTxRef;
+use namada_tx::action::{Action, PgfAction};
 use namada_vp_env::{Error, Result, VpEnv};
 use thiserror::Error;
 

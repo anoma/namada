@@ -3,14 +3,14 @@
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use arse_merkle_tree::traits::Hasher;
 use arse_merkle_tree::H256;
+use arse_merkle_tree::traits::Hasher;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -392,7 +392,7 @@ pub mod testing {
 /// Tests and strategies for hashes
 pub mod tests {
     use proptest::prelude::*;
-    use proptest::string::{string_regex, RegexGeneratorStrategy};
+    use proptest::string::{RegexGeneratorStrategy, string_regex};
 
     use super::*;
 

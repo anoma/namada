@@ -330,11 +330,11 @@ pub mod testing {
     use std::collections::BTreeMap;
     use std::sync::Mutex;
 
-    use masp_primitives::consensus::testing::arb_height;
     #[cfg(feature = "mainnet")]
     use masp_primitives::consensus::MainNetwork as Network;
     #[cfg(not(feature = "mainnet"))]
     use masp_primitives::consensus::TestNetwork as Network;
+    use masp_primitives::consensus::testing::arb_height;
     use masp_primitives::merkle_tree::FrozenCommitmentTree;
     use masp_primitives::transaction::builder::Builder;
     use masp_primitives::transaction::components::sapling::builder::{
@@ -346,13 +346,13 @@ pub mod testing {
     use namada_core::address::testing::arb_non_internal_address;
     use namada_core::address::{Address, MASP};
     use namada_core::collections::HashMap;
-    use namada_core::masp::{encode_asset_type, AssetData, TAddrData};
+    use namada_core::masp::{AssetData, TAddrData, encode_asset_type};
     pub use namada_core::token::*;
     use namada_shielded_token::masp::testing::{
-        arb_masp_epoch, arb_output_descriptions, arb_pre_asset_type, arb_rng,
-        arb_spend_descriptions, MockTxProver, TestCsprng,
+        MockTxProver, TestCsprng, arb_masp_epoch, arb_output_descriptions,
+        arb_pre_asset_type, arb_rng, arb_spend_descriptions,
     };
-    use namada_shielded_token::masp::{ShieldedTransfer, WalletMap, NETWORK};
+    use namada_shielded_token::masp::{NETWORK, ShieldedTransfer, WalletMap};
     pub use namada_trans_token::testing::*;
     use proptest::collection;
     use proptest::prelude::*;

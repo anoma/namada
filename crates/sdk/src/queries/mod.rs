@@ -2,14 +2,14 @@
 //! defined via `router!` macro.
 
 // Re-export to show in rustdoc!
-use namada_state::{DBIter, StorageHasher, DB};
-pub use shell::Shell;
+use namada_state::{DB, DBIter, StorageHasher};
 use shell::SHELL;
+pub use shell::Shell;
 pub use types::{
     EncodedResponseQuery, Error, RequestCtx, RequestQuery, ResponseQuery,
     Router,
 };
-use vp::{Vp, VP};
+use vp::{VP, Vp};
 
 pub use self::shell::eth_bridge::{
     Erc20FlowControl, GenBridgePoolProofReq, GenBridgePoolProofRsp,
@@ -180,9 +180,9 @@ pub(crate) mod testing {
                 tx_wasm_cache: (),
                 storage_read_past_height_limit: None,
             };
-            self.rpc.handle(ctx, &request).map_err(|err| {
-                std::io::Error::new(std::io::ErrorKind::Other, err.to_string())
-            })
+            self.rpc
+                .handle(ctx, &request)
+                .map_err(|err| std::io::Error::other(err.to_string()))
         }
 
         async fn perform<R>(&self, _request: R) -> Result<R::Output, RpcError>

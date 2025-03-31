@@ -7,7 +7,7 @@ use namada_sdk::token::DenominatedAmount;
 use namada_sdk::tx::data::GasLimit;
 use namada_sdk::tx::{Authorization, Tx, TxError};
 
-use super::{attach_fee, attach_fee_signature, GlobalArgs};
+use super::{GlobalArgs, attach_fee, attach_fee_signature};
 use crate::transaction;
 
 const TX_RESIGN_STEWARD: &str = "tx_resign_steward.wasm";

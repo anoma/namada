@@ -27,8 +27,8 @@ use namada_state::{Error, Result, StateRead};
 use namada_systems::trans_token::{self as token, Amount};
 use namada_systems::{governance, parameters, proof_of_stake};
 use namada_tx::BatchedTxRef;
-use namada_vp::native_vp::{Ctx, CtxPreStorageRead, NativeVp, VpEvaluator};
 use namada_vp::VpEnv;
+use namada_vp::native_vp::{Ctx, CtxPreStorageRead, NativeVp, VpEvaluator};
 use thiserror::Error;
 
 use crate::context::middlewares::create_transfer_middlewares;
@@ -41,8 +41,8 @@ use crate::storage::{
 };
 use crate::trace::calc_hash;
 use crate::{
-    Error as ActionError, IbcActions, NftTransferModule, ValidationParams,
-    COMMITMENT_PREFIX,
+    COMMITMENT_PREFIX, Error as ActionError, IbcActions, NftTransferModule,
+    ValidationParams,
 };
 
 #[allow(missing_docs)]
@@ -479,14 +479,14 @@ mod tests {
     use ibc::core::channel::types::timeout::TimeoutTimestamp;
     use ibc::primitives::IntoTimestamp;
     use ibc_testkit::testapp::ibc::clients::mock::client_state::{
-        client_type, MockClientState, MOCK_CLIENT_TYPE,
+        MOCK_CLIENT_TYPE, MockClientState, client_type,
     };
     use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
     use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
+    use namada_core::address::InternalAddress;
     use namada_core::address::testing::{
         established_address_1, established_address_2, nam,
     };
-    use namada_core::address::InternalAddress;
     use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
     use namada_core::chain::testing::get_dummy_header;
     use namada_core::chain::{BlockHeight, Epoch};
@@ -496,18 +496,18 @@ mod tests {
     use namada_core::time::DurationSecs;
     use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_governance::parameters::GovernanceParameters;
-    use namada_parameters::storage::get_epoch_duration_storage_key;
     use namada_parameters::EpochDuration;
+    use namada_parameters::storage::get_epoch_duration_storage_key;
     use namada_proof_of_stake::test_utils::get_dummy_genesis_validator;
-    use namada_state::testing::TestState;
     use namada_state::StorageRead;
-    use namada_token::storage_key::balance_key;
+    use namada_state::testing::TestState;
     use namada_token::Transfer;
+    use namada_token::storage_key::balance_key;
     use namada_tx::data::TxType;
     use namada_tx::{Authorization, Code, Data, Section, Tx};
-    use namada_vm::wasm::run::VpEvalWasm;
     use namada_vm::wasm::VpCache;
-    use namada_vm::{wasm, WasmCacheRwAccess};
+    use namada_vm::wasm::run::VpEvalWasm;
+    use namada_vm::{WasmCacheRwAccess, wasm};
     use prost::Message;
     use sha2::Digest;
 
@@ -528,8 +528,9 @@ mod tests {
     use crate::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
     use crate::apps::transfer::types::packet::PacketData;
     use crate::apps::transfer::types::{
-        ack_success_b64, PrefixedCoin, TracePrefix, VERSION,
+        PrefixedCoin, TracePrefix, VERSION, ack_success_b64,
     };
+    use crate::core::channel::types::Version as ChanVersion;
     use crate::core::channel::types::acknowledgement::{
         Acknowledgement, AcknowledgementStatus,
     };
@@ -550,10 +551,9 @@ mod tests {
     };
     use crate::core::channel::types::packet::Packet;
     use crate::core::channel::types::timeout::TimeoutHeight;
-    use crate::core::channel::types::Version as ChanVersion;
+    use crate::core::client::types::Height;
     use crate::core::client::types::events::{CreateClient, UpdateClient};
     use crate::core::client::types::msgs::{MsgCreateClient, MsgUpdateClient};
-    use crate::core::client::types::Height;
     use crate::core::commitment_types::commitment::{
         CommitmentPrefix, CommitmentProofBytes,
     };
@@ -591,8 +591,8 @@ mod tests {
     };
     use crate::trace::{calc_hash, ibc_token};
     use crate::{
-        init_genesis_storage, MsgNftTransfer, MsgTransfer, NftClass,
-        NftMetadata,
+        MsgNftTransfer, MsgTransfer, NftClass, NftMetadata,
+        init_genesis_storage,
     };
 
     type CA = WasmCacheRwAccess;

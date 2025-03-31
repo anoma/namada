@@ -7,7 +7,7 @@ use namada_tx::data::TxSentinel;
 use crate::in_memory::InMemory;
 use crate::write_log::WriteLog;
 use crate::{
-    DBIter, Error, Result, State, StateError, StateRead, StorageHasher, DB,
+    DB, DBIter, Error, Result, State, StateError, StateRead, StorageHasher,
 };
 
 /// State with mutable write log and gas metering for tx host env.

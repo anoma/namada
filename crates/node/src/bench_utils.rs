@@ -14,14 +14,14 @@ use std::sync::{Arc, Once, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
-use masp_primitives::transaction::components::sapling::builder::RngBuildParams;
 use masp_primitives::transaction::Transaction;
+use masp_primitives::transaction::components::sapling::builder::RngBuildParams;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use masp_proofs::prover::LocalTxProver;
 use namada_apps_lib::cli;
-use namada_apps_lib::cli::context::FromContext;
 use namada_apps_lib::cli::Context;
-use namada_apps_lib::wallet::{defaults, CliWalletUtils};
+use namada_apps_lib::cli::context::FromContext;
+use namada_apps_lib::wallet::{CliWalletUtils, defaults};
 use namada_sdk::address::{self, Address, InternalAddress, MASP};
 use namada_sdk::args::ShieldedSync;
 use namada_sdk::borsh::{
@@ -29,27 +29,27 @@ use namada_sdk::borsh::{
 };
 use namada_sdk::chain::testing::get_dummy_header;
 use namada_sdk::chain::{BlockHeight, ChainId, Epoch};
-use namada_sdk::events::extend::ComposeEvent;
 use namada_sdk::events::Event;
+use namada_sdk::events::extend::ComposeEvent;
 use namada_sdk::gas::TxGasMeter;
 use namada_sdk::governance::storage::proposal::ProposalType;
 use namada_sdk::governance::{self, InitProposalData};
+use namada_sdk::ibc::apps::transfer::types::PrefixedCoin;
 use namada_sdk::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use namada_sdk::ibc::apps::transfer::types::packet::PacketData;
-use namada_sdk::ibc::apps::transfer::types::PrefixedCoin;
 use namada_sdk::ibc::clients::tendermint::client_state::ClientState;
 use namada_sdk::ibc::clients::tendermint::consensus_state::ConsensusState;
 use namada_sdk::ibc::clients::tendermint::types::{
     AllowUpdate, ClientState as ClientStateType,
     ConsensusState as ConsensusStateType, TrustThreshold,
 };
+use namada_sdk::ibc::core::channel::types::Version as ChannelVersion;
 use namada_sdk::ibc::core::channel::types::channel::{
     ChannelEnd, Counterparty as ChannelCounterparty, Order, State,
 };
 use namada_sdk::ibc::core::channel::types::timeout::{
     TimeoutHeight, TimeoutTimestamp,
 };
-use namada_sdk::ibc::core::channel::types::Version as ChannelVersion;
 use namada_sdk::ibc::core::client::types::Height as IbcHeight;
 use namada_sdk::ibc::core::commitment_types::commitment::{
     CommitmentPrefix, CommitmentRoot,
@@ -72,7 +72,7 @@ use namada_sdk::ibc::primitives::{IntoTimestamp, Timestamp as IbcTimestamp};
 use namada_sdk::ibc::storage::{
     channel_key, connection_key, mint_limit_key, port_key, throughput_limit_key,
 };
-use namada_sdk::ibc::{MsgTransfer, COMMITMENT_PREFIX};
+use namada_sdk::ibc::{COMMITMENT_PREFIX, MsgTransfer};
 use namada_sdk::io::{Client, NamadaIo, StdIo};
 use namada_sdk::key::common::SecretKey;
 use namada_sdk::masp::shielded_wallet::ShieldedApi;
@@ -82,16 +82,16 @@ use namada_sdk::masp::{
     ShieldedContext, ShieldedUtils, ShieldedWallet,
 };
 use namada_sdk::queries::{
-    EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
+    EncodedResponseQuery, RPC, RequestCtx, RequestQuery, Router,
 };
-use namada_sdk::state::write_log::StorageModification;
 use namada_sdk::state::StorageRead;
+use namada_sdk::state::write_log::StorageModification;
 use namada_sdk::storage::{Key, KeySeg, TxIndex};
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::{self, Amount, DenominatedAmount, Transfer};
 use namada_sdk::tx::data::pos::Bond;
 use namada_sdk::tx::data::{BatchedTxResult, Fee, TxResult, VpsResult};
-use namada_sdk::tx::event::{new_tx_event, Batch, MaspEvent, MaspTxRef};
+use namada_sdk::tx::event::{Batch, MaspEvent, MaspTxRef, new_tx_event};
 use namada_sdk::tx::{
     Authorization, BatchedTx, BatchedTxRef, Code, Data, IndexedTx, Section, Tx,
 };
@@ -110,16 +110,16 @@ pub use namada_sdk::tx::{
 };
 use namada_sdk::wallet::{DatedSpendingKey, Wallet};
 use namada_sdk::{
-    parameters, proof_of_stake, tendermint, Namada, NamadaImpl, PaymentAddress,
-    TransferSource, TransferTarget,
+    Namada, NamadaImpl, PaymentAddress, TransferSource, TransferTarget,
+    parameters, proof_of_stake, tendermint,
 };
 use namada_test_utils::tx_data::TxWriteData;
 use namada_vm::wasm::run;
 use rand_core::OsRng;
 use tempfile::TempDir;
 
-use crate::config::global::GlobalConfig;
 use crate::config::TendermintMode;
+use crate::config::global::GlobalConfig;
 use crate::shell::Shell;
 use crate::tendermint::abci::request::InitChain;
 use crate::tendermint_proto::google::protobuf::Timestamp;

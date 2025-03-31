@@ -8,7 +8,7 @@ pub use namada_core::eth_bridge_pool::{
 use namada_core::ethereum_events::EthAddress;
 use namada_core::storage::{self, DbKeySeg};
 use namada_trans_token::storage_key::{
-    balance_key, minted_balance_key, MINTED_STORAGE_KEY,
+    MINTED_STORAGE_KEY, balance_key, minted_balance_key,
 };
 
 /// Represents the type of a key relating to a wrapped ERC20
@@ -113,8 +113,8 @@ mod test {
     use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
 
     use super::*;
-    use crate::token::storage_key::BALANCE_STORAGE_KEY;
     use crate::ADDRESS;
+    use crate::token::storage_key::BALANCE_STORAGE_KEY;
 
     const MULTITOKEN_ADDRESS: Address =
         Address::Internal(InternalAddress::Multitoken);

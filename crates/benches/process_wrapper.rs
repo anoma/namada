@@ -1,12 +1,12 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use namada_apps_lib::key::RefTo;
 use namada_apps_lib::state::TxIndex;
 use namada_apps_lib::time::DateTimeUtc;
 use namada_apps_lib::token::{Amount, DenominatedAmount, Transfer};
-use namada_apps_lib::tx::data::{Fee, WrapperTx};
 use namada_apps_lib::tx::Authorization;
+use namada_apps_lib::tx::data::{Fee, WrapperTx};
 use namada_apps_lib::wallet::defaults;
-use namada_apps_lib::{address, DEFAULT_GAS_LIMIT};
+use namada_apps_lib::{DEFAULT_GAS_LIMIT, address};
 use namada_node::bench_utils::{BenchShell, TX_TRANSFER_WASM};
 use namada_node::shell::process_proposal::ValidationMeta;
 

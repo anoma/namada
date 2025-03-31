@@ -15,8 +15,8 @@ use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusStat
 use namada_systems::parameters;
 use prost::Message;
 
-use super::common::IbcCommonContext;
 use super::IbcContext;
+use super::common::IbcCommonContext;
 
 /// ClientState for light clients
 #[derive(Clone, Debug, IbcClientState)]
