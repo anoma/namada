@@ -49,6 +49,8 @@ pub const MASP_MAX_REWARD_RATE_KEY: &str = "max_reward_rate";
 pub const MASP_TOTAL_REWARDS: &str = "max_total_rewards";
 /// The key for the reward precision for a given asset
 pub const MASP_REWARD_PRECISION_KEY: &str = "reward_precision";
+/// The key for the base native precision
+pub const MASP_BASE_NATIVE_PRECISION_KEY: &str = "base_native_precision";
 
 /// Obtain the nominal proportional key for the given token
 pub fn masp_kp_gain_key<TransToken: trans_token::Keys>(
@@ -195,6 +197,7 @@ pub fn is_masp_governance_key(key: &storage::Key) -> bool {
     is_masp_token_map_key(key)
         || is_masp_conversion_key(key).is_some()
         || is_masp_scheduled_reward_precision_key(key).is_some()
+        || is_masp_base_native_precision_key(key)
 }
 
 /// Check if the given storage key is allowed to be touched by a masp transfer
@@ -244,6 +247,14 @@ pub fn is_masp_token_map_key(key: &storage::Key) -> bool {
     [DbKeySeg::AddressSeg(addr),
              DbKeySeg::StringSeg(prefix),
         ] if *addr == address::MASP && prefix == MASP_TOKEN_MAP_KEY)
+}
+
+/// Check if the given storage key is a masp base native precision key
+pub fn is_masp_base_native_precision_key(key: &storage::Key) -> bool {
+    matches!(&key.segments[..],
+    [DbKeySeg::AddressSeg(addr),
+             DbKeySeg::StringSeg(prefix),
+        ] if *addr == address::MASP && prefix == MASP_BASE_NATIVE_PRECISION_KEY)
 }
 
 /// Check if the given storage key is a masp conversion key
@@ -322,6 +333,13 @@ pub fn masp_convert_anchor_key() -> storage::Key {
 pub fn masp_token_map_key() -> storage::Key {
     storage::Key::from(address::MASP.to_db_key())
         .push(&MASP_TOKEN_MAP_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the key for the masp base native precision map
+pub fn masp_base_native_precision_key() -> storage::Key {
+    storage::Key::from(address::MASP.to_db_key())
+        .push(&MASP_BASE_NATIVE_PRECISION_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 

@@ -29,7 +29,7 @@ pub const OLD_CONVERSION_STATE_TYPE_HASH: &str =
 )]
 pub struct NewConversionState {
     /// The last amount of the native token distributed
-    pub normed_inflation: Option<u128>,
+    pub current_precision: Option<u128>,
     /// The tree currently containing all the conversions
     pub tree: FrozenCommitmentTree<sapling::Node>,
     /// Map assets to their latest conversion and position in Merkle tree
@@ -40,7 +40,8 @@ pub struct NewConversionState {
 impl From<ConversionState> for NewConversionState {
     fn from(value: ConversionState) -> Self {
         Self {
-            normed_inflation: value.normed_inflation,
+            #[allow(deprecated)]
+            current_precision: value.current_precision,
             tree: value.tree,
             assets: value.assets,
         }
