@@ -50,10 +50,14 @@ pub mod storage_key {
     use namada_core::storage;
     use namada_shielded_token::storage_key as shielded;
     pub use namada_shielded_token::storage_key::{
-        is_masp_commitment_anchor_key, is_masp_key, is_masp_nullifier_key,
-        is_masp_token_map_key, is_masp_transfer_key, masp_assets_hash_key,
-        masp_commitment_anchor_key, masp_commitment_tree_key,
-        masp_conversion_key, masp_convert_anchor_key, masp_nullifier_key,
+        is_masp_base_native_precision_key, is_masp_commitment_anchor_key,
+        is_masp_key, is_masp_nullifier_key,
+        is_masp_scheduled_base_native_precision_key,
+        is_masp_scheduled_reward_precision_key, is_masp_token_map_key,
+        is_masp_transfer_key, masp_assets_hash_key,
+        masp_base_native_precision_key, masp_commitment_anchor_key,
+        masp_commitment_tree_key, masp_conversion_key, masp_convert_anchor_key,
+        masp_nullifier_key, masp_scheduled_base_native_precision_key,
         masp_scheduled_reward_precision_key, masp_token_map_key,
         masp_total_rewards,
     };
