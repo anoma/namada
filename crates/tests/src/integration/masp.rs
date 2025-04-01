@@ -21,7 +21,8 @@ use namada_sdk::signing::SigningTxData;
 use namada_sdk::state::{StorageRead, StorageWrite};
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::storage_key::{
-    masp_conversion_key, masp_reward_precision_key,
+    masp_base_native_precision_key, masp_conversion_key,
+    masp_reward_precision_key, masp_scheduled_base_native_precision_key,
     masp_scheduled_reward_precision_key, masp_token_map_key,
 };
 use namada_sdk::token::{self, Amount, DenominatedAmount, MaspEpoch};
@@ -1770,6 +1771,203 @@ fn auto_compounding() -> Result<()> {
     check_balance_and_reshield(
         "0.31854", "0.31851", "0.128528", "0.128524", "0.637092",
     )?;
+    Ok(())
+}
+
+// Test that the base native precision and scheduled base native precision keys
+// are effective and actually alter rewards.
+#[test]
+fn base_precision_effective() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::setup()?;
+    // The initial base native precision
+    const PRECISION: Precision = 1000000;
+    // Write the base native precision to storage
+    node.shell
+        .lock()
+        .unwrap()
+        .state
+        .write(&masp_base_native_precision_key(), PRECISION)
+        .expect("unable to write base precision");
+    // The scheduled base native precision
+    const SCHEDULED_PRECISION: Precision = 10000;
+    // Write the scheduled base native precision to storage
+    node.shell
+        .lock()
+        .unwrap()
+        .state
+        .write(
+            &masp_scheduled_base_native_precision_key(&MaspEpoch::new(4)),
+            SCHEDULED_PRECISION,
+        )
+        .expect("unable to write scheduled base precision");
+    // Wait till epoch boundary
+    node.next_masp_epoch();
+    // Check that the stored precision is as expected
+    assert_eq!(
+        node.shell
+            .lock()
+            .unwrap()
+            .state
+            .read(&masp_base_native_precision_key())
+            .expect("unable to read base precision"),
+        Some(PRECISION),
+    );
+    // Send 0.1 NAM from Albert to Albert's payment address
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec![
+                "shield",
+                "--source",
+                ALBERT,
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                "0.1",
+                "--signing-keys",
+                ALBERT_KEY,
+                "--node",
+                validator_one_rpc,
+            ]),
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            AB_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+
+    // Assert NAM balance at Albert's viewing key is 0.1
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0.1"));
+
+    // Wait till epoch boundary
+    node.next_masp_epoch();
+
+    // Check that the stored precision is as expected
+    assert_eq!(
+        node.shell
+            .lock()
+            .unwrap()
+            .state
+            .read(&masp_base_native_precision_key())
+            .expect("unable to read base precision"),
+        Some(PRECISION),
+    );
+
+    // Assert NAM balance at Albert's payment address is still 0.1
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    // This number would have been 0.1006 if the base precision had been 1000
+    // from the beginning.
+    assert!(captured.contains("nam: 0.1"));
+
+    // Wait till epoch boundary
+    node.next_masp_epoch();
+
+    // Check that the stored precision is as expected
+    assert_eq!(
+        node.shell
+            .lock()
+            .unwrap()
+            .state
+            .read(&masp_base_native_precision_key())
+            .expect("unable to read base precision"),
+        Some(PRECISION),
+    );
+
+    // Wait till epoch boundary
+    node.next_masp_epoch();
+
+    // Check that the stored precision is as expected
+    assert_eq!(
+        node.shell
+            .lock()
+            .unwrap()
+            .state
+            .read(&masp_base_native_precision_key())
+            .expect("unable to read base precision"),
+        Some(PRECISION),
+    );
+
+    // Wait till epoch boundary. Until then, note the node is currently in the
+    // 4th MASP epoch, so the scheduled base native precision will be written at
+    // the end of this MASP epoch.
+    node.next_masp_epoch();
+
+    // Check that the stored precision has now changed to the scheduled
+    // precision
+    assert_eq!(
+        node.shell
+            .lock()
+            .unwrap()
+            .state
+            .read(&masp_base_native_precision_key())
+            .expect("unable to read base precision"),
+        Some(SCHEDULED_PRECISION),
+    );
+
+    // Wait till epoch boundary
+    node.next_masp_epoch();
+
+    // Check that the stored precision is as expected
+    assert_eq!(
+        node.shell
+            .lock()
+            .unwrap()
+            .state
+            .read(&masp_base_native_precision_key())
+            .expect("unable to read base precision"),
+        Some(SCHEDULED_PRECISION),
+    );
+
     Ok(())
 }
 
