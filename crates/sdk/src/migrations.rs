@@ -608,6 +608,7 @@ derive_borshdeserializer!(Vec::<u8>);
 derive_borshdeserializer!(Vec::<String>);
 derive_borshdeserializer!(u64);
 derive_borshdeserializer!(u128);
+derive_borshdeserializer!(namada_core::hash::Hash);
 derive_borshdeserializer!(masp_primitives::convert::AllowedConversion);
 
 #[derive(BorshSerialize, BorshDeserialize)]

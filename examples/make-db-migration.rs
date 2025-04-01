@@ -6,6 +6,8 @@ use masp_primitives::convert::AllowedConversion;
 use masp_primitives::ff::PrimeField;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
+use namada_core::borsh::BorshSerializeExt;
+use namada_core::hash::Hash;
 use namada_core::masp::encode_asset_type;
 use namada_macros::BorshDeserializer;
 use namada_migrations::REGISTER_DESERIALIZERS;
@@ -17,7 +19,7 @@ use namada_sdk::masp_primitives::sapling;
 use namada_sdk::migrations;
 use namada_sdk::storage::DbColFam;
 use namada_shielded_token::storage_key::{
-    masp_conversion_key, masp_reward_precision_key,
+    masp_assets_hash_key, masp_conversion_key, masp_reward_precision_key,
 };
 use namada_shielded_token::{ConversionLeaf, ConversionState, MaspEpoch};
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
@@ -407,6 +409,7 @@ fn conversion_state_migration() {
         tree: FrozenCommitmentTree::new(&conv_notes),
         assets,
     };
+    let assets_hash = Hash::sha256(conversion_state.assets.serialize_to_vec());
     // Write the conversion state to the database and memory
     updates.push(migrations::DbUpdateType::Add {
         key: migrations::CONVERSION_STATE_KEY
@@ -414,6 +417,14 @@ fn conversion_state_migration() {
             .expect("unable to construct conversion state key"),
         cf: DbColFam::STATE,
         value: conversion_state.into(),
+        force: false,
+    });
+
+    // Put in storage only the assets hash because the size is quite large
+    updates.push(migrations::DbUpdateType::Add {
+        key: masp_assets_hash_key(),
+        cf: DbColFam::SUBSPACE,
+        value: assets_hash.into(),
         force: false,
     });
 
