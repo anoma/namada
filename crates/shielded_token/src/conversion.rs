@@ -33,14 +33,15 @@ use namada_systems::{parameters, trans_token};
 #[cfg(any(feature = "multicore", test))]
 use crate::storage_key::{
     is_masp_conversion_key, is_masp_scheduled_reward_precision_key,
-    masp_assets_hash_key, masp_base_native_precision_key,
-    masp_conversion_key_prefix, masp_scheduled_base_native_precision_key,
+    masp_assets_hash_key, masp_conversion_key_prefix,
+    masp_scheduled_base_native_precision_key,
     masp_scheduled_reward_precision_key_prefix, masp_token_map_key,
 };
 use crate::storage_key::{
-    masp_kd_gain_key, masp_kp_gain_key, masp_last_inflation_key,
-    masp_last_locked_amount_key, masp_locked_amount_target_key,
-    masp_max_reward_rate_key, masp_reward_precision_key,
+    masp_base_native_precision_key, masp_kd_gain_key, masp_kp_gain_key,
+    masp_last_inflation_key, masp_last_locked_amount_key,
+    masp_locked_amount_target_key, masp_max_reward_rate_key,
+    masp_reward_precision_key,
 };
 #[cfg(any(feature = "multicore", test))]
 use crate::{ConversionLeaf, Error, OptionExt, ResultExt};
@@ -108,6 +109,29 @@ where
     Ok(reward_precision)
 }
 
+// Read the base native precision from storage. And if it is not initialized,
+// fall back to inferring it based on native denomination.
+fn read_base_native_precision<S, TransToken>(
+    storage: &mut S,
+    native_token: &Address,
+) -> Result<Precision>
+where
+    S: StorageWrite + StorageRead + WithConversionState,
+    TransToken: trans_token::Keys + trans_token::Read<S>,
+{
+    let base_native_precision_key = masp_base_native_precision_key();
+    storage.read(&base_native_precision_key)?.map_or_else(
+        || -> Result<Precision> {
+            #[allow(deprecated)]
+            let precision =
+                infer_token_precision::<_, TransToken>(storage, native_token)?;
+            storage.write(&base_native_precision_key, precision)?;
+            Ok(precision)
+        },
+        Ok,
+    )
+}
+
 /// Compute the precision of MASP rewards for the given token. This function
 /// must be a non-zero constant for a given token.
 pub fn calculate_masp_rewards_precision<S, TransToken>(
@@ -132,31 +156,32 @@ where
     let reward_precision: Precision =
         storage.read(&reward_precision_key)?.map_or_else(
             || -> Result<Precision> {
+                let native_token = storage.get_native_token()?;
                 #[allow(deprecated)]
-                match storage.conversion_state().current_precision {
-                    Some(native_precision)
-                        if *addr == storage.get_native_token()? =>
-                    {
-                        // If this is the native token, then the precision was
-                        // actually stored in the conversion state.
-                        Ok(native_precision)
+                let prec = match storage.conversion_state().current_precision {
+                    // If this is the native token, then the precision was
+                    // actually stored in the conversion state.
+                    Some(native_precision) if *addr == native_token => {
+                        native_precision
                     }
-                    _ => {
-                        let reward_precision =
-                            infer_token_precision::<_, TransToken>(
-                                storage, addr,
-                            )?;
-                        // Record the precision that is now being used so that
-                        // it does not have to be
-                        // recomputed each time, and to
-                        // ensure that this value is not accidentally
-                        // changed even by a change to this initialization
-                        // algorithm.
-                        storage
-                            .write(&reward_precision_key, reward_precision)?;
-                        Ok(reward_precision)
+                    // If the current precision is not defined for the native
+                    // token, then attempt to get it from the base native
+                    // precision.
+                    None if *addr == native_token => {
+                        read_base_native_precision::<_, TransToken>(
+                            storage, addr,
+                        )?
                     }
-                }
+                    // Otherwise default to inferring the precision from the
+                    // token denomination
+                    _ => infer_token_precision::<_, TransToken>(storage, addr)?,
+                };
+                // Record the precision that is now being used so that it does
+                // not have to be recomputed each time, and to ensure that this
+                // value is not accidentally changed even by a change to this
+                // initialization algorithm.
+                storage.write(&reward_precision_key, prec)?;
+                Ok(prec)
             },
             Ok,
         )?;
@@ -705,20 +730,8 @@ where
         AllowedConversion,
     >::new();
     // This is the base native token precision value
-    let base_native_precision_key = masp_base_native_precision_key();
     let base_native_precision =
-        storage.read(&base_native_precision_key)?.map_or_else(
-            || -> Result<Precision> {
-                #[allow(deprecated)]
-                let precision = infer_token_precision::<_, TransToken>(
-                    storage,
-                    &native_token,
-                )?;
-                storage.write(&base_native_precision_key, precision)?;
-                Ok(precision)
-            },
-            Ok,
-        )?;
+        read_base_native_precision::<_, TransToken>(storage, &native_token)?;
     // Get the last rewarded amount of the native token
     let mut current_native_precision = calculate_masp_rewards_precision::<
         S,
