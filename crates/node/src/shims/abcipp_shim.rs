@@ -43,6 +43,7 @@ pub struct AbcippShim {
     )>,
     snapshot_task: Option<std::thread::JoinHandle<Result<(), DbError>>>,
     snapshots_to_keep: u64,
+    namada_version: String,
 }
 
 impl AbcippShim {
@@ -58,6 +59,7 @@ impl AbcippShim {
         scheduled_migration: Option<ScheduledMigration>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
+        namada_version: String,
     ) -> (Self, AbciService, broadcast::Sender<()>) {
         // We can use an unbounded channel here, because tower-abci limits the
         // the number of requests that can come in
@@ -84,6 +86,7 @@ impl AbcippShim {
                 shell_recv,
                 snapshot_task: None,
                 snapshots_to_keep,
+                namada_version,
             },
             AbciService {
                 shell_send,
@@ -109,7 +112,10 @@ impl AbcippShim {
             let resp = match req {
                 Req::ProcessProposal(proposal) => self
                     .service
-                    .call(Request::ProcessProposal(proposal))
+                    .call(
+                        Request::ProcessProposal(proposal),
+                        &self.namada_version,
+                    )
                     .map_err(Error::from)
                     .and_then(|resp| resp.try_into()),
                 Req::BeginBlock(block) => {
@@ -146,7 +152,7 @@ impl AbcippShim {
                                 begin_block_request.into();
                             end_block_request.txs = txs;
                             self.service
-                        .call(Request::FinalizeBlock(end_block_request))
+                        .call(Request::FinalizeBlock(end_block_request), &self.namada_version)
                         .map_err(Error::from)
                         .and_then(|res| match res {
                             Response::FinalizeBlock(resp) => {
@@ -162,7 +168,10 @@ impl AbcippShim {
                         }
                     }
                 }
-                Req::Commit => match self.service.call(Request::Commit) {
+                Req::Commit => match self
+                    .service
+                    .call(Request::Commit, &self.namada_version)
+                {
                     Ok(Response::Commit(res, take_snapshot)) => {
                         self.update_snapshot_task(take_snapshot);
                         Ok(Resp::Commit(res))
@@ -173,7 +182,7 @@ impl AbcippShim {
                 _ => match Request::try_from(req.clone()) {
                     Ok(request) => self
                         .service
-                        .call(request)
+                        .call(request, &self.namada_version)
                         .map(Resp::try_from)
                         .map_err(Error::Shell)
                         .and_then(|inner| inner),
