@@ -19,6 +19,8 @@ The total order of version strings is preserved. E.g. changes in:
 
 This versioning scheme applies since version the release of apps v1.1.0 and libs v0.47.0. The `CONSENSUS` version in these versions is considered to be `0`.
 
+Starting from CONSENSUS version `1`, the version number is written in `CONSENSUS_VERSION` file in the root of this repository and made available via `namada_core::consensus_version` (re-exported in `namada_sdk`).
+
 ## `CONSENSUS` and `MAJOR` version resetting
 
 In SemVer, when `MAJOR` is bumped, `MINOR` and `PATCH` are reset to `0` and when `MINOR` is bumped `PATCH` is reset to `0`. Note that however on `CONSENSUS` changes we DO NOT reset `MAJOR` version to preserve continuity of API evolution - as mentioned earlier a `CONSENSUS` change may not necessitate `MAJOR` API changes. `MINOR` and `PATCH` versions are still reset to `0` on `CONSENSUS` change.
