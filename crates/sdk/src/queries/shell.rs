@@ -24,6 +24,7 @@ use namada_storage::{ResultExt, StorageRead};
 use namada_token::masp::MaspTokenRewardData;
 use namada_token::storage_key::masp_token_map_key;
 use namada_tx::data::DryRunResult;
+use namada_tx::event::types::APPLIED;
 
 use self::eth_bridge::{ETH_BRIDGE, EthBridge};
 use crate::borsh::BorshSerializeExt;
@@ -34,6 +35,7 @@ use crate::ibc::core::host::types::identifiers::{
 };
 use crate::queries::types::{RequestCtx, RequestQuery};
 use crate::queries::{EncodedResponseQuery, require_latest_height};
+use crate::rpc::TxAppliedEvents;
 use crate::tendermint::merkle::proof::ProofOps;
 
 type ConversionWithoutPath = (
@@ -105,7 +107,7 @@ router! {SHELL,
     ( "results" ) -> Vec<BlockResults> = read_results,
 
     // was the transaction applied?
-    ( "applied" / [tx_hash: Hash] ) -> Option<Event> = applied,
+    ( "applied" / [tx_hash: Hash] ) -> Option<TxAppliedEvents> = applied,
 
     // Query account subspace
     ( "account" / [owner: Address] ) -> Option<Account> = account,
@@ -574,13 +576,32 @@ where
 fn applied<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     tx_hash: Hash,
-) -> namada_storage::Result<Option<Event>>
+) -> namada_storage::Result<Option<TxAppliedEvents>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let matcher = dumb_queries::QueryMatcher::applied(tx_hash);
-    Ok(ctx.event_log.with_matcher(matcher).iter().next().cloned())
+    // Match all the events carrying the provided tx hash
+    let matcher_tx_events = dumb_queries::QueryMatcher::tx_events(tx_hash);
+    let mut tx_events: Vec<Event> = ctx
+        .event_log
+        .with_matcher(matcher_tx_events)
+        .iter()
+        .cloned()
+        .collect();
+
+    Ok(tx_events
+        .iter()
+        .position(|event| event.kind() == &APPLIED)
+        .map(|applied_event_pos| {
+            // Reorganize the events for the output
+            let tx_applied_event = tx_events.swap_remove(applied_event_pos);
+
+            TxAppliedEvents {
+                applied: tx_applied_event,
+                other: tx_events,
+            }
+        }))
 }
 
 fn ibc_client_update<D, H, V, T>(
