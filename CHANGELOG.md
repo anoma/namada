@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v101.0.0
+
+Namada apps v101.0.0 consensus breaking release.
+
+### MISCELLANEOUS
+
+- Updated Namada libraries to lib-v0.149.0
+  ([\#4536](https://github.com/anoma/namada/pull/4536))
+
 ## v1.1.4
 
 Namada apps v1.1.4 patch release
