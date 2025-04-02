@@ -7,7 +7,7 @@ use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::ControlFlow;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::BorshDeserialize;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
@@ -29,7 +29,6 @@ use namada_core::token::{
     Amount, DenominatedAmount, Denomination, MaspDigitPos,
 };
 use namada_core::{storage, token};
-use namada_events::extend::InnerTxHash;
 use namada_gas::WholeGas;
 use namada_gas::event::GasUsed as GasUsedAttr;
 use namada_governance::parameters::GovernanceParameters;
@@ -94,7 +93,7 @@ pub async fn query_tx_status2<C, IO>(
     io: &IO,
     status: TxEventQuery<'_>,
     deadline: time::Instant,
-) -> Result<TxAppliedEvents, Error>
+) -> Result<Event, Error>
 where
     C: namada_io::Client + Sync,
     IO: Io + crate::MaybeSend + crate::MaybeSync,
@@ -152,7 +151,7 @@ pub async fn query_tx_status(
     context: &impl Namada,
     status: TxEventQuery<'_>,
     deadline: time::Instant,
-) -> Result<TxAppliedEvents, Error> {
+) -> Result<Event, Error> {
     query_tx_status2(context.client(), context.io(), status, deadline).await
 }
 
@@ -585,11 +584,12 @@ impl<'a> From<TxEventQuery<'a>> for Query {
 pub async fn query_tx_events<C: namada_io::Client + Sync>(
     client: &C,
     tx_event_query: TxEventQuery<'_>,
-) -> std::result::Result<Option<TxAppliedEvents>, <C as namada_io::Client>::Error>
-{
+) -> std::result::Result<Option<Event>, <C as namada_io::Client>::Error> {
     let tx_hash: Hash = tx_event_query.tx_hash().try_into().unwrap();
     match tx_event_query {
-        TxEventQuery::Applied(_) => RPC.shell().applied(client, &tx_hash).await,
+        TxEventQuery::Applied(_) => RPC.shell().applied(client, &tx_hash).await, /* .wrap_err_with(|| {
+                                                                                  * eyre!("Error querying whether a transaction was applied")
+                                                                                  * }) */
     }
 }
 
@@ -677,16 +677,6 @@ pub enum TxBroadcastData {
     },
 }
 
-/// The events for an applied transaction
-#[derive(Debug, BorshDeserialize, BorshSerialize)]
-pub struct TxAppliedEvents {
-    /// The applied tx event
-    pub applied: Event,
-    /// All the other events associated with this transaction (transfers, ibc,
-    /// masp, ...)
-    pub other: Vec<Event>,
-}
-
 /// A parsed event from tendermint relating to a transaction
 #[derive(Debug, Serialize)]
 pub struct TxResponse {
@@ -717,54 +707,29 @@ pub enum InnerTxResult<'a> {
     OtherFailure(String),
 }
 
-impl TryFrom<TxAppliedEvents> for TxResponse {
+impl TryFrom<Event> for TxResponse {
     type Error = String;
 
-    fn try_from(
-        TxAppliedEvents {
-            applied: applied_event,
-            other: other_events,
-        }: TxAppliedEvents,
-    ) -> Result<Self, Self::Error> {
-        let mut batch = applied_event.read_attribute::<BatchAttr<'_>>().ok();
-        let hash = applied_event
+    fn try_from(event: Event) -> Result<Self, Self::Error> {
+        let batch = event.read_attribute::<BatchAttr<'_>>().ok();
+        let hash = event
             .read_attribute::<extend::TxHash>()
             .map_err(|err| err.to_string())?;
-        let info = applied_event
+        let info = event
             .read_attribute::<extend::Info>()
             .map_err(|err| err.to_string())?;
-        let log = applied_event
+        let log = event
             .read_attribute::<extend::Log>()
             .map_err(|err| err.to_string())?;
-        let height = applied_event
+        let height = event
             .read_attribute::<extend::Height>()
             .map_err(|err| err.to_string())?;
-        let code = applied_event
+        let code = event
             .read_attribute::<CodeAttr>()
             .map_err(|err| err.to_string())?;
-        let gas_used = applied_event
+        let gas_used = event
             .read_attribute::<GasUsedAttr>()
             .map_err(|err| err.to_string())?;
-
-        // Reconstruct the inner txs' events
-        if let Some(batch) = &mut batch {
-            for event in other_events {
-                let inner_tx_hash = event
-                    .read_attribute::<InnerTxHash>()
-                    .map_err(|e| e.to_string())?;
-                let inner_tx_result =
-                    batch.get_mut(&inner_tx_hash).ok_or_else(|| {
-                        format!(
-                            "Missing result of inner transaction {}",
-                            inner_tx_hash
-                        )
-                    })?;
-
-                if let Ok(result) = inner_tx_result {
-                    result.events.insert(event);
-                }
-            }
-        }
 
         Ok(TxResponse {
             batch,
@@ -779,9 +744,9 @@ impl TryFrom<TxAppliedEvents> for TxResponse {
 }
 
 impl TxResponse {
-    /// Convert a [`TxAppliedEvents`] to a [`TxResponse`], or error out.
-    pub fn from_events(applied_events: TxAppliedEvents) -> Self {
-        applied_events.try_into().unwrap_or_else(|err| {
+    /// Convert an [`Event`] to a [`TxResponse`], or error out.
+    pub fn from_event(event: Event) -> Self {
+        event.try_into().unwrap_or_else(|err| {
             panic!("Error fetching TxResponse: {err}");
         })
     }

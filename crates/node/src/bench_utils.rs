@@ -12,7 +12,6 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Once, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use either::Either;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::Transaction;
@@ -31,7 +30,7 @@ use namada_sdk::borsh::{
 use namada_sdk::chain::testing::get_dummy_header;
 use namada_sdk::chain::{BlockHeight, ChainId, Epoch};
 use namada_sdk::events::Event;
-use namada_sdk::events::extend::{ComposeEvent, InnerTxHash, TxHash};
+use namada_sdk::events::extend::ComposeEvent;
 use namada_sdk::gas::TxGasMeter;
 use namada_sdk::governance::storage::proposal::ProposalType;
 use namada_sdk::governance::{self, InitProposalData};
@@ -91,9 +90,7 @@ use namada_sdk::storage::{Key, KeySeg, TxIndex};
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::{self, Amount, DenominatedAmount, Transfer};
 use namada_sdk::tx::data::pos::Bond;
-use namada_sdk::tx::data::{
-    BatchedTxResult, Fee, TxResult, VpsResult, compute_inner_tx_hash,
-};
+use namada_sdk::tx::data::{BatchedTxResult, Fee, TxResult, VpsResult};
 use namada_sdk::tx::event::{Batch, MaspEvent, MaspTxRef, new_tx_event};
 use namada_sdk::tx::{
     Authorization, BatchedTx, BatchedTxRef, Code, Data, IndexedTx, Section, Tx,
@@ -1068,10 +1065,6 @@ impl Client for BenchShell {
                     }
                 });
 
-                let first_inner_tx_hash = compute_inner_tx_hash(
-                    tx.wrapper_hash().as_ref(),
-                    Either::Right(tx.first_commitments().unwrap()),
-                );
                 let masp_event = masp_ref.map(|data| {
                     let masp_event: Event = MaspEvent {
                         tx_index: IndexedTx {
@@ -1084,8 +1077,6 @@ impl Client for BenchShell {
                         kind: namada_sdk::tx::event::MaspEventKind::Transfer,
                         data,
                     }
-                    .with(TxHash(tx.header_hash()))
-                    .with(InnerTxHash(first_inner_tx_hash))
                     .into();
                     masp_event
                 });
