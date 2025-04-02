@@ -44,6 +44,7 @@ use namada_core::key::{self, *};
 use namada_core::masp::{AssetData, MaspEpoch, TransferSource, TransferTarget};
 use namada_core::storage;
 use namada_core::time::DateTimeUtc;
+use namada_events::extend::EventAttributeEntry;
 use namada_governance::cli::onchain::{
     DefaultProposal, OnChainProposal, PgfFundingProposal, PgfStewardProposal,
 };
@@ -91,7 +92,7 @@ use crate::signing::{
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::wallet::WalletIo;
-use crate::{Namada, args};
+use crate::{Namada, args, events};
 
 /// Initialize account transaction WASM
 pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
@@ -161,8 +162,9 @@ pub enum ProcessTxResponse {
 }
 
 impl ProcessTxResponse {
-    /// Returns a `TxResult` if the transaction was applied and accepted by
-    /// all VPs. Note that this always returns false for dry-run transactions.
+    /// Returns a `BatchedTxResult` if the transaction was applied and accepted
+    /// by all VPs. Note that this always returns false for dry-run
+    /// transactions.
     pub fn is_applied_and_valid(
         &self,
         wrapper_hash: Option<&Hash>,
@@ -430,8 +432,8 @@ pub async fn submit_tx(
 
     // The transaction is now on chain. We wait for it to be applied
     let tx_query = rpc::TxEventQuery::Applied(tx_hash.as_str());
-    let event = rpc::query_tx_status(context, tx_query, deadline).await?;
-    let response = TxResponse::from_event(event);
+    let tx_events = rpc::query_tx_status(context, tx_query, deadline).await?;
+    let response = TxResponse::from_events(tx_events);
     display_batch_resp(context, &response);
     Ok(response)
 }
@@ -510,7 +512,15 @@ pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
                             event.level(),
                             event.kind(),
                         );
-                        for (k, v) in event.into_attributes() {
+                        for (k, v) in
+                            event.into_attributes().iter().filter(|(k, _v)| {
+                                // Filter out data that's already displayed
+                                // above
+                                *k != events::extend::TxHash::KEY
+                                    && *k != events::extend::Height::KEY
+                                    && *k != events::extend::InnerTxHash::KEY
+                            })
+                        {
                             display_line!(context.io(), "{:4} - {k}: {v}", "")
                         }
                     }
