@@ -1,7 +1,5 @@
 //! Helper functions and types
-use std::cmp::Ordering;
 use std::collections::BTreeMap;
-use std::ops::{Bound, RangeBounds};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::memo::MemoBytes;
@@ -10,166 +8,16 @@ use masp_primitives::sapling::{Node, Note, PaymentAddress, ViewingKey};
 use masp_primitives::transaction::Transaction;
 use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
-use namada_state::TxIndex;
-use namada_tx::IndexedTx;
-use namada_tx::event::MaspEventKind;
-use serde::{Deserialize, Serialize};
-
-/// The type of a MASP transaction
-#[derive(
-    Debug,
-    Default,
-    Clone,
-    Copy,
-    BorshSerialize,
-    BorshDeserialize,
-    PartialOrd,
-    PartialEq,
-    Eq,
-    Ord,
-    Serialize,
-    Deserialize,
-    Hash,
-)]
-pub enum MaspTxKind {
-    /// A MASP transaction used for fee payment
-    FeePayment,
-    /// A general MASP transfer
-    #[default]
-    Transfer,
-}
-
-impl From<MaspEventKind> for MaspTxKind {
-    fn from(value: MaspEventKind) -> Self {
-        match value {
-            MaspEventKind::FeePayment => Self::FeePayment,
-            MaspEventKind::Transfer => Self::Transfer,
-        }
-    }
-}
-
-/// An indexed masp tx carrying information on whether it was a fee paying tx or
-/// a normal transfer
-#[derive(
-    Debug,
-    Default,
-    Clone,
-    Copy,
-    BorshSerialize,
-    BorshDeserialize,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-    Hash,
-)]
-pub struct MaspIndexedTx {
-    /// The masp tx kind, fee-payment or transfer
-    pub kind: MaspTxKind,
-    /// The pointer to the inner tx carrying this masp tx
-    pub indexed_tx: IndexedTx,
-}
-
-impl Ord for MaspIndexedTx {
-    fn cmp(&self, other: &Self) -> Ordering {
-        // If txs are in different blocks we just have to compare their block
-        // heights. If instead txs are in the same block, masp fee paying txs
-        // take precedence over transfer masp txs. After that we sort them based
-        // on their indexes
-        self.indexed_tx
-            .block_height
-            .cmp(&other.indexed_tx.block_height)
-            .then(
-                self.kind
-                    .cmp(&other.kind)
-                    .then(self.indexed_tx.cmp(&other.indexed_tx)),
-            )
-    }
-}
-
-impl PartialOrd for MaspIndexedTx {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-/// Inclusive range of [`MaspIndexedTx`] entries.
-pub struct MaspIndexedTxRange {
-    lo: MaspIndexedTx,
-    hi: MaspIndexedTx,
-}
-
-impl MaspIndexedTxRange {
-    /// Create a new [`MaspIndexedTxRange`].
-    pub const fn new(lo: MaspIndexedTx, hi: MaspIndexedTx) -> Self {
-        Self { lo, hi }
-    }
-
-    /// Create a new [`MaspIndexedTxRange`] over a range of [block
-    /// heights](BlockHeight).
-    pub const fn between_heights(from: BlockHeight, to: BlockHeight) -> Self {
-        Self::new(
-            MaspIndexedTx {
-                kind: MaspTxKind::FeePayment,
-                indexed_tx: IndexedTx {
-                    block_height: from,
-                    block_index: TxIndex(0),
-                    batch_index: None,
-                },
-            },
-            MaspIndexedTx {
-                kind: MaspTxKind::Transfer,
-                indexed_tx: IndexedTx {
-                    block_height: to,
-                    block_index: TxIndex(u32::MAX),
-                    batch_index: Some(u32::MAX),
-                },
-            },
-        )
-    }
-
-    /// Create a new [`MaspIndexedTxRange`] over a given [`BlockHeight`].
-    pub const fn with_height(height: BlockHeight) -> Self {
-        Self::between_heights(height, height)
-    }
-
-    /// The start of the range.
-    pub const fn start(&self) -> MaspIndexedTx {
-        self.lo
-    }
-
-    /// The end of the range.
-    pub const fn end(&self) -> MaspIndexedTx {
-        self.hi
-    }
-}
-
-impl RangeBounds<MaspIndexedTx> for MaspIndexedTxRange {
-    fn start_bound(&self) -> Bound<&MaspIndexedTx> {
-        Bound::Included(&self.lo)
-    }
-
-    fn end_bound(&self) -> Bound<&MaspIndexedTx> {
-        Bound::Included(&self.hi)
-    }
-
-    fn contains<U>(&self, item: &U) -> bool
-    where
-        MaspIndexedTx: PartialOrd<U>,
-        U: PartialOrd<MaspIndexedTx> + ?Sized,
-    {
-        *item >= self.lo && *item <= self.hi
-    }
-}
+use namada_tx::{IndexedTx, IndexedTxRange};
 
 /// Type alias for convenience and profit
-pub type IndexedNoteData = BTreeMap<MaspIndexedTx, Transaction>;
+pub type IndexedNoteData = BTreeMap<IndexedTx, Transaction>;
 
 /// Type alias for the entries of [`IndexedNoteData`] iterators
-pub type IndexedNoteEntry = (MaspIndexedTx, Transaction);
+pub type IndexedNoteEntry = (IndexedTx, Transaction);
 
 /// Borrowed version of an [`IndexedNoteEntry`]
-pub type IndexedNoteEntryRefs<'a> = (&'a MaspIndexedTx, &'a Transaction);
+pub type IndexedNoteEntryRefs<'a> = (&'a IndexedTx, &'a Transaction);
 
 /// Type alias for a successful note decryption.
 pub type DecryptedData = (Note, PaymentAddress, MemoBytes);
@@ -177,10 +25,8 @@ pub type DecryptedData = (Note, PaymentAddress, MemoBytes);
 /// Cache of decrypted notes.
 #[derive(Default, BorshSerialize, BorshDeserialize)]
 pub struct TrialDecrypted {
-    inner: HashMap<
-        MaspIndexedTx,
-        HashMap<ViewingKey, BTreeMap<usize, DecryptedData>>,
-    >,
+    inner:
+        HashMap<IndexedTx, HashMap<ViewingKey, BTreeMap<usize, DecryptedData>>>,
 }
 
 impl TrialDecrypted {
@@ -193,10 +39,30 @@ impl TrialDecrypted {
             .sum::<usize>()
     }
 
+    /// Update the transaction indices according to the given map. If a key is
+    /// not found, then return it.
+    pub fn reindex(
+        &mut self,
+        key_map: &BTreeMap<IndexedTx, IndexedTx>,
+    ) -> Option<IndexedTx> {
+        let mut value_map = HashMap::new();
+        // First grab all the values we need to make sure that we do not
+        // accidentally overwrite
+        for (old, new) in key_map {
+            if let Some(value) = self.inner.swap_remove(old) {
+                value_map.insert(*new, value);
+            } else {
+                return Some(*old);
+            }
+        }
+        self.inner.extend(value_map);
+        None
+    }
+
     /// Get cached notes decrypted with `vk`, indexed at `itx`.
     pub fn get(
         &self,
-        itx: &MaspIndexedTx,
+        itx: &IndexedTx,
         vk: &ViewingKey,
     ) -> Option<&BTreeMap<usize, DecryptedData>> {
         self.inner.get(itx).and_then(|h| h.get(vk))
@@ -205,7 +71,7 @@ impl TrialDecrypted {
     /// Take cached notes decrypted with `vk`, indexed at `itx`.
     pub fn take(
         &mut self,
-        itx: &MaspIndexedTx,
+        itx: &IndexedTx,
         vk: &ViewingKey,
     ) -> Option<BTreeMap<usize, DecryptedData>> {
         let (notes, no_more_notes) = {
@@ -222,7 +88,7 @@ impl TrialDecrypted {
     /// Cache `notes` decrypted with `vk`, indexed at `itx`.
     pub fn insert(
         &mut self,
-        itx: MaspIndexedTx,
+        itx: IndexedTx,
         vk: ViewingKey,
         notes: BTreeMap<usize, DecryptedData>,
     ) {
@@ -278,7 +144,7 @@ impl Fetched {
     /// block height.
     pub fn contains_height(&self, height: BlockHeight) -> bool {
         self.txs
-            .range(MaspIndexedTxRange::with_height(height))
+            .range(IndexedTxRange::with_height(height))
             .next()
             .is_some()
     }
@@ -408,7 +274,7 @@ pub trait MaspClient: Clone {
     async fn fetch_note_index(
         &self,
         height: BlockHeight,
-    ) -> Result<BTreeMap<MaspIndexedTx, usize>, Self::Error>;
+    ) -> Result<BTreeMap<IndexedTx, usize>, Self::Error>;
 
     /// Fetch the witness map of height `height`.
     #[allow(async_fn_in_trait)]
@@ -501,13 +367,11 @@ mod test_blocks_left_to_fetch {
             .into_iter()
             .map(|height| {
                 (
-                    MaspIndexedTx {
-                        indexed_tx: IndexedTx {
-                            block_height: height,
-                            block_index: TxIndex(0),
-                            batch_index: None,
-                        },
-                        kind: MaspTxKind::Transfer,
+                    IndexedTx {
+                        block_height: height,
+                        masp_index: 0,
+                        block_index: TxIndex(0),
+                        batch_index: None,
                     },
                     masp_tx.clone(),
                 )
@@ -706,71 +570,5 @@ mod test_blocks_left_to_fetch {
             fetched_cache_with_blocks(blocks_in_range(1.into(), 5.into()));
         let blocks_to_fetch = blocks_left_to_fetch(2.into(), 4.into(), &cache);
         assert!(blocks_to_fetch.is_empty());
-    }
-
-    #[test]
-    fn test_sort_indexed_masp_events() {
-        let ev1 = MaspIndexedTx {
-            kind: MaspTxKind::FeePayment,
-            indexed_tx: IndexedTx {
-                block_height: BlockHeight(1),
-                block_index: TxIndex(2),
-                batch_index: Some(0),
-            },
-        };
-        let ev2 = MaspIndexedTx {
-            kind: MaspTxKind::Transfer,
-            indexed_tx: IndexedTx {
-                block_height: BlockHeight(2),
-                block_index: TxIndex(0),
-                batch_index: Some(0),
-            },
-        };
-        let ev3 = MaspIndexedTx {
-            kind: MaspTxKind::Transfer,
-            indexed_tx: IndexedTx {
-                block_height: BlockHeight(3),
-                block_index: TxIndex(1),
-                batch_index: Some(1),
-            },
-        };
-        let ev4 = MaspIndexedTx {
-            kind: MaspTxKind::FeePayment,
-            indexed_tx: IndexedTx {
-                block_height: BlockHeight(3),
-                block_index: TxIndex(3),
-                batch_index: Some(2),
-            },
-        };
-        let ev5 = MaspIndexedTx {
-            kind: MaspTxKind::FeePayment,
-            indexed_tx: IndexedTx {
-                block_height: BlockHeight(3),
-                block_index: TxIndex(2),
-                batch_index: Some(0),
-            },
-        };
-        let ev6 = MaspIndexedTx {
-            kind: MaspTxKind::Transfer,
-            indexed_tx: IndexedTx {
-                block_height: BlockHeight(1),
-                block_index: TxIndex(1),
-                batch_index: Some(1),
-            },
-        };
-        let ev7 = MaspIndexedTx {
-            kind: MaspTxKind::Transfer,
-            indexed_tx: IndexedTx {
-                block_height: BlockHeight(1),
-                block_index: TxIndex(1),
-                batch_index: Some(0),
-            },
-        };
-
-        let mut txs = [ev1, ev2, ev3, ev4, ev5, ev6, ev7];
-
-        txs.sort();
-
-        assert_eq!(txs, [ev1, ev7, ev6, ev2, ev5, ev4, ev3])
     }
 }

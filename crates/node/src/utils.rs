@@ -189,7 +189,7 @@ pub fn dry_run_proposal(
 
     let gas_scale = parameters::get_gas_scale(&state)
         .expect("Failed to get gas scale from parameters");
-    let height = state.in_mem().get_last_block_height();
+    let _height = state.in_mem().get_last_block_height();
 
     let mut tx = Tx::from_type(TxType::Raw);
     tx.header.chain_id = chain_id.clone();
@@ -210,7 +210,6 @@ pub fn dry_run_proposal(
             wrapper_tx_result: None,
             vp_wasm_cache: &mut vp_wasm_cache,
             tx_wasm_cache: &mut tx_wasm_cache,
-            height,
         },
         // No gas limit for governance proposal
         &RefCell::new(TxGasMeter::new(u64::MAX, gas_scale)),
@@ -221,6 +220,7 @@ pub fn dry_run_proposal(
     let cmt = tx.first_commitments().unwrap().to_owned();
     match dispatch_result {
         Ok(tx_result) => match tx_result
+            .tx_result
             .get_inner_tx_result(None, either::Right(&cmt))
             .expect("Proposal tx must have a result")
         {

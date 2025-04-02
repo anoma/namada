@@ -9,6 +9,9 @@ use namada_core::address::Address;
 use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
 use namada_core::hash::Hash;
+use namada_core::ibc::IbcTxDataHash;
+use namada_core::masp::MaspTxId;
+use namada_core::storage::TxIndex;
 use serde::Deserializer;
 
 use super::*;
@@ -543,6 +546,60 @@ impl EventAttributeEntry<'static> for Info {
     type ValueOwned = Self::Value;
 
     const KEY: &'static str = "info";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// A type representing the possible reference to some MASP data, either a masp
+/// section or ibc tx data
+#[derive(Clone, Serialize, Deserialize)]
+pub enum MaspTxRef {
+    /// Reference to a MASP section
+    MaspSection(MaspTxId),
+    /// Reference to an ibc tx data section
+    IbcData(IbcTxDataHash),
+}
+
+/// A list of MASP tx references
+#[derive(Default, Clone, Serialize, Deserialize)]
+pub struct MaspTxRefs(pub Vec<MaspTxRef>);
+
+/// A mapping between the index of a transaction in a block and the set of
+/// associated masp data
+#[derive(Clone, Serialize, Deserialize)]
+pub struct IndexedMaspData {
+    /// The transaction index in the block
+    pub tx_index: TxIndex,
+    /// The set of masp data
+    pub masp_refs: MaspTxRefs,
+}
+
+impl Display for IndexedMaspData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", serde_json::to_string(self).unwrap())
+    }
+}
+
+impl FromStr for IndexedMaspData {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
+    }
+}
+
+/// Extend an [`Event`] with `masp_data_refs` data, mapping a transaction
+/// index in the block to a collection of either the MASP sections or the data
+/// sections for shielded actions.
+pub struct MaspDataRefs(pub IndexedMaspData);
+
+impl EventAttributeEntry<'static> for MaspDataRefs {
+    type Value = IndexedMaspData;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "masp_data_refs";
 
     fn into_value(self) -> Self::Value {
         self.0
