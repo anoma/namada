@@ -19,10 +19,9 @@ use namada_core::borsh::BorshSerializeExt;
 use namada_core::dec::Dec;
 #[cfg(any(feature = "multicore", test))]
 use namada_core::hash::Hash;
+use namada_core::masp::Precision;
 #[cfg(any(feature = "multicore", test))]
-use namada_core::masp::MaspEpoch;
-#[cfg(any(feature = "multicore", test))]
-use namada_core::masp::encode_asset_type;
+use namada_core::masp::{MaspEpoch, encode_asset_type};
 #[cfg(any(feature = "multicore", test))]
 use namada_core::token::MaspDigitPos;
 use namada_core::token::{Amount, DenominatedAmount, Denomination};
@@ -33,8 +32,9 @@ use namada_systems::{parameters, trans_token};
 
 #[cfg(any(feature = "multicore", test))]
 use crate::storage_key::{
-    is_masp_conversion_key, masp_assets_hash_key, masp_conversion_key_prefix,
-    masp_token_map_key,
+    is_masp_conversion_key, is_masp_scheduled_reward_precision_key,
+    masp_assets_hash_key, masp_conversion_key_prefix,
+    masp_scheduled_reward_precision_key_prefix, masp_token_map_key,
 };
 use crate::storage_key::{
     masp_kd_gain_key, masp_kp_gain_key, masp_last_inflation_key,
@@ -89,7 +89,7 @@ pub fn compute_inflation(
 pub fn calculate_masp_rewards_precision<S, TransToken>(
     storage: &mut S,
     addr: &Address,
-) -> Result<(u128, Denomination)>
+) -> Result<(Precision, Denomination)>
 where
     S: StorageWrite + StorageRead,
     TransToken: trans_token::Keys + trans_token::Read<S>,
@@ -108,9 +108,9 @@ where
     // Key to read/write reward precision from
     let reward_precision_key = masp_reward_precision_key::<TransToken>(addr);
     // Now read the desired reward precision for this token address
-    let reward_precision: u128 =
+    let reward_precision: Precision =
         storage.read(&reward_precision_key)?.map_or_else(
-            || -> Result<u128> {
+            || -> Result<Precision> {
                 // Since reading reward precision has failed, choose a
                 // thousandth of the given token. But clamp the precision above
                 // by 10^38, the maximum power of 10 that can be contained by a
@@ -160,9 +160,9 @@ pub fn calculate_masp_rewards<S, TransToken>(
     storage: &mut S,
     token: &Address,
     denomination: Denomination,
-    precision: u128,
+    precision: Precision,
     masp_epochs_per_year: u64,
-) -> Result<(u128, u128)>
+) -> Result<(u128, Precision)>
 where
     S: StorageWrite + StorageRead,
     TransToken: trans_token::Keys + trans_token::Read<S>,
@@ -524,11 +524,42 @@ where
 #[cfg(any(feature = "multicore", test))]
 /// Apply the conversion updates that are in storage to the in memory structure
 /// and delete them.
-fn apply_stored_conversion_updates<S>(storage: &mut S) -> Result<()>
+fn apply_stored_conversion_updates<S, TransToken>(
+    storage: &mut S,
+    ep: &MaspEpoch,
+) -> Result<()>
 where
     S: StorageWrite + StorageRead + WithConversionState,
+    TransToken:
+        trans_token::Keys + trans_token::Read<S> + trans_token::Write<S>,
 {
-    let conversion_key_prefix = masp_conversion_key_prefix();
+    let scheduled_reward_precision_key_prefix =
+        masp_scheduled_reward_precision_key_prefix(ep);
+    let mut precision_updates = BTreeMap::<_, Precision>::new();
+    // Read scheduled precisions from storage and store them in a map
+    for prec_result in iter_prefix_with_filter_map(
+        storage,
+        &scheduled_reward_precision_key_prefix,
+        is_masp_scheduled_reward_precision_key,
+    )? {
+        match prec_result {
+            Ok(((_ep, addr), precision)) => {
+                precision_updates.insert(addr, precision);
+            }
+            Err(err) => {
+                tracing::warn!("Encountered malformed precision: {}", err);
+                continue;
+            }
+        }
+    }
+    // Apply the precision updates to storage
+    for (addr, precision) in precision_updates {
+        // Key to read/write reward precision from
+        let reward_precision_key =
+            masp_reward_precision_key::<TransToken>(&addr);
+        storage.write(&reward_precision_key, precision)?;
+    }
+    let conversion_key_prefix = masp_conversion_key_prefix(ep);
     let mut conversion_updates =
         BTreeMap::<_, UncheckedAllowedConversion>::new();
     // Read conversion updates from storage and store them in a map
@@ -538,7 +569,7 @@ where
         is_masp_conversion_key,
     )? {
         match conv_result {
-            Ok((asset_type, conv)) => {
+            Ok(((_ep, asset_type), conv)) => {
                 conversion_updates.insert(asset_type, conv);
             }
             Err(err) => {
@@ -561,6 +592,7 @@ where
     }
     // Delete the updates now that they have been applied
     storage.delete_prefix(&conversion_key_prefix)?;
+    storage.delete_prefix(&scheduled_reward_precision_key_prefix)?;
     Ok(())
 }
 
@@ -590,7 +622,20 @@ where
 
     use crate::mint_rewards;
 
-    apply_stored_conversion_updates(storage)?;
+    // Get the previous MASP epoch if there's any
+    let masp_epoch_multiplier = Params::masp_epoch_multiplier(storage)?;
+    let masp_epoch = MaspEpoch::try_from_epoch(
+        storage.get_block_epoch()?,
+        masp_epoch_multiplier,
+    )
+    .map_err(Error::new_const)?;
+    let Some(prev_masp_epoch) = masp_epoch.prev() else {
+        return Ok(());
+    };
+    apply_stored_conversion_updates::<_, TransToken>(
+        storage,
+        &prev_masp_epoch,
+    )?;
     let token_map_key = masp_token_map_key();
     let token_map: namada_core::masp::TokenMap =
         storage.read(&token_map_key)?.unwrap_or_default();
@@ -631,15 +676,6 @@ where
         .get_or_insert(ref_inflation);
 
     // Reward all tokens according to above reward rates
-    let masp_epoch_multiplier = Params::masp_epoch_multiplier(storage)?;
-    let masp_epoch = MaspEpoch::try_from_epoch(
-        storage.get_block_epoch()?,
-        masp_epoch_multiplier,
-    )
-    .map_err(Error::new_const)?;
-    if masp_epoch.prev().is_none() {
-        return Ok(());
-    }
     let epochs_per_year = Params::epochs_per_year(storage)?;
     let masp_epochs_per_year =
         checked!(epochs_per_year / masp_epoch_multiplier)?;

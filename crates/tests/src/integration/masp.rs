@@ -11,7 +11,7 @@ use namada_apps_lib::wallet::defaults::{
 };
 use namada_core::address::Address;
 use namada_core::dec::Dec;
-use namada_core::masp::{MaspTxId, TokenMap, encode_asset_type};
+use namada_core::masp::{MaspTxId, Precision, TokenMap, encode_asset_type};
 use namada_node::shell::testing::client::run;
 use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
@@ -21,7 +21,8 @@ use namada_sdk::signing::SigningTxData;
 use namada_sdk::state::{StorageRead, StorageWrite};
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::storage_key::{
-    masp_conversion_key, masp_reward_precision_key, masp_token_map_key,
+    masp_conversion_key, masp_reward_precision_key,
+    masp_scheduled_reward_precision_key, masp_token_map_key,
 };
 use namada_sdk::token::{self, Amount, DenominatedAmount, MaspEpoch};
 use namada_sdk::tx::{Section, Tx};
@@ -2077,7 +2078,7 @@ fn reset_conversions() -> Result<()> {
             .expect("unable to read token denomination");
 
     // Erase the BTC rewards that have been distributed so far
-    const PRECISION: i128 = 100000;
+    const PRECISION: i128 = 10000;
     let mut asset_types = BTreeMap::new();
     let mut precision_btcs = BTreeMap::new();
     let mut reward_deltas = BTreeMap::new();
@@ -2110,13 +2111,24 @@ fn reset_conversions() -> Result<()> {
             })
             .clone()
     };
+    let current_masp_epoch = node.current_masp_epoch();
+    // Write the scheduled precision update to memory
+    node.shell
+        .lock()
+        .unwrap()
+        .state
+        .write(
+            &masp_scheduled_reward_precision_key(&current_masp_epoch, btc_addr),
+            Precision::try_from(PRECISION).unwrap(),
+        )
+        .expect("unable to write scheduled precision update");
     // Write the new BTC conversions to memory
     for digit in token::MaspDigitPos::iter() {
         // -PRECISION BTC[ep, digit] + PRECISION BTC[current_ep, digit]
         let mut reward: AllowedConversion = I128Sum::zero().into();
         for epoch in MaspEpoch::iter_bounds_inclusive(
             MaspEpoch::zero(),
-            node.current_masp_epoch().prev().unwrap(),
+            current_masp_epoch.prev().unwrap(),
         )
         .rev()
         {
@@ -2134,7 +2146,10 @@ fn reset_conversions() -> Result<()> {
                 .lock()
                 .unwrap()
                 .state
-                .write(&masp_conversion_key(&asset_type), reward.clone())
+                .write(
+                    &masp_conversion_key(&current_masp_epoch, &asset_type),
+                    reward.clone(),
+                )
                 .expect("unable to write conversion update");
         }
     }
@@ -2179,7 +2194,7 @@ fn reset_conversions() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.188976"));
+    assert!(captured.contains("nam: 0.17272"));
 
     // Assert the rewards estimate are 0 since we haven't shielded any more
     // tokens
@@ -2197,11 +2212,9 @@ fn reset_conversions() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(
-        captured.contains(
-            "Estimated native token rewards for the next MASP epoch: 0"
-        )
-    );
+    assert!(captured.contains(
+        "Estimated native token rewards for the next MASP epoch: 0.174772"
+    ));
 
     // Assert NAM balance at MASP pool is exclusively the
     // rewards from the shielded BTC
@@ -2221,7 +2234,7 @@ fn reset_conversions() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.378968"));
+    assert!(captured.contains("nam: 0.362712"));
 
     Ok(())
 }
