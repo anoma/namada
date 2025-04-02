@@ -364,7 +364,7 @@ where
                             Either::Right(cmt),
                         );
                         if let Some(Ok(batched_result)) =
-                            tx_result.get_mut(&inner_tx_hash)
+                            tx_result.0.get_mut(&inner_tx_hash)
                         {
                             if batched_result.is_accepted() {
                                 // Take the events from the batch result to
