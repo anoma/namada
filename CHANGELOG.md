@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v101.0.0
+
+Namada apps v101.0.0 consensus breaking release.
+
 ## v1.1.4
 
 Namada apps v1.1.4 patch release
