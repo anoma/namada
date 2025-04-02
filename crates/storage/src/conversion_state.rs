@@ -37,7 +37,9 @@ pub struct ConversionLeaf {
 )]
 pub struct ConversionState {
     /// The last amount of the native token distributed
-    pub normed_inflation: Option<u128>,
+    #[deprecated = "Current native precision has been moved into the native \
+                    precision storage key."]
+    pub current_precision: Option<u128>,
     /// The tree currently containing all the conversions
     pub tree: FrozenCommitmentTree<SaplingNode>,
     /// Map assets to their latest conversion and position in Merkle tree

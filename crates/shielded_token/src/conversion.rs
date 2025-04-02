@@ -34,12 +34,14 @@ use namada_systems::{parameters, trans_token};
 use crate::storage_key::{
     is_masp_conversion_key, is_masp_scheduled_reward_precision_key,
     masp_assets_hash_key, masp_conversion_key_prefix,
+    masp_scheduled_base_native_precision_key,
     masp_scheduled_reward_precision_key_prefix, masp_token_map_key,
 };
 use crate::storage_key::{
-    masp_kd_gain_key, masp_kp_gain_key, masp_last_inflation_key,
-    masp_last_locked_amount_key, masp_locked_amount_target_key,
-    masp_max_reward_rate_key, masp_reward_precision_key,
+    masp_base_native_precision_key, masp_kd_gain_key, masp_kp_gain_key,
+    masp_last_inflation_key, masp_last_locked_amount_key,
+    masp_locked_amount_target_key, masp_max_reward_rate_key,
+    masp_reward_precision_key,
 };
 #[cfg(any(feature = "multicore", test))]
 use crate::{ConversionLeaf, Error, OptionExt, ResultExt};
@@ -84,19 +86,62 @@ pub fn compute_inflation(
         .expect("Inflation calculation overflow")
 }
 
+// Infer the precision of a token from its denomination
+#[deprecated = "Token precisions are now read from storage instead of being \
+                inferred from their denominations."]
+fn infer_token_precision<S, TransToken>(
+    storage: &mut S,
+    addr: &Address,
+) -> Result<Precision>
+where
+    S: StorageWrite + StorageRead + WithConversionState,
+    TransToken: trans_token::Read<S>,
+{
+    // Since reading reward precision has failed, choose a
+    // thousandth of the given token. But clamp the precision above
+    // by 10^38, the maximum power of 10 that can be contained by a
+    // u128.
+    let denomination = TransToken::read_denom(storage, addr)?
+        .expect("failed to read token denomination");
+    let precision_denom =
+        u32::from(denomination.0).saturating_sub(3).clamp(0, 38);
+    let reward_precision = checked!(10u128 ^ precision_denom)?;
+    Ok(reward_precision)
+}
+
+// Read the base native precision from storage. And if it is not initialized,
+// fall back to inferring it based on native denomination.
+fn read_base_native_precision<S, TransToken>(
+    storage: &mut S,
+    native_token: &Address,
+) -> Result<Precision>
+where
+    S: StorageWrite + StorageRead + WithConversionState,
+    TransToken: trans_token::Keys + trans_token::Read<S>,
+{
+    let base_native_precision_key = masp_base_native_precision_key();
+    storage.read(&base_native_precision_key)?.map_or_else(
+        || -> Result<Precision> {
+            #[allow(deprecated)]
+            let precision =
+                infer_token_precision::<_, TransToken>(storage, native_token)?;
+            storage.write(&base_native_precision_key, precision)?;
+            Ok(precision)
+        },
+        Ok,
+    )
+}
+
 /// Compute the precision of MASP rewards for the given token. This function
 /// must be a non-zero constant for a given token.
 pub fn calculate_masp_rewards_precision<S, TransToken>(
     storage: &mut S,
     addr: &Address,
-) -> Result<(Precision, Denomination)>
+) -> Result<Precision>
 where
-    S: StorageWrite + StorageRead,
+    S: StorageWrite + StorageRead + WithConversionState,
     TransToken: trans_token::Keys + trans_token::Read<S>,
 {
-    let denomination = TransToken::read_denom(storage, addr)?
-        .expect("failed to read token denomination");
-
     // Inflation is implicitly denominated by this value. The lower this
     // figure, the less precise inflation computations are. This is especially
     // problematic when inflation is coming from a token with much higher
@@ -111,25 +156,37 @@ where
     let reward_precision: Precision =
         storage.read(&reward_precision_key)?.map_or_else(
             || -> Result<Precision> {
-                // Since reading reward precision has failed, choose a
-                // thousandth of the given token. But clamp the precision above
-                // by 10^38, the maximum power of 10 that can be contained by a
-                // u128.
-                let precision_denom =
-                    u32::from(denomination.0).saturating_sub(3).clamp(0, 38);
-                let reward_precision = checked!(10u128 ^ precision_denom)?;
+                let native_token = storage.get_native_token()?;
+                #[allow(deprecated)]
+                let prec = match storage.conversion_state().current_precision {
+                    // If this is the native token, then the precision was
+                    // actually stored in the conversion state.
+                    Some(native_precision) if *addr == native_token => {
+                        native_precision
+                    }
+                    // If the current precision is not defined for the native
+                    // token, then attempt to get it from the base native
+                    // precision.
+                    None if *addr == native_token => {
+                        read_base_native_precision::<_, TransToken>(
+                            storage, addr,
+                        )?
+                    }
+                    // Otherwise default to inferring the precision from the
+                    // token denomination
+                    _ => infer_token_precision::<_, TransToken>(storage, addr)?,
+                };
                 // Record the precision that is now being used so that it does
-                // not have to be recomputed each time, and to
-                // ensure that this value is not accidentally
-                // changed even by a change to this initialization
-                // algorithm.
-                storage.write(&reward_precision_key, reward_precision)?;
-                Ok(reward_precision)
+                // not have to be recomputed each time, and to ensure that this
+                // value is not accidentally changed even by a change to this
+                // initialization algorithm.
+                storage.write(&reward_precision_key, prec)?;
+                Ok(prec)
             },
             Ok,
         )?;
 
-    Ok((reward_precision, denomination))
+    Ok(reward_precision)
 }
 
 /// Get the balance of the given token at the MASP address that is eligble to
@@ -306,7 +363,7 @@ where
 fn update_native_conversions<S, TransToken>(
     storage: &mut S,
     token: &Address,
-    normed_inflation: &mut u128,
+    current_precision: &mut u128,
     masp_epochs_per_year: u64,
     masp_epoch: MaspEpoch,
     current_convs: &mut BTreeMap<
@@ -327,25 +384,24 @@ where
         storage,
         token,
         denom,
-        *normed_inflation,
+        *current_precision,
         masp_epochs_per_year,
     )?;
     // The amount that will be given of the new native token for
     // every amount of the native token given in the
     // previous epoch
-    let inflation_uint = Uint::from(*normed_inflation);
+    let current_precision_uint = Uint::from(*current_precision);
     let reward = Uint::from(reward);
-    let new_normed_inflation = checked!(inflation_uint + reward)?;
-    let new_normed_inflation = u128::try_from(new_normed_inflation)
-        .unwrap_or_else(|_| {
-            tracing::warn!(
-                "MASP inflation for the native token {} is kept the same as \
-                 in the last epoch because the computed value is too large. \
-                 Please check the inflation parameters.",
-                token
-            );
-            *normed_inflation
-        });
+    let new_precision = checked!(current_precision_uint + reward)?;
+    let new_precision = u128::try_from(new_precision).unwrap_or_else(|_| {
+        tracing::warn!(
+            "MASP precision for the native token {} is kept the same as in \
+             the last epoch because the computed value is too large. Please \
+             check the inflation parameters.",
+            token
+        );
+        *current_precision
+    });
     for digit in MaspDigitPos::iter() {
         // Provide an allowed conversion from previous timestamp. The
         // negative sign allows each instance of the old asset to be
@@ -365,14 +421,14 @@ where
         // tokens cancel/telescope out
         let cur_conv = MaspAmount::from_pair(
             old_asset,
-            i128::try_from(*normed_inflation)
+            i128::try_from(*current_precision)
                 .ok()
                 .and_then(i128::checked_neg)
                 .ok_or_err_msg("Current inflation overflow")?,
         );
         let new_conv = MaspAmount::from_pair(
             new_asset,
-            i128::try_from(new_normed_inflation).into_storage_result()?,
+            i128::try_from(new_precision).into_storage_result()?,
         );
         current_convs.insert(
             (token.clone(), denom, digit),
@@ -393,17 +449,15 @@ where
     }
     // Note the fraction used to compute rewards from balance
     let reward_frac = (
-        new_normed_inflation
-            .checked_sub(*normed_inflation)
+        new_precision
+            .checked_sub(*current_precision)
             .unwrap_or_default(),
-        *normed_inflation,
+        *current_precision,
     );
-    // Save the new normed inflation
-    let _ = storage
-        .conversion_state_mut()
-        .normed_inflation
-        .insert(new_normed_inflation);
-    *normed_inflation = new_normed_inflation;
+    // Save the new native reward precision
+    let reward_precision_key = masp_reward_precision_key::<TransToken>(token);
+    storage.write(&reward_precision_key, new_precision)?;
+    *current_precision = new_precision;
     Ok((denom, reward_frac))
 }
 
@@ -415,8 +469,8 @@ where
 fn update_non_native_conversions<S, TransToken>(
     storage: &mut S,
     token: &Address,
-    ref_inflation: u128,
-    normed_inflation: u128,
+    base_native_precision: u128,
+    current_native_precision: u128,
     masp_epochs_per_year: u64,
     masp_epoch: MaspEpoch,
     reward_assets: [AssetType; 4],
@@ -433,7 +487,9 @@ where
 {
     let prev_masp_epoch =
         masp_epoch.prev().ok_or_err_msg("MASP epoch underflow")?;
-    let (precision, denom) =
+    let denom = TransToken::read_denom(storage, token)?
+        .expect("failed to read token denomination");
+    let precision =
         calculate_masp_rewards_precision::<S, TransToken>(storage, token)?;
     let (reward, precision) = calculate_masp_rewards::<S, TransToken>(
         storage,
@@ -445,20 +501,21 @@ where
     // Express the inflation reward in real terms, that is, with
     // respect to the native asset in the zeroth epoch
     let reward_uint = Uint::from(reward);
-    let ref_inflation_uint = Uint::from(ref_inflation);
-    let inflation_uint = Uint::from(normed_inflation);
-    let real_reward =
-        checked!((reward_uint * ref_inflation_uint) / inflation_uint)?
-            .try_into()
-            .unwrap_or_else(|_| {
-                tracing::warn!(
-                    "MASP reward for {} assumed to be 0 because the computed \
-                     value is too large. Please check the inflation \
-                     parameters.",
-                    token
-                );
-                0u128
-            });
+    let base_native_precision_uint = Uint::from(base_native_precision);
+    let current_native_precision_uint = Uint::from(current_native_precision);
+    let real_reward = checked!(
+        (reward_uint * base_native_precision_uint)
+            / current_native_precision_uint
+    )?
+    .try_into()
+    .unwrap_or_else(|_| {
+        tracing::warn!(
+            "MASP reward for {} assumed to be 0 because the computed value is \
+             too large. Please check the inflation parameters.",
+            token
+        );
+        0u128
+    });
     // The conversion is computed such that if consecutive
     // conversions are added together, the
     // intermediate tokens cancel/ telescope out
@@ -533,6 +590,14 @@ where
     TransToken:
         trans_token::Keys + trans_token::Read<S> + trans_token::Write<S>,
 {
+    // Read and apply any scheduled base native precisions
+    let scheduled_base_precision_key =
+        masp_scheduled_base_native_precision_key(ep);
+    if let Some(precision) = storage.read(&scheduled_base_precision_key)? {
+        let base_precision_key = masp_base_native_precision_key();
+        storage.write::<Precision>(&base_precision_key, precision)?;
+    }
+
     let scheduled_reward_precision_key_prefix =
         masp_scheduled_reward_precision_key_prefix(ep);
     let mut precision_updates = BTreeMap::<_, Precision>::new();
@@ -593,6 +658,7 @@ where
     // Delete the updates now that they have been applied
     storage.delete_prefix(&conversion_key_prefix)?;
     storage.delete_prefix(&scheduled_reward_precision_key_prefix)?;
+    storage.delete(&scheduled_base_precision_key)?;
     Ok(())
 }
 
@@ -663,17 +729,14 @@ where
         (Address, Denomination, MaspDigitPos),
         AllowedConversion,
     >::new();
-    // Native token inflation values are always with respect to this
-    let ref_inflation = calculate_masp_rewards_precision::<S, TransToken>(
-        storage,
-        &native_token,
-    )?
-    .0;
+    // This is the base native token precision value
+    let base_native_precision =
+        read_base_native_precision::<_, TransToken>(storage, &native_token)?;
     // Get the last rewarded amount of the native token
-    let mut normed_inflation = *storage
-        .conversion_state_mut()
-        .normed_inflation
-        .get_or_insert(ref_inflation);
+    let mut current_native_precision = calculate_masp_rewards_precision::<
+        S,
+        TransToken,
+    >(storage, &native_token)?;
 
     // Reward all tokens according to above reward rates
     let epochs_per_year = Params::epochs_per_year(storage)?;
@@ -687,7 +750,7 @@ where
             let (denom, frac) = update_native_conversions::<_, TransToken>(
                 storage,
                 token,
-                &mut normed_inflation,
+                &mut current_native_precision,
                 masp_epochs_per_year,
                 masp_epoch,
                 &mut current_convs,
@@ -698,8 +761,8 @@ where
             let denom = update_non_native_conversions::<_, TransToken>(
                 storage,
                 token,
-                ref_inflation,
-                normed_inflation,
+                base_native_precision,
+                current_native_precision,
                 masp_epochs_per_year,
                 masp_epoch,
                 reward_assets,
@@ -712,7 +775,10 @@ where
     // Inflate the non-native rewards for all tokens in one operation
     let non_native_reward = total_deflated_reward
         .raw_amount()
-        .checked_mul_div(normed_inflation.into(), ref_inflation.into())
+        .checked_mul_div(
+            current_native_precision.into(),
+            base_native_precision.into(),
+        )
         .ok_or_else(|| Error::new_const("Total reward calculation overflow"))?;
     // The total transparent value of the rewards being distributed. First
     // accumulate the integer part of the non-native reward.
@@ -734,17 +800,17 @@ where
         // Accumulate the integer part of the native reward
         checked!(total_reward += native_reward.0.into())?;
 
-        let ref_inflation = Uint::from(ref_inflation);
+        let base_native_precision = Uint::from(base_native_precision);
         // Compute the fraction obtained by adding the fractional parts of the
         // native reward and the non-native reward:
         // native_reward.1/native_reward_frac.1 +
-        // non_native_reward.1/ref_inflation
+        // non_native_reward.1/base_native_precision
         let numerator = checked!(
-            native_reward.1 * ref_inflation
+            native_reward.1 * base_native_precision
                 + Uint::from(native_reward_frac.1) * non_native_reward.1
         )?;
         let denominator =
-            checked!(ref_inflation * Uint::from(native_reward_frac.1))?;
+            checked!(base_native_precision * Uint::from(native_reward_frac.1))?;
         // A fraction greater than or equal to one corresponds to the situation
         // where combining non-native rewards with pre-existing NAM balance
         // gives a greater reward than treating each separately.
