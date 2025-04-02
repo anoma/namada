@@ -30,6 +30,8 @@ wasm_for_tests/*.wasm
 
 # app version string file
 /crates/apps/version.rs
+# consensus version file
+/crates/core/consensus_version.rs
 
 # coverage
 lcov.info
