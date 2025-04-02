@@ -1,7 +1,6 @@
 //! Virtual machine's host environment exposes functions that may be called from
 //! within a virtual machine.
 
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
@@ -29,12 +28,12 @@ use namada_state::{
     StorageHasher, StorageRead, StorageWrite, TxHostEnvState, VpHostEnvState,
 };
 pub use namada_state::{Error, Result};
-use namada_token::MaspTransaction;
 use namada_token::storage_key::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
     is_any_token_parameter_key,
 };
-use namada_tx::data::{InnerTxId, TxSentinel};
+use namada_token::MaspTransaction;
+use namada_tx::data::TxSentinel;
 use namada_tx::{BatchedTx, BatchedTxRef, Tx, TxCommitments};
 use namada_vp::vp_host_fns;
 use thiserror::Error;
@@ -117,9 +116,6 @@ where
     pub gas_meter: HostRef<RoAccess, RefCell<TxGasMeter>>,
     /// Transaction sentinel. In  `RefCell` to charge gas in read-only fns.
     pub sentinel: HostRef<RoAccess, RefCell<TxSentinel>>,
-    /// Hash of the wrapper transaction associated with
-    /// the current inner tx.
-    pub wrapper_hash: HostRef<RoAccess, Hash>,
     /// The transaction code is used for signature verification
     pub tx: HostRef<RoAccess, Tx>,
     /// The commitments inside the transaction
@@ -167,7 +163,6 @@ where
         iterators: &mut PrefixIterators<'static, D>,
         gas_meter: &RefCell<TxGasMeter>,
         sentinel: &RefCell<TxSentinel>,
-        wrapper_hash: &Hash,
         tx: &Tx,
         cmt: &TxCommitments,
         tx_index: &TxIndex,
@@ -183,7 +178,6 @@ where
         let iterators = unsafe { RwHostRef::new(iterators) };
         let gas_meter = unsafe { RoHostRef::new(gas_meter) };
         let sentinel = unsafe { RoHostRef::new(sentinel) };
-        let wrapper_hash = unsafe { RoHostRef::new(wrapper_hash) };
         let tx = unsafe { RoHostRef::new(tx) };
         let cmt = unsafe { RoHostRef::new(cmt) };
         let tx_index = unsafe { RoHostRef::new(tx_index) };
@@ -201,7 +195,6 @@ where
             iterators,
             gas_meter,
             sentinel,
-            wrapper_hash,
             tx,
             cmt,
             tx_index,
@@ -286,7 +279,6 @@ where
             iterators: self.iterators,
             gas_meter: self.gas_meter,
             sentinel: self.sentinel,
-            wrapper_hash: self.wrapper_hash,
             tx: self.tx,
             cmt: self.cmt,
             tx_index: self.tx_index,
@@ -1063,17 +1055,9 @@ where
     let event: Event = BorshDeserialize::try_from_slice(&event)
         .map_err(TxRuntimeError::EncodingError)?;
     let mut state = env.state();
-    let wrapper_hash = unsafe { env.ctx.wrapper_hash.get() };
-    let cmt = unsafe { env.ctx.cmt.get() };
     let gas = state
         .write_log_mut()
-        .emit_event_with_tx_hashes(
-            event,
-            Some(InnerTxId {
-                wrapper_hash: Some(Cow::Borrowed(wrapper_hash)),
-                commitments_hash: Cow::Owned(cmt.get_hash()),
-            }),
-        )
+        .emit_event(event)
         .ok_or(TxRuntimeError::GasOverflow)?;
     consume_tx_gas::<MEM, D, H, CA>(env, gas)
 }
@@ -2381,7 +2365,6 @@ pub mod testing {
             iterators,
             gas_meter,
             sentinel,
-            &Hash::zero(),
             tx,
             cmt,
             tx_index,
@@ -2431,7 +2414,6 @@ pub mod testing {
             iterators,
             gas_meter,
             sentinel,
-            &Hash::zero(),
             tx,
             cmt,
             tx_index,

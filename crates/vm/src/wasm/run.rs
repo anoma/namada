@@ -139,7 +139,6 @@ where
 pub fn tx<S, CA>(
     state: &mut S,
     gas_meter: &RefCell<TxGasMeter>,
-    wrapper_hash: Option<&Hash>,
     tx_index: &TxIndex,
     tx: &Tx,
     cmt: &TxCommitments,
@@ -203,8 +202,6 @@ where
 
     let sentinel = RefCell::new(TxSentinel::default());
     let (write_log, in_mem, db) = state.split_borrow();
-    const ZERO_HASH: Hash = Hash::zero();
-    let wrapper_hash = wrapper_hash.unwrap_or(&ZERO_HASH);
     let mut env = TxVmEnv::new(
         WasmMemory::new(Rc::downgrade(&store)),
         write_log,
@@ -213,7 +210,6 @@ where
         &mut iterators,
         gas_meter,
         &sentinel,
-        wrapper_hash,
         tx,
         cmt,
         tx_index,
@@ -1197,7 +1193,6 @@ mod tests {
         let result = tx(
             &mut state,
             &gas_meter,
-            None,
             &tx_index,
             batched_tx.tx,
             batched_tx.cmt,
@@ -1216,7 +1211,6 @@ mod tests {
         let error = tx(
             &mut state,
             &gas_meter,
-            None,
             &tx_index,
             batched_tx.tx,
             batched_tx.cmt,
@@ -1439,7 +1433,6 @@ mod tests {
         let result = tx(
             &mut state,
             &gas_meter,
-            None,
             &tx_index,
             batched_tx.tx,
             batched_tx.cmt,
@@ -1576,7 +1569,6 @@ mod tests {
         let error = tx(
             &mut state,
             &gas_meter,
-            None,
             &tx_index,
             batched_tx.tx,
             batched_tx.cmt,
@@ -1820,7 +1812,6 @@ mod tests {
         let result = tx(
             &mut state,
             &gas_meter,
-            None,
             &tx_index,
             batched_tx.tx,
             batched_tx.cmt,
@@ -1861,7 +1852,6 @@ mod tests {
         let result = tx(
             &mut state,
             &gas_meter,
-            None,
             &tx_index,
             batched_tx.tx,
             batched_tx.cmt,
@@ -2169,7 +2159,6 @@ mod tests {
         tx(
             &mut state,
             &gas_meter,
-            None,
             &tx_index,
             batched_tx.tx,
             batched_tx.cmt,
