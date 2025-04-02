@@ -407,7 +407,8 @@ fn conversion_state_migration() {
 
     // Finally construct the entire conversion state
     let conversion_state = ConversionState {
-        normed_inflation: Some(NATIVE_PRECISION),
+        #[allow(deprecated)]
+        current_precision: Some(NATIVE_PRECISION),
         tree: FrozenCommitmentTree::new(&conv_notes),
         assets,
     };
