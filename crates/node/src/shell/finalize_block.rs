@@ -475,7 +475,7 @@ where
     fn handle_inner_tx_results(
         &mut self,
         response: &mut shim::response::FinalizeBlock,
-        tx_result: namada_sdk::tx::data::TxResult<protocol::Error>,
+        mut tx_result: namada_sdk::tx::data::TxResult<protocol::Error>,
         tx_data: TxData<'_>,
         tx_logs: &mut TxLogs<'_>,
     ) {
@@ -484,7 +484,7 @@ where
         let ValidityFlags {
             commit_batch_hash,
             is_any_tx_invalid,
-        } = temp_log.check_inner_results(&tx_result, tx_data.height);
+        } = temp_log.check_inner_results(&mut tx_result, tx_data.height);
 
         if tx_data.is_atomic_batch && is_any_tx_invalid {
             // Atomic batches need custom handling when even a single tx fails,
@@ -537,7 +537,7 @@ where
         &mut self,
         response: &mut shim::response::FinalizeBlock,
         msg: &Error,
-        tx_result: namada_sdk::tx::data::TxResult<protocol::Error>,
+        mut tx_result: namada_sdk::tx::data::TxResult<protocol::Error>,
         tx_data: TxData<'_>,
         tx_logs: &mut TxLogs<'_>,
     ) {
@@ -546,7 +546,7 @@ where
         let ValidityFlags {
             commit_batch_hash,
             is_any_tx_invalid: _,
-        } = temp_log.check_inner_results(&tx_result, tx_data.height);
+        } = temp_log.check_inner_results(&mut tx_result, tx_data.height);
 
         let unrun_txs = tx_data
             .commitments_len
@@ -994,12 +994,12 @@ impl<'finalize> TempTxLogs {
 
     fn check_inner_results(
         &mut self,
-        tx_result: &namada_sdk::tx::data::TxResult<protocol::Error>,
+        tx_result: &mut namada_sdk::tx::data::TxResult<protocol::Error>,
         height: BlockHeight,
     ) -> ValidityFlags {
         let mut flags = ValidityFlags::default();
 
-        for (cmt_hash, batched_result) in tx_result.iter() {
+        for (cmt_hash, batched_result) in tx_result.iter_mut() {
             match batched_result {
                 Ok(result) => {
                     if result.is_accepted() {
@@ -1015,11 +1015,12 @@ impl<'finalize> TempTxLogs {
                         self.stats.increment_successful_txs();
                         flags.commit_batch_hash = true;
 
-                        // events from other sources
                         self.response_events.emit_many(
-                            result.events.iter().map(|event| {
-                                event.clone().with(Height(height))
-                            }),
+                            // Take the events to avoid replicating them when
+                            // emitting the transaction's result event
+                            std::mem::take(&mut result.events)
+                                .into_iter()
+                                .map(|event| event.with(Height(height))),
                         );
                     } else {
                         // VPs rejected, this branch can only be reached by

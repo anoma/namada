@@ -3156,6 +3156,41 @@ fn pos_validator_metadata_validation() -> Result<()> {
     Ok(())
 }
 
+// Test that a client can reconstruct the events associated with a transaction
+#[test]
+fn client_events_reconstruction() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    let (node, _services) = setup::setup()?;
+
+    // Submit a transfer transaction that will emit a transfer event
+    let tx_args = apply_use_device(vec![
+        "transparent-transfer",
+        "--source",
+        BERTHA_KEY,
+        "--target",
+        ALBERT_KEY,
+        "--token",
+        NAM,
+        "--amount",
+        "1",
+        "--node",
+        &validator_one_rpc,
+        "--force",
+    ]);
+
+    let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+    // Check that, even if we don't serialize the events within the tx/applied
+    // event, the client can recover the events associated with this transaction
+    // from the block and reconstruct a complete log for the user
+    assert!(captured.contains("Events:"));
+    assert!(captured.contains("- tx - token/transfer:"));
+
+    Ok(())
+}
+
 fn make_migration_json() -> (Hash, tempfile::NamedTempFile) {
     let file = tempfile::Builder::new().tempfile().expect("Test failed");
     let updates = [migrations::DbUpdateType::Add {
