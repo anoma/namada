@@ -25,7 +25,7 @@ use crate::borsh::BorshSerializeExt;
 const PRINTLN_CUTOFF: usize = 300;
 
 /// For migrations involving the conversion state
-const CONVERSION_STATE_KEY: &str = "conversion_state";
+pub const CONVERSION_STATE_KEY: &str = "conversion_state";
 
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 enum UpdateBytes {
@@ -608,6 +608,7 @@ derive_borshdeserializer!(Vec::<u8>);
 derive_borshdeserializer!(Vec::<String>);
 derive_borshdeserializer!(u64);
 derive_borshdeserializer!(u128);
+derive_borshdeserializer!(namada_core::hash::Hash);
 derive_borshdeserializer!(masp_primitives::convert::AllowedConversion);
 
 #[derive(BorshSerialize, BorshDeserialize)]
