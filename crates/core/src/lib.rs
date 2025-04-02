@@ -89,6 +89,9 @@ use thiserror::Error;
 
 use crate::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 
+// Imports `pub fn consensus_version() -> u64` made by build script
+include!(concat!(env!("OUT_DIR"), "/consensus_version.rs"));
+
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum DecodeError {

@@ -703,6 +703,7 @@ where
     /// any. This is returned when ABCI sends an `info` request.
     pub fn last_state(&self, namada_version: &str) -> response::Info {
         let version = namada_version.to_string();
+        let consensus_version = namada_sdk::consensus_version();
         let other_data: HashMap<&str, &str> =
             HashMap::from_iter([("libs_version", env!("CARGO_PKG_VERSION"))]);
         let data = serde_json::to_string(&other_data)
@@ -710,6 +711,7 @@ where
         let response = response::Info {
             data,
             version,
+            app_version: consensus_version,
             ..response::Info::default()
         };
         if crate::migrating_state().is_some() {
