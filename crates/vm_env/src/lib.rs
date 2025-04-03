@@ -24,7 +24,7 @@ pub use namada_core::internal::{HostEnvResult, KeyVal};
 pub mod tx {
     // These host functions are implemented in the Namada's [`host_env`]
     // module. The environment provides calls to them via this C interface.
-    extern "C" {
+    unsafe extern "C" {
         /// Read variable-length data when we don't know the size up-front,
         /// returns the size of the value (can be 0), or -1 if the key is
         /// not present. If a value is found, it will be placed in the read
@@ -161,7 +161,7 @@ pub mod tx {
 pub mod vp {
     // These host functions are implemented in the Namada's [`host_env`]
     // module. The environment provides calls to them via this C interface.
-    extern "C" {
+    unsafe extern "C" {
         /// Read variable-length prior state when we don't know the size
         /// up-front, returns the size of the value (can be 0), or -1 if
         /// the key is not present. If a value is found, it will be placed in

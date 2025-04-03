@@ -4501,7 +4501,7 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
                 "--amount",
                 "50",
                 "--gas-payer",
-                cooper_alias.as_ref(),
+                cooper_alias,
                 "--output-folder-path",
                 tempdir.path().to_str().unwrap(),
                 "--dump-tx",
@@ -4538,7 +4538,7 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
                 "--amount",
                 "50",
                 "--gas-payer",
-                cooper_alias.as_ref(),
+                cooper_alias,
                 "--output-folder-path",
                 tempdir.path().to_str().unwrap(),
                 "--dump-tx",
@@ -4656,7 +4656,7 @@ fn expired_masp_tx() -> Result<()> {
                 "--amount",
                 "50",
                 "--gas-payer",
-                cooper_alias.as_ref(),
+                cooper_alias,
                 // We want to create an expired masp tx. Doing so will also set
                 // the expiration field of the header which can
                 // be a problem because this would lead to the
@@ -6567,7 +6567,7 @@ fn identical_output_descriptions() -> Result<()> {
             apply_use_device(vec![
                 "shield",
                 "--source",
-                adam_alias.as_ref(),
+                adam_alias,
                 "--target",
                 AA_PAYMENT_ADDRESS,
                 "--token",
@@ -6575,7 +6575,7 @@ fn identical_output_descriptions() -> Result<()> {
                 "--amount",
                 "1000",
                 "--gas-payer",
-                bradley_alias.as_ref(),
+                bradley_alias,
                 "--gas-limit",
                 "60000",
                 "--output-folder-path",
@@ -6709,7 +6709,7 @@ fn identical_output_descriptions() -> Result<()> {
             vec![
                 "balance",
                 "--owner",
-                adam_alias.as_ref(),
+                adam_alias,
                 "--token",
                 NAM,
                 "--node",
@@ -6839,8 +6839,8 @@ fn masp_batch() -> Result<()> {
     // Assert reference NAM balances at VK(A), Albert and Bertha
     for (owner, balance) in [
         (AA_VIEWING_KEY, 0),
-        (adam_alias.as_ref(), 500_000),
-        (bradley_alias.as_ref(), 500_000),
+        (adam_alias, 500_000),
+        (bradley_alias, 500_000),
     ] {
         let captured = CapturedOutput::of(|| {
             run(
@@ -6864,7 +6864,7 @@ fn masp_batch() -> Result<()> {
     // Generate txs for the batch to shield some tokens. Use two different
     // sources
     let mut batch = vec![];
-    for source in [adam_alias.as_ref(), bradley_alias.as_ref()] {
+    for source in [adam_alias, bradley_alias] {
         let captured = CapturedOutput::of(|| {
             run(
                 &node,
@@ -6882,7 +6882,7 @@ fn masp_batch() -> Result<()> {
                     "--gas-limit",
                     "60000",
                     "--gas-payer",
-                    cooper_alias.as_ref(),
+                    cooper_alias,
                     "--output-folder-path",
                     tempdir.path().to_str().unwrap(),
                     "--dump-wrapper-tx",
@@ -7045,8 +7045,8 @@ fn masp_batch() -> Result<()> {
     // Assert NAM balances at VK(A), Bob and Bertha
     for (owner, balance) in [
         (AA_VIEWING_KEY, 2_000),
-        (adam_alias.as_ref(), 498_000),
-        (bradley_alias.as_ref(), 500_000),
+        (adam_alias, 498_000),
+        (bradley_alias, 500_000),
     ] {
         let captured = CapturedOutput::of(|| {
             run(
@@ -7095,8 +7095,8 @@ fn masp_atomic_batch() -> Result<()> {
     // Assert reference NAM balances at VK(A), Albert and Bertha are unchanged
     for (owner, balance) in [
         (AA_VIEWING_KEY, 0),
-        (adam_alias.as_ref(), 500_000),
-        (bradley_alias.as_ref(), 500_000),
+        (adam_alias, 500_000),
+        (bradley_alias, 500_000),
     ] {
         let captured = CapturedOutput::of(|| {
             run(
@@ -7120,7 +7120,7 @@ fn masp_atomic_batch() -> Result<()> {
     // Generate txs for the batch to shield some tokens. Use two different
     // sources
     let mut batch = vec![];
-    for source in [adam_alias.as_ref(), bradley_alias.as_ref()] {
+    for source in [adam_alias, bradley_alias] {
         let captured = CapturedOutput::of(|| {
             run(
                 &node,
@@ -7138,7 +7138,7 @@ fn masp_atomic_batch() -> Result<()> {
                     "--gas-limit",
                     "60000",
                     "--gas-payer",
-                    cooper_alias.as_ref(),
+                    cooper_alias,
                     "--output-folder-path",
                     tempdir.path().to_str().unwrap(),
                     "--dump-wrapper-tx",
@@ -7297,8 +7297,8 @@ fn masp_atomic_batch() -> Result<()> {
     // Assert NAM balances at VK(A), Albert and Bertha are unchanged
     for (owner, balance) in [
         (AA_VIEWING_KEY, 0),
-        (adam_alias.as_ref(), 500_000),
-        (bradley_alias.as_ref(), 500_000),
+        (adam_alias, 500_000),
+        (bradley_alias, 500_000),
     ] {
         let captured = CapturedOutput::of(|| {
             run(
@@ -7350,10 +7350,10 @@ fn tricky_masp_txs() -> Result<()> {
     // Assert reference NAM balances at VK(A), Albert, Bertha and Christel
     for (owner, balance) in [
         (AA_VIEWING_KEY, 0),
-        (arthur_alias.as_ref(), 500_000),
-        (bradley_alias.as_ref(), 500_000),
-        (adam_alias.as_ref(), 500_000),
-        (cooper_alias.as_ref(), 500_000),
+        (arthur_alias, 500_000),
+        (bradley_alias, 500_000),
+        (adam_alias, 500_000),
+        (cooper_alias, 500_000),
     ] {
         let captured = CapturedOutput::of(|| {
             run(
@@ -7382,7 +7382,7 @@ fn tricky_masp_txs() -> Result<()> {
             vec![
                 "shield",
                 "--source",
-                adam_alias.as_ref(),
+                adam_alias,
                 "--target",
                 AA_PAYMENT_ADDRESS,
                 "--token",
@@ -7390,7 +7390,7 @@ fn tricky_masp_txs() -> Result<()> {
                 "--amount",
                 "1000",
                 "--gas-payer",
-                cooper_alias.as_ref(),
+                cooper_alias,
                 "--output-folder-path",
                 tempdir.path().to_str().unwrap(),
                 "--dump-tx",
@@ -7426,9 +7426,9 @@ fn tricky_masp_txs() -> Result<()> {
             vec![
                 "transparent-transfer",
                 "--source",
-                arthur_alias.as_ref(),
+                arthur_alias,
                 "--target",
-                cooper_alias.as_ref(),
+                cooper_alias,
                 "--token",
                 NAM,
                 "--amount",
@@ -7477,7 +7477,7 @@ fn tricky_masp_txs() -> Result<()> {
             vec![
                 "shield",
                 "--source",
-                bradley_alias.as_ref(),
+                bradley_alias,
                 "--target",
                 AA_PAYMENT_ADDRESS,
                 "--token",
@@ -7541,10 +7541,10 @@ fn tricky_masp_txs() -> Result<()> {
     // Assert NAM balances at VK(A), Albert, Bertha and Christel
     for (owner, balance) in [
         (AA_VIEWING_KEY, 1_000),
-        (arthur_alias.as_ref(), 499_000),
-        (bradley_alias.as_ref(), 499_000),
-        (adam_alias.as_ref(), 500_000),
-        (cooper_alias.as_ref(), 501_000),
+        (arthur_alias, 499_000),
+        (bradley_alias, 499_000),
+        (adam_alias, 500_000),
+        (cooper_alias, 501_000),
     ] {
         let captured = CapturedOutput::of(|| {
             run(
