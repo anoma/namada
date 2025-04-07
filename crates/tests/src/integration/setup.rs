@@ -58,8 +58,8 @@ pub fn initialize_genesis(
     for (_, config) in templates.tokens.token.iter_mut() {
         config.masp_params = Some(token::ShieldedParams {
             max_reward_rate: Dec::from_str("0.1").unwrap(),
-            kp_gain_nom: Dec::from_str("0.1").unwrap(),
-            kd_gain_nom: Dec::from_str("0.1").unwrap(),
+            kp_gain_nom: Dec::from_str("0.01").unwrap(),
+            kd_gain_nom: Dec::from_str("0.01").unwrap(),
             locked_amount_target: 1_000_000u64,
         });
     }

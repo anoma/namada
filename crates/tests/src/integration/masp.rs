@@ -623,8 +623,10 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
             // the inflation being computed by the pd controller to
             // exceed the amount of test tokens in the masp
             max_reward_rate: Dec::from_str("999999999999999.0").unwrap(),
-            kp_gain_nom: Dec::from_str("99999999999999999999").unwrap(),
-            kd_gain_nom: Dec::from_str("99999999999999999999").unwrap(),
+            kp_gain_nom: Dec::from_str("99999999999999899999000000000000001")
+                .unwrap(),
+            kd_gain_nom: Dec::from_str("99999999999999899999000000000000001")
+                .unwrap(),
             locked_amount_target: u64::MAX,
         }),
         &mut node.shell.lock().unwrap().state,

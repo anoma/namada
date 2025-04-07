@@ -5,8 +5,8 @@ denom = 6
 
 [token.NAM.masp_params]
 max_reward_rate = "0.01"
-kd_gain_nom = "0.25"
-kp_gain_nom = "0.25"
+kd_gain_nom = "0.0025"
+kp_gain_nom = "0.0025"
 locked_amount_target = 10000
 
 [token.BTC]
@@ -14,8 +14,8 @@ denom = 8
 
 [token.BTC.masp_params]
 max_reward_rate = "0.01"
-kd_gain_nom = "0.25"
-kp_gain_nom = "0.25"
+kd_gain_nom = "0.0025"
+kp_gain_nom = "0.0025"
 locked_amount_target = 10000
 
 [token.ETH]
@@ -23,8 +23,8 @@ denom = 18
 
 [token.ETH.masp_params]
 max_reward_rate = "0.01"
-kd_gain_nom = "0.25"
-kp_gain_nom = "0.25"
+kd_gain_nom = "0.0025"
+kp_gain_nom = "0.0025"
 locked_amount_target = 10000
 
 [token.DOT]
@@ -32,8 +32,8 @@ denom = 10
 
 [token.DOT.masp_params]
 max_reward_rate = "0.01"
-kd_gain_nom = "0.25"
-kp_gain_nom = "0.25"
+kd_gain_nom = "0.0025"
+kp_gain_nom = "0.0025"
 locked_amount_target = 10000
 
 [token.Schnitzel]
@@ -41,8 +41,8 @@ denom = 6
 
 [token.Schnitzel.masp_params]
 max_reward_rate = "0.01"
-kd_gain_nom = "0.25"
-kp_gain_nom = "0.25"
+kd_gain_nom = "0.0025"
+kp_gain_nom = "0.0025"
 locked_amount_target = 10000
 
 [token.Apfel]
@@ -50,8 +50,8 @@ denom = 6
 
 [token.Apfel.masp_params]
 max_reward_rate = "0.01"
-kd_gain_nom = "0.25"
-kp_gain_nom = "0.25"
+kd_gain_nom = "0.0025"
+kp_gain_nom = "0.0025"
 locked_amount_target = 10000
 
 [token.Kartoffel]
@@ -59,6 +59,6 @@ denom = 6
 
 [token.Kartoffel.masp_params]
 max_reward_rate = "0.01"
-kd_gain_nom = "0.25"
-kp_gain_nom = "0.25"
+kd_gain_nom = "0.0025"
+kp_gain_nom = "0.0025"
 locked_amount_target = 10000
