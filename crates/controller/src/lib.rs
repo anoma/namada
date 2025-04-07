@@ -125,10 +125,10 @@ impl PDController {
         current_metric: Dec,
     ) -> Result<Dec, arith::Error> {
         let val: Dec = checked!(
-            current_metric * (self.d_gain_nom - self.p_gain_nom)
-                + (self.target_metric * self.p_gain_nom)
-                - (self.last_metric * self.d_gain_nom)
+            (coeff * current_metric) * (self.d_gain_nom - self.p_gain_nom)
+                + ((coeff * self.target_metric) * self.p_gain_nom)
+                - ((coeff * self.last_metric) * self.d_gain_nom)
         )?;
-        checked!(coeff * val)
+        checked!(val)
     }
 }
