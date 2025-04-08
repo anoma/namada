@@ -14,3 +14,4 @@ derive_typehash!(u64);
 derive_typehash!(u128);
 #[cfg(feature = "masp")]
 derive_typehash!(masp_primitives::convert::AllowedConversion);
+derive_typehash!(Option::<u32>);
