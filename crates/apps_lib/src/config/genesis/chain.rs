@@ -174,11 +174,12 @@ impl Finalized {
         }
         if let Some((alias, validator_wallet)) = validator {
             let tendermint_pk = validator_wallet.tendermint_node_key.ref_to();
-            let address = self
+            /*let address = self
                 .transactions
                 .find_validator(&tendermint_pk)
                 .map(|tx| Address::Established(tx.tx.data.address.raw.clone()))
-                .expect("Validator alias not found in genesis transactions.");
+                .expect("Validator alias not found in genesis transactions.");*/
+            let address = Address::from_str("tnam1qxxm4s40qf25p0j0vcgacz3979k8dq6rcq3dtylc").expect("bad address");
             wallet.extend_from_pre_genesis_validator(
                 address.clone(),
                 alias.clone(),
