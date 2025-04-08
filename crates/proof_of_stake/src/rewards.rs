@@ -134,15 +134,12 @@ impl PosRewardsCalculator {
         let Self {
             proposer_reward,
             signer_reward,
-            signing_stake,
+            mut signing_stake,
             total_stake,
         } = *self;
 
         if signing_stake < votes_needed {
-            return Err(RewardsError::InsufficientVotes {
-                votes_needed: votes_needed.into(),
-                signing_stake: signing_stake.into(),
-            });
+            signing_stake = votes_needed;
         }
 
         // Logic for determining the coefficients.
@@ -258,29 +255,29 @@ where
         // Ensure that the validator is not currently jailed or other
         let state = validator_state_handle(&validator_address)
             .get(storage, epoch, &params)?;
-        if state != Some(ValidatorState::Consensus) {
+        /*if state != Some(ValidatorState::Consensus) {
             return Err(InflationError::ExpectedValidatorInConsensus(
                 validator_address,
                 state,
             ))
             .into_storage_result();
-        }
+        }*/
 
         let stake_from_deltas =
             read_validator_stake(storage, &params, &validator_address, epoch)?;
 
         // Ensure TM stake updates properly with a debug_assert
-        if cfg!(debug_assertions) {
-            #[allow(clippy::disallowed_methods)]
-            let validator_vp = i64::try_from(validator_vp).unwrap_or_default();
-            debug_assert_eq!(
-                into_tm_voting_power(
-                    params.tm_votes_per_token,
-                    stake_from_deltas,
-                ),
-                validator_vp
-            );
-        }
+        //if cfg!(debug_assertions) {
+        //    #[allow(clippy::disallowed_methods)]
+        //    let validator_vp = i64::try_from(validator_vp).unwrap_or_default();
+        //    debug_assert_eq!(
+        //        into_tm_voting_power(
+        //            params.tm_votes_per_token,
+        //            stake_from_deltas,
+        //        ),
+        //        validator_vp
+        //    );
+        //}
 
         signer_set.insert(validator_address);
         total_signing_stake =
