@@ -480,14 +480,38 @@ pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
         false
     };
     let batch_results = resp.batch_result();
-    if !batch_results.is_empty() {
+    // If the batch contains at least one transaction
+    if let Some((first_inner_hash, first_result)) = batch_results.first() {
         if !wrapper_successful {
-            display_line!(
-                context.io(),
-                "Since the batch in its entirety failed, none of the \
-                 transactions listed below have been committed. Their results \
-                 are provided for completeness.",
-            );
+            // Check if fees were paid via the shielded pool, in this case the
+            // first transaction of the batch was committed regardless of the
+            // batch failure (even for atomic batches)
+            let masp_fee_payment = if let InnerTxResult::Success(res) =
+                first_result
+            {
+                res.events.iter().any(|event| {
+                    event.kind() == &namada_tx::event::masp_types::FEE_PAYMENT
+                })
+            } else {
+                false
+            };
+            if masp_fee_payment {
+                display_line!(
+                    context.io(),
+                    "The first transaction of the batch ({}) was applied to \
+                     pay the fees via the MASP. Since the batch failed, none \
+                     of the remaining transactions listed below have been \
+                     committed. Their results are provided for completeness.",
+                    first_inner_hash
+                );
+            } else {
+                display_line!(
+                    context.io(),
+                    "Since the batch in its entirety failed, none of the \
+                     transactions listed below have been committed. Their \
+                     results are provided for completeness.",
+                );
+            }
         }
         display_line!(context.io(), "Batch results:");
     }
