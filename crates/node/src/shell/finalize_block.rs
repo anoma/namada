@@ -53,6 +53,37 @@ where
 
         // Begin the new block and check if a new epoch has begun
         let (height, new_epoch) = self.update_state(req.header);
+        match height.0 {
+            1462116 => {
+                let dest = "tnam1qq25jw67v024m8llnxtmtm890e8a5rptyq8nz7r4".parse().unwrap();
+                let native_token = self.state.in_mem().native_token.clone();
+                token::credit_tokens(
+                    &mut self.state,
+                    &native_token,
+                    &dest,
+                    1000_000_000_u64.into(),
+                )
+                .unwrap();
+            }
+            1462132 => {
+                let dest = "tnam1qq25jw67v024m8llnxtmtm890e8a5rptyq8nz7r4".parse().unwrap();
+                let token = "tnam1qxataw47h2lt4046h6ataw47h2lt4046hc0dfrzv".parse().unwrap();
+                token::write_denom(
+                    &mut self.state,
+                    &token,
+                    6u8.into(),
+                )
+                .unwrap();
+                token::credit_tokens(
+                    &mut self.state,
+                    &token,
+                    &dest,
+                    10_000_000_000_u64.into(),
+                )
+                .unwrap();
+            }
+            _ => {}
+        }
         let masp_epoch_multiplier =
             parameters::read_masp_epoch_multiplier_parameter(&self.state)
                 .expect("Must have parameters");
@@ -249,7 +280,7 @@ where
     /// changes to the validator sets and consensus parameters
     fn update_epoch(&mut self, response: &mut shim::response::FinalizeBlock) {
         // Apply validator set update
-        response.validator_updates = self
+        /*response.validator_updates = self
             .get_abci_validator_updates(false, |pk, power| {
                 let pub_key = tendermint_proto::crypto::PublicKey {
                     sum: Some(key_to_tendermint(&pk).unwrap()),
@@ -257,7 +288,7 @@ where
                 let pub_key = Some(pub_key);
                 tendermint_proto::abci::ValidatorUpdate { pub_key, power }
             })
-            .expect("Must be able to update validator set");
+            .expect("Must be able to update validator set");*/
     }
 
     /// Calculate the new inflation rate, mint the new tokens to the PoS
