@@ -73,8 +73,8 @@ impl Default for ShieldedParams {
     fn default() -> Self {
         Self {
             max_reward_rate: Dec::from_str("0.1").unwrap(),
-            kp_gain_nom: Dec::from_str("0.25").unwrap(),
-            kd_gain_nom: Dec::from_str("0.25").unwrap(),
+            kp_gain_nom: Dec::from_str("0.025").unwrap(),
+            kd_gain_nom: Dec::from_str("0.025").unwrap(),
             locked_amount_target: 10_000_u64,
         }
     }

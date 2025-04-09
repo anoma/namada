@@ -6,6 +6,6 @@ denom = 6
 
 [token.NAM.masp_params]
 max_reward_rate = "0.01"
-kd_gain_nom = "0.25"
-kp_gain_nom = "0.25"
+kd_gain_nom = "0.0025"
+kp_gain_nom = "0.0025"
 locked_amount_target = 10000

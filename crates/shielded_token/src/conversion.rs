@@ -73,7 +73,7 @@ pub fn compute_inflation(
 
     let metric = Dec::try_from(locked_amount)
         .expect("Should not fail to convert Uint to Dec");
-    let control_coeff = max_reward_rate
+    let control_coeff = Dec::one()
         .checked_div(controller.get_epochs_per_year())
         .expect("Control coefficient overflow");
 
@@ -991,8 +991,8 @@ mod tests {
             // Tokens
             let token_params = ShieldedParams {
                 max_reward_rate: Dec::from_str("0.1").unwrap(),
-                kp_gain_nom: Dec::from_str("0.1").unwrap(),
-                kd_gain_nom: Dec::from_str("0.1").unwrap(),
+                kp_gain_nom: Dec::from_str("0.01").unwrap(),
+                kd_gain_nom: Dec::from_str("0.01").unwrap(),
                 locked_amount_target: 10_000_u64,
             };
 
