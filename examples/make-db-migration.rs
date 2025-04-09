@@ -30,12 +30,15 @@ use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 use namada_trans_token::{Amount, Denomination, MaspDigitPos, Store};
 use sha2::{Digest, Sha256};
 
+/// Represents the channel ID of an IBC token
 pub type ChannelId = &'static str;
+/// Represents the base token of an IBC token
 pub type BaseToken = &'static str;
-
+/// The type hash of the conversion state structure in v0.31.9
 pub const OLD_CONVERSION_STATE_TYPE_HASH: &str =
     "05E2FD0BEBD54A05AAE349BBDE61F90893F09A72850EFD4F69060821EC5DE65F";
 
+/// The new conversion state structure after the v0.32.0 upgrade
 #[derive(
     Debug, Default, BorshSerialize, BorshDeserialize, BorshDeserializer,
 )]
@@ -60,8 +63,8 @@ impl From<ConversionState> for NewConversionState {
     }
 }
 
-// Demonstrate how to set the minted balance using a migration
-fn minted_balance_migration(updates: &mut Vec<migrations::DbUpdateType>) {
+/// Demonstrate how to set the minted balance using a migration
+pub fn minted_balance_migration(updates: &mut Vec<migrations::DbUpdateType>) {
     let person =
         Address::decode("tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn")
             .unwrap();
@@ -90,9 +93,9 @@ fn minted_balance_migration(updates: &mut Vec<migrations::DbUpdateType>) {
     ));
 }
 
-// Demonstrate how to set the shielded reward precision of IBC tokens using a
-// migration
-fn shielded_reward_precision_migration(
+/// Demonstrate how to set the shielded reward precision of IBC tokens using a
+/// migration
+pub fn shielded_reward_precision_migration(
     updates: &mut Vec<migrations::DbUpdateType>,
 ) {
     const IBC_TOKENS: [(ChannelId, BaseToken, Precision); 6] = [
@@ -122,8 +125,8 @@ fn shielded_reward_precision_migration(
     }
 }
 
-// A convenience data structure to allow token addresses to be more readably
-// expressed as a channel ID and base token instead of a raw Namada address.
+/// A convenience data structure to allow token addresses to be more readably
+/// expressed as a channel ID and base token instead of a raw Namada address.
 pub enum TokenAddress {
     // Specify an IBC address. This can also be done more directly using the
     // Self::Address variant.
@@ -132,15 +135,16 @@ pub enum TokenAddress {
     Address(Address),
 }
 
-// Demonstrate clearing MASP rewards for the given IBC tokens by overwriting
-// their allowed conversions with conversions that do not contain rewards.
-fn shielded_reward_reset_migration(
+/// Demonstrate clearing MASP rewards for the given IBC tokens by overwriting
+/// their allowed conversions with conversions that do not contain rewards.
+pub fn shielded_reward_reset_migration(
     updates: &mut Vec<migrations::DbUpdateType>,
 ) {
     // The address of the native token. This is what rewards are denominated in.
-    let native_token =
-        Address::from_str("tnam1qxgfw7myv4dh0qna4hq0xdg6lx77fzl7dcem8h7e")
-            .expect("unable to construct native token address");
+    const NATIVE_TOKEN_BECH32M: &str =
+        "tnam1qxgfw7myv4dh0qna4hq0xdg6lx77fzl7dcem8h7e";
+    let native_token = Address::from_str(NATIVE_TOKEN_BECH32M)
+        .expect("unable to construct native token address");
     // The MASP epoch in which this migration will be applied. This number
     // controls the number of epochs of conversions created.
     const TARGET_MASP_EPOCH: MaspEpoch = MaspEpoch::new(2000);
@@ -262,9 +266,9 @@ fn shielded_reward_reset_migration(
     }
 }
 
-// Demonstrate replacing the entire conversion state with a new state that does
-// not contain rewards.
-fn conversion_state_migration(updates: &mut Vec<migrations::DbUpdateType>) {
+/// Demonstrate replacing the entire conversion state with a new state that does
+/// not contain rewards.
+pub fn conversion_state_migration(updates: &mut Vec<migrations::DbUpdateType>) {
     // Valid precisions must be in the intersection of i128 and u128
     pub type Precision = u128;
 
@@ -441,8 +445,8 @@ fn conversion_state_migration(updates: &mut Vec<migrations::DbUpdateType>) {
     });
 }
 
-// Demonstrate upgrading the transaction WASM code and hashes in storage
-fn wasm_migration(updates: &mut Vec<migrations::DbUpdateType>) {
+/// Demonstrate upgrading the transaction WASM code and hashes in storage
+pub fn wasm_migration(updates: &mut Vec<migrations::DbUpdateType>) {
     // wasm_updates[x].0) The WASM hash that is being replaced
     // wasm_updates[x].1) The name of WASM being updated
     // wasm_updates[x].2) The bytes of the new WASM code
@@ -559,8 +563,8 @@ fn wasm_migration(updates: &mut Vec<migrations::DbUpdateType>) {
     });
 }
 
-// Generate various migrations
-fn main() {
+/// Generate various migrations
+pub fn main() {
     // Write an example migration that updates minted balances
     let mut minted_balance_changes = migrations::DbChanges { changes: vec![] };
     minted_balance_migration(&mut minted_balance_changes.changes);
