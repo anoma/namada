@@ -132,6 +132,20 @@ Namada libs 0.149.0 is a consensus and major breaking release.
 - Demonstrate direct conversion state migrations.
   ([\#4513](https://github.com/anoma/namada/pull/4513))
 
+## libs-v0.48.1
+
+Namada libs 0.48.1
+
+### BUG FIXES
+
+- Upgrade tendermint-rs ([\#4545](https://github.com/anoma/namada/pull/4545))
+
+### IMPROVEMENTS
+
+- Generalize the comparison of denominated amounts to
+  support the case where gap between denominations is large.
+  ([\#4472](https://github.com/anoma/namada/pull/4472))
+
 ## libs-v0.48.0
 
 Namada libraries v0.48.0 major release.
