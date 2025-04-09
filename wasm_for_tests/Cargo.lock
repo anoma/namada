@@ -2463,7 +2463,7 @@ dependencies = [
 
 [[package]]
 name = "namada_account"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "borsh",
  "namada_core",
@@ -2474,7 +2474,7 @@ dependencies = [
 
 [[package]]
 name = "namada_controller"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "namada_core",
  "smooth-operator",
@@ -2483,7 +2483,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "bech32",
  "borsh",
@@ -2526,7 +2526,7 @@ dependencies = [
 
 [[package]]
 name = "namada_events"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "borsh",
  "namada_core",
@@ -2539,7 +2539,7 @@ dependencies = [
 
 [[package]]
 name = "namada_gas"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "borsh",
  "namada_core",
@@ -2551,7 +2551,7 @@ dependencies = [
 
 [[package]]
 name = "namada_governance"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "borsh",
  "itertools 0.14.0",
@@ -2573,7 +2573,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ibc"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "borsh",
  "data-encoding",
@@ -2607,7 +2607,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "data-encoding",
  "proc-macro2",
@@ -2618,7 +2618,7 @@ dependencies = [
 
 [[package]]
 name = "namada_merkle_tree"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "borsh",
  "eyre",
@@ -2632,7 +2632,7 @@ dependencies = [
 
 [[package]]
 name = "namada_parameters"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "namada_core",
  "namada_macros",
@@ -2646,7 +2646,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "borsh",
  "itertools 0.14.0",
@@ -2669,14 +2669,14 @@ dependencies = [
 
 [[package]]
 name = "namada_replay_protection"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "namada_core",
 ]
 
 [[package]]
 name = "namada_shielded_token"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "async-trait",
  "borsh",
@@ -2712,7 +2712,7 @@ dependencies = [
 
 [[package]]
 name = "namada_state"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "borsh",
  "clru",
@@ -2734,7 +2734,7 @@ dependencies = [
 
 [[package]]
 name = "namada_storage"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "borsh",
  "itertools 0.14.0",
@@ -2752,7 +2752,7 @@ dependencies = [
 
 [[package]]
 name = "namada_systems"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "namada_core",
  "namada_events",
@@ -2761,7 +2761,7 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "borsh",
  "namada_core",
@@ -2772,7 +2772,7 @@ dependencies = [
 
 [[package]]
 name = "namada_token"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "borsh",
  "namada_core",
@@ -2789,7 +2789,7 @@ dependencies = [
 
 [[package]]
 name = "namada_trans_token"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "konst",
  "namada_core",
@@ -2805,7 +2805,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "ark-bls12-381",
  "bitflags",
@@ -2833,7 +2833,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_env"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "namada_core",
  "namada_events",
@@ -2842,7 +2842,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "borsh",
  "namada_account",
@@ -2863,14 +2863,14 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "namada_core",
 ]
 
 [[package]]
 name = "namada_vp"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "namada_core",
  "namada_events",
@@ -2885,7 +2885,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_env"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "derivative",
  "masp_primitives",
@@ -2899,7 +2899,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "borsh",
  "namada_account",
@@ -3275,7 +3275,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
  "heck",
- "itertools 0.14.0",
+ "itertools 0.13.0",
  "log",
  "multimap",
  "once_cell",
@@ -3295,7 +3295,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
  "syn 2.0.98",
@@ -3949,9 +3949,9 @@ dependencies = [
 
 [[package]]
 name = "tendermint"
-version = "0.40.1"
+version = "0.40.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9703e34d940c2a293804752555107f8dbe2b84ec4c6dd5203831235868105d2"
+checksum = "ab2972a56891bc9173eaebdd51290bc848e448aa281881f3a4712bd8fe1899b3"
 dependencies = [
  "bytes",
  "digest 0.10.7",
@@ -3979,9 +3979,9 @@ dependencies = [
 
 [[package]]
 name = "tendermint-light-client-verifier"
-version = "0.40.1"
+version = "0.40.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0cda4a449fc70985a95f892a67286f13afa4e048d90b8d04a2bf6341e88d1c2"
+checksum = "58dc3c4ebd336efaf0b831b0cd4d2aca24ac624875fa514e18fe636da9ea98d5"
 dependencies = [
  "derive_more 0.99.19",
  "flex-error",
@@ -3992,9 +3992,9 @@ dependencies = [
 
 [[package]]
 name = "tendermint-proto"
-version = "0.40.1"
+version = "0.40.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ae9e1705aa0fa5ecb2c6aa7fb78c2313c4a31158ea5f02048bf318f849352eb"
+checksum = "ca44b9eaaa98e8440fbafe5593b8a32a1c395c094ac566b3eb50497f8bd2bee0"
 dependencies = [
  "borsh",
  "bytes",
@@ -4187,7 +4187,7 @@ dependencies = [
 
 [[package]]
 name = "tx_fail"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -4196,7 +4196,7 @@ dependencies = [
 
 [[package]]
 name = "tx_fail_event"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -4205,7 +4205,7 @@ dependencies = [
 
 [[package]]
 name = "tx_infinite_guest_gas"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -4214,7 +4214,7 @@ dependencies = [
 
 [[package]]
 name = "tx_infinite_host_gas"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -4223,7 +4223,7 @@ dependencies = [
 
 [[package]]
 name = "tx_invalid_data"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -4232,7 +4232,7 @@ dependencies = [
 
 [[package]]
 name = "tx_memory_limit"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -4241,7 +4241,7 @@ dependencies = [
 
 [[package]]
 name = "tx_no_op"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -4250,7 +4250,7 @@ dependencies = [
 
 [[package]]
 name = "tx_no_op_event"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -4259,7 +4259,7 @@ dependencies = [
 
 [[package]]
 name = "tx_proposal_code"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_proof_of_stake",
@@ -4269,7 +4269,7 @@ dependencies = [
 
 [[package]]
 name = "tx_proposal_ibc_token_inflation"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -4278,7 +4278,7 @@ dependencies = [
 
 [[package]]
 name = "tx_proposal_masp_reward"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -4287,7 +4287,7 @@ dependencies = [
 
 [[package]]
 name = "tx_proposal_token_gas"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -4296,7 +4296,7 @@ dependencies = [
 
 [[package]]
 name = "tx_read_storage_key"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -4305,7 +4305,7 @@ dependencies = [
 
 [[package]]
 name = "tx_write"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_test_utils",
@@ -4450,7 +4450,7 @@ dependencies = [
 
 [[package]]
 name = "vp_always_false"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_vp_prelude",
@@ -4459,7 +4459,7 @@ dependencies = [
 
 [[package]]
 name = "vp_always_true"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_vp_prelude",
@@ -4468,7 +4468,7 @@ dependencies = [
 
 [[package]]
 name = "vp_eval"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -4478,7 +4478,7 @@ dependencies = [
 
 [[package]]
 name = "vp_infinite_guest_gas"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_vp_prelude",
@@ -4487,7 +4487,7 @@ dependencies = [
 
 [[package]]
 name = "vp_infinite_host_gas"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -4497,7 +4497,7 @@ dependencies = [
 
 [[package]]
 name = "vp_memory_limit"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_vp_prelude",
@@ -4506,7 +4506,7 @@ dependencies = [
 
 [[package]]
 name = "vp_read_storage_key"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_vp_prelude",
@@ -4515,7 +4515,7 @@ dependencies = [
 
 [[package]]
 name = "vp_verify_signature"
-version = "0.48.0"
+version = "0.48.1"
 dependencies = [
  "getrandom 0.2.15",
  "namada_vp_prelude",

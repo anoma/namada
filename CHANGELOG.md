@@ -49,6 +49,20 @@ Namada v1.0.0 is the first stable release of the Namada apps.
 - updated namada libraries to libs-v0.46.1
   ([\#4123](https://github.com/anoma/namada/pull/4123))
 
+## libs-v0.48.1
+
+Namada libs 0.48.1
+
+### BUG FIXES
+
+- Upgrade tendermint-rs ([\#4545](https://github.com/anoma/namada/pull/4545))
+
+### IMPROVEMENTS
+
+- Generalize the comparison of denominated amounts to
+  support the case where gap between denominations is large.
+  ([\#4472](https://github.com/anoma/namada/pull/4472))
+
 ## libs-v0.48.0
 
 Namada libraries v0.48.0 major release.
@@ -1288,9 +1302,6 @@ Namada 0.33.0 is a minor release that contains various new features, improvement
 
 - move query_ibc_tokens and lookup_ibc_token_alias to sdk
   ([\#2729](https://github.com/anoma/namada/issues/2729))
-
-### SDK
-
 - Add a new method to the sdk to change a validator consensus key.
   ([\#3037](https://github.com/anoma/namada/pull/3037))
 - Improve the function to update an enstablished address via the sdk.
