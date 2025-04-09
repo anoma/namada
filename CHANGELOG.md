@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v1.1.5
+
+Changelog: Release apps 1.1.5
+
 ## v1.1.4
 
 Namada apps v1.1.4 patch release
