@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v1.1.5
+
+Namada apps 1.1.5
+
+### MISCELLANEOUS
+
+- Updated Namada libraries to libs-v0.48.3
+  ([\#4563](https://github.com/anoma/namada/pull/4563))
+
 ## v1.1.4
 
 Namada apps v1.1.4 patch release
@@ -48,6 +57,38 @@ Namada v1.0.0 is the first stable release of the Namada apps.
 
 - updated namada libraries to libs-v0.46.1
   ([\#4123](https://github.com/anoma/namada/pull/4123))
+
+## libs-v0.48.3
+
+Namada libs 0.48.3
+
+### MISCELLANEOUS
+
+- Fix CI release workflow file.
+  ([\#4561](https://github.com/anoma/namada/pull/4561))
+
+## libs-v0.48.2
+
+Namada libs 0.48.2
+
+### MISCELLANEOUS
+
+- Fix CI on maintenance branch.
+  ([\#4554](https://github.com/anoma/namada/pull/4554))
+
+## libs-v0.48.1
+
+Namada libs 0.48.1
+
+### BUG FIXES
+
+- Upgrade tendermint-rs ([\#4545](https://github.com/anoma/namada/pull/4545))
+
+### IMPROVEMENTS
+
+- Generalize the comparison of denominated amounts to
+  support the case where gap between denominations is large.
+  ([\#4472](https://github.com/anoma/namada/pull/4472))
 
 ## libs-v0.48.0
 
@@ -1288,9 +1329,6 @@ Namada 0.33.0 is a minor release that contains various new features, improvement
 
 - move query_ibc_tokens and lookup_ibc_token_alias to sdk
   ([\#2729](https://github.com/anoma/namada/issues/2729))
-
-### SDK
-
 - Add a new method to the sdk to change a validator consensus key.
   ([\#3037](https://github.com/anoma/namada/pull/3037))
 - Improve the function to update an enstablished address via the sdk.
