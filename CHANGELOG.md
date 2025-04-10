@@ -27,6 +27,15 @@ Namada libs 0.48.3
 - Fix CI release workflow file.
   ([\#4561](https://github.com/anoma/namada/pull/4561))
 
+## libs-v0.48.3
+
+Namada libs 0.48.3
+
+### MISCELLANEOUS
+
+- Fix CI release workflow file.
+  ([\#4561](https://github.com/anoma/namada/pull/4561))
+
 ## libs-v0.48.2
 
 Namada libs 0.48.2
