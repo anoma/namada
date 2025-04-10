@@ -27,13 +27,14 @@ jobs:
     runs-on: [ubuntu-latest]
     container: 
       image:  ghcr.io/heliaxdev/namada-ci:wasm-v2.0.0
-      options: --user 1001
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
-    - run: git fetch --tags --force origin # WA: https://github.com/actions/checkout/issues/882
+    - run: |
+        git config --global --add safe.directory '*'
+        git fetch --tags --force origin # WA: https://github.com/actions/checkout/issues/882
     - name: Switch to tag if specified
       if: "${{ github.event.inputs.tag != '' }}"
       run: git checkout ${{ github.event.inputs.tag }}
@@ -61,7 +62,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - run: git fetch --tags --force origin # WA: https://github.com/actions/checkout/issues/882
+      - run: |
+          git config --global --add safe.directory '*'
+          git fetch --tags --force origin # WA: https://github.com/actions/checkout/issues/882
       - name: Switch to tag if specified
         if: "${{ github.event.inputs.tag != '' }}"
         run: git checkout ${{ github.event.inputs.tag }}
