@@ -132,6 +132,15 @@ Namada libs 0.149.0 is a consensus and major breaking release.
 - Demonstrate direct conversion state migrations.
   ([\#4513](https://github.com/anoma/namada/pull/4513))
 
+## libs-v0.48.2
+
+Namada libs 0.48.2
+
+### MISCELLANEOUS
+
+- Fix CI on maintenance branch.
+  ([\#4554](https://github.com/anoma/namada/pull/4554))
+
 ## libs-v0.48.1
 
 Namada libs 0.48.1
