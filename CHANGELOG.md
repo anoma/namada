@@ -27,6 +27,15 @@ Namada libs 0.48.2
 - Fix CI on maintenance branch.
   ([\#4554](https://github.com/anoma/namada/pull/4554))
 
+## libs-v0.48.2
+
+Namada libs 0.48.2
+
+### MISCELLANEOUS
+
+- Fix CI on maintenance branch.
+  ([\#4554](https://github.com/anoma/namada/pull/4554))
+
 ## libs-v0.48.1
 
 Namada libs 0.48.1
