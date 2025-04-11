@@ -26,6 +26,12 @@ const PRINTLN_CUTOFF: usize = 300;
 
 /// For migrations involving the conversion state
 pub const CONVERSION_STATE_KEY: &str = "conversion_state";
+/// Key holding minimum start height for next epoch
+pub const NEXT_EPOCH_MIN_START_HEIGHT_KEY: &str = "next_epoch_min_start_height";
+/// Key holding minimum start time for next epoch
+pub const NEXT_EPOCH_MIN_START_TIME_KEY: &str = "next_epoch_min_start_time";
+/// Key holding number of blocks till next epoch
+pub const UPDATE_EPOCH_BLOCKS_DELAY_KEY: &str = "update_epoch_blocks_delay";
 
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 enum UpdateBytes {
@@ -319,6 +325,51 @@ impl DbUpdateType {
                         })?;
                     // Make sure to put the conversion state into memory too
                     state.in_mem_mut().conversion_state = conversion_state;
+                } else if DbColFam::STATE == *cf
+                    && NEXT_EPOCH_MIN_START_HEIGHT_KEY == key.to_string()
+                {
+                    let next_epoch_min_start_height = crate::decode(value)
+                        .map_err(|_| {
+                            eyre::eyre!(
+                                "The value provided for the key {} is not a \
+                                 valid BlockHeight",
+                                key,
+                            )
+                        })?;
+                    // Make sure to put the next epoch minimum start height into
+                    // memory too
+                    state.in_mem_mut().next_epoch_min_start_height =
+                        next_epoch_min_start_height;
+                } else if DbColFam::STATE == *cf
+                    && NEXT_EPOCH_MIN_START_TIME_KEY == key.to_string()
+                {
+                    let next_epoch_min_start_time = crate::decode(value)
+                        .map_err(|_| {
+                            eyre::eyre!(
+                                "The value provided for the key {} is not a \
+                                 valid DateTimeUtc",
+                                key,
+                            )
+                        })?;
+                    // Make sure to put the next epoch minimum start time into
+                    // memory too
+                    state.in_mem_mut().next_epoch_min_start_time =
+                        next_epoch_min_start_time;
+                } else if DbColFam::STATE == *cf
+                    && UPDATE_EPOCH_BLOCKS_DELAY_KEY == key.to_string()
+                {
+                    let update_epoch_blocks_delay = crate::decode(value)
+                        .map_err(|_| {
+                            eyre::eyre!(
+                                "The value provided for the key {} is not a \
+                                 valid Option<u32>",
+                                key,
+                            )
+                        })?;
+                    // Make sure to put the update epoch blocks delay into
+                    // memory too
+                    state.in_mem_mut().update_epoch_blocks_delay =
+                        update_epoch_blocks_delay;
                 }
 
                 migrator.write(state.db(), key, cf, value, persist_diffs);
