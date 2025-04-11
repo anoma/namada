@@ -486,15 +486,13 @@ pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
             // Check if fees were paid via the shielded pool, in this case the
             // first transaction of the batch was committed regardless of the
             // batch failure (even for atomic batches)
-            let masp_fee_payment = if let InnerTxResult::Success(res) =
-                first_result
-            {
-                res.events.iter().any(|event| {
-                    event.kind() == &namada_tx::event::masp_types::FEE_PAYMENT
-                })
-            } else {
-                false
-            };
+            let masp_fee_payment = matches!(
+                first_result,
+                InnerTxResult::Success(res)
+                    if res.events.iter().any(|event| {
+                        event.kind() == &namada_tx::event::masp_types::FEE_PAYMENT
+                    })
+            );
             if masp_fee_payment {
                 display_line!(
                     context.io(),
