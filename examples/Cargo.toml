@@ -17,6 +17,10 @@ name = "generate-txs"
 path = "generate_txs.rs"
 
 [[example]]
+name = "shielded-rewards"
+path = "shielded_rewards.rs"
+
+[[example]]
 name = "tx-schema"
 path = "tx_schema.rs"
 
