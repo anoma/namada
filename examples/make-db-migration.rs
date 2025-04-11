@@ -59,12 +59,6 @@ pub type KdGain = &'static str;
 /// The type hash of the conversion state structure in v0.31.9
 pub const OLD_CONVERSION_STATE_TYPE_HASH: &str =
     "05E2FD0BEBD54A05AAE349BBDE61F90893F09A72850EFD4F69060821EC5DE65F";
-/// Key holding minimum start height for next epoch
-pub const NEXT_EPOCH_MIN_START_HEIGHT_KEY: &str = "next_epoch_min_start_height";
-/// Key holding minimum start time for next epoch
-pub const NEXT_EPOCH_MIN_START_TIME_KEY: &str = "next_epoch_min_start_time";
-/// Key holding number of blocks till next epoch
-pub const UPDATE_EPOCH_BLOCKS_DELAY_KEY: &str = "update_epoch_blocks_delay";
 
 /// The new conversion state structure after the v0.32.0 upgrade
 #[derive(
@@ -785,7 +779,7 @@ pub fn accelerate_epoch_migration(updates: &mut Vec<migrations::DbUpdateType>) {
     });
     // Set the next epoch's block height to zero in order to force transition
     updates.push(migrations::DbUpdateType::Add {
-        key: NEXT_EPOCH_MIN_START_HEIGHT_KEY
+        key: migrations::NEXT_EPOCH_MIN_START_HEIGHT_KEY
             .parse()
             .expect("unable to construct conversion state key"),
         cf: DbColFam::STATE,
@@ -794,7 +788,7 @@ pub fn accelerate_epoch_migration(updates: &mut Vec<migrations::DbUpdateType>) {
     });
     // Set the next epoch's start time to a minimum in order to force transition
     updates.push(migrations::DbUpdateType::Add {
-        key: NEXT_EPOCH_MIN_START_TIME_KEY
+        key: migrations::NEXT_EPOCH_MIN_START_TIME_KEY
             .parse()
             .expect("unable to construct conversion state key"),
         cf: DbColFam::STATE,
