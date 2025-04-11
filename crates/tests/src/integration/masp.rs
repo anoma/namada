@@ -7830,3 +7830,361 @@ fn speculative_context() -> Result<()> {
 
     Ok(())
 }
+
+// Test that mixed masp tranfers and fee payments are correctly labeld by the
+// protocol (by means of events) and reconstructed in the correct order by the
+// client
+#[test]
+fn mixed_masp_txs_same_block() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::setup()?;
+    _ = node.next_masp_epoch();
+
+    let native_token = node
+        .shell
+        .lock()
+        .unwrap()
+        .state
+        .in_mem()
+        .native_token
+        .clone();
+
+    // 0. Initialize accounts we can access the secret keys of
+    let (alias1, sk1) =
+        make_temp_account(&node, validator_one_rpc, "Alias1", NAM, 100_000)?;
+    let pk1 = sk1.to_public();
+    let (alias2, sk2) =
+        make_temp_account(&node, validator_one_rpc, "Alias2", NAM, 0)?;
+    let pk2 = sk2.to_public();
+
+    // 1. Shield some tokens in two steps two generate two different output
+    //    notes
+    for _ in 0..2 {
+        let captured = CapturedOutput::of(|| {
+            run(
+                &node,
+                Bin::Client,
+                apply_use_device(vec![
+                    "shield",
+                    "--source",
+                    ALBERT,
+                    "--target",
+                    AA_PAYMENT_ADDRESS,
+                    "--token",
+                    NAM,
+                    "--amount",
+                    "500",
+                    "--node",
+                    validator_one_rpc,
+                ]),
+            )
+        });
+        assert!(captured.result.is_ok());
+        assert!(captured.contains(TX_APPLIED_SUCCESS));
+    }
+
+    // 2. Sync the shielded context and check the balance
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 1000"));
+
+    // 3. Construct a block with two masp transactions, the first one is a
+    //    shielding and the second one is a shielded transfer doing masp fee
+    //    payment
+    let tempdir = tempfile::tempdir().unwrap();
+    let mut txs_bytes = vec![];
+
+    _ = node.next_epoch();
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec![
+                "shield",
+                "--source",
+                alias1.as_ref(),
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                "1000",
+                "--output-folder-path",
+                tempdir.path().to_str().unwrap(),
+                "--dump-tx",
+                "--ledger-address",
+                validator_one_rpc,
+            ]),
+        )
+    });
+    assert!(captured.result.is_ok());
+
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    txs_bytes.push(std::fs::read(&file_path).unwrap());
+    std::fs::remove_file(&file_path).unwrap();
+
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec![
+                "transfer",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                AB_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                "--gas-spending-key",
+                A_SPENDING_KEY,
+                "--gas-payer",
+                alias2.as_ref(),
+                "--gas-limit",
+                "100000",
+                "--gas-price",
+                "0.00001",
+                "--output-folder-path",
+                tempdir.path().to_str().unwrap(),
+                "--dump-tx",
+                "--ledger-address",
+                validator_one_rpc,
+            ]),
+        )
+    });
+    assert!(captured.result.is_ok());
+
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    txs_bytes.push(std::fs::read(&file_path).unwrap());
+    std::fs::remove_file(&file_path).unwrap();
+
+    let mut txs = vec![];
+    // FIXME: improve
+    for (idx, bytes) in txs_bytes.iter().enumerate() {
+        let (sk, pk) = if idx == 0 {
+            (sk1.clone(), pk1.clone())
+        } else {
+            (sk2.clone(), pk2.clone())
+        };
+        let mut tx = Tx::try_from_json_bytes(bytes).unwrap();
+        tx.add_wrapper(
+            tx::data::wrapper::Fee {
+                amount_per_gas_unit: DenominatedAmount::native(10.into()),
+                token: native_token.clone(),
+            },
+            pk.clone(),
+            100_000.into(),
+        );
+        tx.sign_raw(
+            vec![sk.clone()],
+            AccountPublicKeysMap::from_iter(vec![(pk)].into_iter()),
+            None,
+        );
+        tx.sign_wrapper(sk);
+
+        txs.push(tx.to_bytes());
+    }
+
+    node.clear_results();
+    node.submit_txs(txs);
+    // If empty then failed in process proposal
+    assert!(!node.tx_result_codes.lock().unwrap().is_empty());
+    node.assert_success();
+
+    // 4. Sync the shielded context and check the balances
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            AB_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 1998"));
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AB_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 1"));
+
+    // 5. Spend all the tokens in the pool (this verifies that the client
+    //    reconstructs the correct shielded state)
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec![
+                "unshield",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                alias2.as_ref(),
+                "--token",
+                NAM,
+                "--amount",
+                "1998",
+                "--gas-limit",
+                "100000",
+                "--gas-payer",
+                CHRISTEL_KEY,
+                "--node",
+                validator_one_rpc,
+            ]),
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec![
+                "unshield",
+                "--source",
+                B_SPENDING_KEY,
+                "--target",
+                alias2.as_ref(),
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                "--gas-limit",
+                "100000",
+                "--gas-payer",
+                CHRISTEL_KEY,
+                "--node",
+                validator_one_rpc,
+            ]),
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // 6. Check that all the shielded balances are 0
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            AB_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0"));
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AB_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0"));
+
+    Ok(())
+}
+
+// FIXME: we should also redo the same test but within a same batch?
