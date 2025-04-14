@@ -18,6 +18,100 @@ Namada v1.0.0 is the first stable release of the Namada apps.
 - updated namada libraries to libs-v0.46.1
   ([\#4123](https://github.com/anoma/namada/pull/4123))
 
+<<<<<<< HEAD
+=======
+## libs-v0.149.1
+
+Namada libs 0.149.1 release.
+
+### BUG FIXES
+
+- Upgrade tendermint-rs ([\#4545](https://github.com/anoma/namada/pull/4545))
+
+## libs-v0.149.0
+
+Namada libs 0.149.0 is a consensus and major breaking release.
+
+### BUG FIXES
+
+- Stop the minting of unclaimable shielded rewards for undated assets.
+  ([\#4304](https://github.com/anoma/namada/issues/4304))
+- Fixed the node's ledger reset command to avoid deleting
+  keys unless explicitly ran with a `--full-reset` flag.
+  ([\#4441](https://github.com/anoma/namada/pull/4441))
+- Fixed the production of masp events for masp fee payment transactions.
+  ([\#4449](https://github.com/anoma/namada/pull/4449))
+
+### FEATURES
+
+- Include the hash of the inner and wrapper transactions in emitted wasm events.
+  ([\#4454](https://github.com/anoma/namada/pull/4454))
+- Added a `node utils dry-run-proposal` command for governance proposal code
+  testing. ([\#4481](https://github.com/anoma/namada/pull/4481))
+
+### IMPROVEMENTS
+
+- Added app and libs version string to the ABCI Info query response.
+  ([\#4259](https://github.com/anoma/namada/pull/4259))
+- Improve accuracy in the determination of NAM to be minted by the MASP.
+  ([\#4369](https://github.com/anoma/namada/pull/4369))
+- Generate shielded payment addresses sequentially instead of randomly.
+  ([\#4417](https://github.com/anoma/namada/pull/4417))
+- Allow the shielded reward precision for tokens to be explicitly set via
+  governance proposals ([\#4423](https://github.com/anoma/namada/pull/4423))
+- Generate test vectors that use whitelisted tokens for the hardware wallet.
+  ([\#4445](https://github.com/anoma/namada/pull/4445))
+- Make sure that conversion state migrations are not ignored by the rewards
+  distrbiution algorithm. ([\#4452](https://github.com/anoma/namada/pull/4452))
+- Added MASP epoch to the `namada client epoch` query.
+  ([\#4457](https://github.com/anoma/namada/pull/4457))
+- Generalize the comparison of denominated amounts to
+  support the case where gap between denominations is large.
+  ([\#4472](https://github.com/anoma/namada/pull/4472))
+- The orderd of results of the inner transactions of a batch is now preserved in
+  the events. ([\#4489](https://github.com/anoma/namada/pull/4489))
+- Restored the old unordered buffer for fetched shielded transactions.
+  ([\#4490](https://github.com/anoma/namada/pull/4490))
+- Allow governance proposals to modify any shielded token storage key-val.
+  ([\#4493](https://github.com/anoma/namada/pull/4493))
+- Fixed the handling of events so that we don't emit
+  duplicated events inside the `tx/applied` one anymore.
+  ([\#4497](https://github.com/anoma/namada/pull/4497))
+- Reduced code duplication of `TxResult`.
+  ([\#4499](https://github.com/anoma/namada/pull/4499))
+- Allow MASP conversion and precision migrations to be applied at a future MASP
+  epoch. ([\#4510](https://github.com/anoma/namada/pull/4510))
+- Allow the current shielded reward precision of the native token to be
+  set. Also allow for scheduled changes to the base native token precision.
+  ([\#4522](https://github.com/anoma/namada/pull/4522))
+- Added consensus version to the ABCI Info query response. In Rust, the
+  version can be obtained from namada_core/sdk `consensus_version` function.
+  ([\#4524](https://github.com/anoma/namada/pull/4524))
+
+### MISCELLANEOUS
+
+- Updated rust-rocksdb dependency to v0.23 which uses RocksDB (C++) 9.9.3.
+  ([\#4378](https://github.com/anoma/namada/pull/4378))
+- Updated Rust toolchain to 1.85.1 and nightly to 2025-03-27
+  ([\#4439](https://github.com/anoma/namada/pull/4439))
+
+### MISCELLANOUS
+
+- Specified a minimum-supported-Rust-version.
+  ([\#4398](https://github.com/anoma/namada/pull/4398))
+
+### TESTING
+
+- Added MASP hardware wallet test automation.
+  ([\#3890](https://github.com/anoma/namada/pull/3890))
+- Fixed the speculative_context integration test so that it passes with the
+  hardware wallet. ([\#4418](https://github.com/anoma/namada/pull/4418))
+- Test that the auto-compounding of shielded balances is equivalent to manual
+  compounding. ([\#4491](https://github.com/anoma/namada/pull/4491))
+- Demonstrate direct conversion state migrations.
+  ([\#4513](https://github.com/anoma/namada/pull/4513))
+
+>>>>>>> 73ec060db (Changelog: Release libs 0.149.1)
 ## libs-v0.48.3
 
 Namada libs 0.48.3
