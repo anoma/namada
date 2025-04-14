@@ -6818,6 +6818,7 @@ fn get_shielded_hash(tx: &namada_sdk::tx::Tx) -> Option<MaspTxId> {
 // that both the protocol and the shielded sync command behave correctly. Since
 // the batches are not atomic check that the valid transactions get committed
 // and the balances are correctly updated
+// FIXME: should test masp fee payment for failing atomic batches? Yes
 #[test]
 fn masp_batch() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
@@ -7853,37 +7854,42 @@ fn mixed_masp_txs_same_block() -> Result<()> {
         .clone();
 
     // 0. Initialize accounts we can access the secret keys of
-    let (alias1, sk1) =
-        make_temp_account(&node, validator_one_rpc, "Alias1", NAM, 100_000)?;
-    let pk1 = sk1.to_public();
-    let (alias2, sk2) =
-        make_temp_account(&node, validator_one_rpc, "Alias2", NAM, 0)?;
-    let pk2 = sk2.to_public();
+    let (adam_alias, adam_key) =
+        make_temp_account(&node, validator_one_rpc, "Adam", NAM, 100_000)?;
+    let adam_pk = adam_key.to_public();
+    let (bradley_alias, bradley_key) =
+        make_temp_account(&node, validator_one_rpc, "Bradley", NAM, 0)?;
+    let bradley_pk = bradley_key.to_public();
+    let (cooper_alias, cooper_key) =
+        make_temp_account(&node, validator_one_rpc, "Cooper", NAM, 0)?;
+    let cooper_pk = cooper_key.to_public();
 
     // 1. Shield some tokens in two steps two generate two different output
     //    notes
-    for _ in 0..2 {
-        let captured = CapturedOutput::of(|| {
-            run(
-                &node,
-                Bin::Client,
-                apply_use_device(vec![
-                    "shield",
-                    "--source",
-                    ALBERT,
-                    "--target",
-                    AA_PAYMENT_ADDRESS,
-                    "--token",
-                    NAM,
-                    "--amount",
-                    "500",
-                    "--node",
-                    validator_one_rpc,
-                ]),
-            )
-        });
-        assert!(captured.result.is_ok());
-        assert!(captured.contains(TX_APPLIED_SUCCESS));
+    for target in [AA_PAYMENT_ADDRESS, AC_PAYMENT_ADDRESS] {
+        for _ in 0..2 {
+            let captured = CapturedOutput::of(|| {
+                run(
+                    &node,
+                    Bin::Client,
+                    apply_use_device(vec![
+                        "shield",
+                        "--source",
+                        ALBERT,
+                        "--target",
+                        target,
+                        "--token",
+                        NAM,
+                        "--amount",
+                        "500",
+                        "--node",
+                        validator_one_rpc,
+                    ]),
+                )
+            });
+            assert!(captured.result.is_ok());
+            assert!(captured.contains(TX_APPLIED_SUCCESS));
+        }
     }
 
     // 2. Sync the shielded context and check the balance
@@ -7894,31 +7900,37 @@ fn mixed_masp_txs_same_block() -> Result<()> {
             "shielded-sync",
             "--viewing-keys",
             AA_VIEWING_KEY,
+            AC_VIEWING_KEY,
             "--node",
             validator_one_rpc,
         ],
     )?;
-    let captured = CapturedOutput::of(|| {
-        run(
-            &node,
-            Bin::Client,
-            vec![
-                "balance",
-                "--owner",
-                AA_VIEWING_KEY,
-                "--token",
-                NAM,
-                "--node",
-                validator_one_rpc,
-            ],
-        )
-    });
-    assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1000"));
+    for owner in [AA_VIEWING_KEY, AC_VIEWING_KEY] {
+        let captured = CapturedOutput::of(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    owner,
+                    "--token",
+                    NAM,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )
+        });
+        assert!(captured.result.is_ok());
+        assert!(captured.contains("nam: 1000"));
+    }
 
-    // 3. Construct a block with two masp transactions, the first one is a
-    //    shielding and the second one is a shielded transfer doing masp fee
-    //    payment
+    // 3. Construct a block with three masp transactions laid out like so:
+    //     1. shielding
+    //     2. batch:
+    //        - unshield to perform masp fee payment
+    //        - masp shielded transfer
+    //     3. shielded transfer (with masp fee payment)
     let tempdir = tempfile::tempdir().unwrap();
     let mut txs_bytes = vec![];
 
@@ -7930,7 +7942,7 @@ fn mixed_masp_txs_same_block() -> Result<()> {
             apply_use_device(vec![
                 "shield",
                 "--source",
-                alias1.as_ref(),
+                adam_alias.as_ref(),
                 "--target",
                 AA_PAYMENT_ADDRESS,
                 "--token",
@@ -7958,6 +7970,125 @@ fn mixed_masp_txs_same_block() -> Result<()> {
     txs_bytes.push(std::fs::read(&file_path).unwrap());
     std::fs::remove_file(&file_path).unwrap();
 
+    // Construct the batch
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec![
+                "unshield",
+                "--source",
+                C_SPENDING_KEY,
+                "--target",
+                cooper_alias.as_ref(),
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                "--gas-limit",
+                "100000",
+                "--gas-price",
+                "0.00001",
+                "--gas-payer",
+                cooper_alias.as_ref(),
+                "--gas-spending-key",
+                C_SPENDING_KEY,
+                "--output-folder-path",
+                tempdir.path().to_str().unwrap(),
+                "--dump-tx",
+                "--ledger-address",
+                validator_one_rpc,
+            ]),
+        )
+    });
+    assert!(captured.result.is_ok());
+
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let batch_tx0_bytes = std::fs::read(&file_path).unwrap();
+    std::fs::remove_file(&file_path).unwrap();
+
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec![
+                "transfer",
+                "--source",
+                C_SPENDING_KEY,
+                "--target",
+                AB_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                // Fake a transparent gas payer, fees will actually be paid by
+                // the first tx of this batch
+                "--gas-payer",
+                CHRISTEL_KEY,
+                "--output-folder-path",
+                tempdir.path().to_str().unwrap(),
+                "--dump-tx",
+                "--ledger-address",
+                validator_one_rpc,
+            ]),
+        )
+    });
+    assert!(captured.result.is_ok());
+
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let batch_tx1_bytes = std::fs::read(&file_path).unwrap();
+    std::fs::remove_file(&file_path).unwrap();
+
+    // Create the batch
+    let tx0: namada_sdk::tx::Tx =
+        serde_json::from_slice(&batch_tx0_bytes).unwrap();
+    let tx1: namada_sdk::tx::Tx =
+        serde_json::from_slice(&batch_tx1_bytes).unwrap();
+
+    let signing_data = SigningTxData {
+        owner: None,
+        public_keys: vec![cooper_pk.clone()],
+        threshold: 1,
+        account_public_keys_map: None,
+        fee_payer: cooper_pk.clone(),
+        shielded_hash: None,
+    };
+
+    let (batched_tx, _signing_data) = namada_sdk::tx::build_batch(vec![
+        (
+            tx0.clone(),
+            SigningTxData {
+                shielded_hash: get_shielded_hash(&tx0),
+                ..signing_data.clone()
+            },
+        ),
+        (
+            tx1.clone(),
+            SigningTxData {
+                shielded_hash: get_shielded_hash(&tx1),
+                ..signing_data.clone()
+            },
+        ),
+    ])
+    .unwrap();
+    let mut buffer = vec![];
+    batched_tx.to_writer_json(&mut buffer).unwrap();
+    txs_bytes.push(buffer);
+
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -7975,7 +8106,7 @@ fn mixed_masp_txs_same_block() -> Result<()> {
                 "--gas-spending-key",
                 A_SPENDING_KEY,
                 "--gas-payer",
-                alias2.as_ref(),
+                bradley_alias.as_ref(),
                 "--gas-limit",
                 "100000",
                 "--gas-price",
@@ -8002,12 +8133,13 @@ fn mixed_masp_txs_same_block() -> Result<()> {
     std::fs::remove_file(&file_path).unwrap();
 
     let mut txs = vec![];
-    // FIXME: improve
     for (idx, bytes) in txs_bytes.iter().enumerate() {
         let (sk, pk) = if idx == 0 {
-            (sk1.clone(), pk1.clone())
+            (adam_key.clone(), adam_pk.clone())
+        } else if idx == 1 {
+            (cooper_key.clone(), cooper_pk.clone())
         } else {
-            (sk2.clone(), pk2.clone())
+            (bradley_key.clone(), bradley_pk.clone())
         };
         let mut tx = Tx::try_from_json_bytes(bytes).unwrap();
         tx.add_wrapper(
@@ -8043,6 +8175,7 @@ fn mixed_masp_txs_same_block() -> Result<()> {
             "--viewing-keys",
             AA_VIEWING_KEY,
             AB_VIEWING_KEY,
+            AC_VIEWING_KEY,
             "--node",
             validator_one_rpc,
         ],
@@ -8080,7 +8213,24 @@ fn mixed_masp_txs_same_block() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1"));
+    assert!(captured.contains("nam: 2"));
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AC_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 997"));
 
     // 5. Spend all the tokens in the pool (this verifies that the client
     //    reconstructs the correct shielded state)
@@ -8093,7 +8243,7 @@ fn mixed_masp_txs_same_block() -> Result<()> {
                 "--source",
                 A_SPENDING_KEY,
                 "--target",
-                alias2.as_ref(),
+                bradley_alias.as_ref(),
                 "--token",
                 NAM,
                 "--amount",
@@ -8119,11 +8269,37 @@ fn mixed_masp_txs_same_block() -> Result<()> {
                 "--source",
                 B_SPENDING_KEY,
                 "--target",
-                alias2.as_ref(),
+                bradley_alias.as_ref(),
                 "--token",
                 NAM,
                 "--amount",
-                "1",
+                "2",
+                "--gas-limit",
+                "100000",
+                "--gas-payer",
+                CHRISTEL_KEY,
+                "--node",
+                validator_one_rpc,
+            ]),
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec![
+                "unshield",
+                "--source",
+                C_SPENDING_KEY,
+                "--target",
+                bradley_alias.as_ref(),
+                "--token",
+                NAM,
+                "--amount",
+                "997",
                 "--gas-limit",
                 "100000",
                 "--gas-payer",
@@ -8145,46 +8321,31 @@ fn mixed_masp_txs_same_block() -> Result<()> {
             "--viewing-keys",
             AA_VIEWING_KEY,
             AB_VIEWING_KEY,
+            AC_VIEWING_KEY,
             "--node",
             validator_one_rpc,
         ],
     )?;
-    let captured = CapturedOutput::of(|| {
-        run(
-            &node,
-            Bin::Client,
-            vec![
-                "balance",
-                "--owner",
-                AA_VIEWING_KEY,
-                "--token",
-                NAM,
-                "--node",
-                validator_one_rpc,
-            ],
-        )
-    });
-    assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0"));
-    let captured = CapturedOutput::of(|| {
-        run(
-            &node,
-            Bin::Client,
-            vec![
-                "balance",
-                "--owner",
-                AB_VIEWING_KEY,
-                "--token",
-                NAM,
-                "--node",
-                validator_one_rpc,
-            ],
-        )
-    });
-    assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0"));
+
+    for owner in [AA_VIEWING_KEY, AB_VIEWING_KEY, AC_VIEWING_KEY] {
+        let captured = CapturedOutput::of(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    owner,
+                    "--token",
+                    NAM,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )
+        });
+        assert!(captured.result.is_ok());
+        assert!(captured.contains("nam: 0"));
+    }
 
     Ok(())
 }
-
-// FIXME: we should also redo the same test but within a same batch?
