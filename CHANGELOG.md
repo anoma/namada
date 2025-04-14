@@ -49,6 +49,14 @@ Namada v1.0.0 is the first stable release of the Namada apps.
 - updated namada libraries to libs-v0.46.1
   ([\#4123](https://github.com/anoma/namada/pull/4123))
 
+## libs-v0.149.1
+
+Namada libs 0.149.1 release.
+
+### BUG FIXES
+
+- Upgrade tendermint-rs ([\#4545](https://github.com/anoma/namada/pull/4545))
+
 ## libs-v0.149.0
 
 Namada libs 0.149.0 is a consensus and major breaking release.
