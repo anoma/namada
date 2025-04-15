@@ -150,45 +150,18 @@ pub fn shielded_reward_reset_migration(
 ) {
     // The address of the native token. This is what rewards are denominated in.
     const NATIVE_TOKEN_BECH32M: AddressBech32m =
-        "tnam1qxgfw7myv4dh0qna4hq0xdg6lx77fzl7dcem8h7e";
+        "tnam1qy440ynh9fwrx8aewjvvmu38zxqgukgc259fzp6h";
     let native_token = Address::from_str(NATIVE_TOKEN_BECH32M)
         .expect("unable to construct native token address");
     // The MASP epoch in which this migration will be applied. This number
     // controls the number of epochs of conversions created.
-    const TARGET_MASP_EPOCH: MaspEpoch = MaspEpoch::new(2000);
+    const TARGET_MASP_EPOCH: MaspEpoch = MaspEpoch::new(26412);
     // The tokens whose rewarrds will be reset.
-    const TOKENS: [(TokenAddress, Denomination, Precision); 6] = [
-        (
-            TokenAddress::Ibc("channel-1", "uosmo"),
-            Denomination(0u8),
-            1000u128,
-        ),
-        (
-            TokenAddress::Ibc("channel-2", "uatom"),
-            Denomination(0u8),
-            1000u128,
-        ),
-        (
-            TokenAddress::Ibc("channel-3", "utia"),
-            Denomination(0u8),
-            1000u128,
-        ),
-        (
-            TokenAddress::Ibc("channel-0", "stuosmo"),
-            Denomination(0u8),
-            1000u128,
-        ),
-        (
-            TokenAddress::Ibc("channel-0", "stuatom"),
-            Denomination(0u8),
-            1000u128,
-        ),
-        (
-            TokenAddress::Ibc("channel-0", "stutia"),
-            Denomination(0u8),
-            1000u128,
-        ),
-    ];
+    const TOKENS: [(TokenAddress, Denomination, Precision); 1] = [(
+        TokenAddress::Ibc("channel-13", "uosmo"),
+        Denomination(0u8),
+        4500u128,
+    )];
 
     // Reset the allowed conversions for the above tokens
     for (token_address, denomination, precision) in TOKENS {
@@ -483,46 +456,42 @@ pub fn wasm_migration(updates: &mut Vec<migrations::DbUpdateType>) {
     let wasm_updates: Vec<(&str, &str, &[u8])> =
         vec![
         (
-            "83afcbf97c35188991ae2e73db2f48cb8d019c4295fe5323d9c3dfebcd5dbec0",
+            "a7930353bb14bf4533f7c646765f699351d9651f80ebf445d69aa0a698f93034",
             "tx_transfer.wasm",
-            //include_bytes!("tx_transfer.5c7e44e61c00df351fa7c497cd2e186d71909f1a18db0c8d362dff36057e0fbf.wasm"),
-            &[0xDE, 0xAD, 0xBE, 0xEF],
+            include_bytes!("../wasm/tx_transfer.ef687f96ec919f5da2e90f125a2800f198a06bcd609a37e5a9ec90d442e32239.wasm"),
         ),
         (
-            "6ff3c2a2ebc65061a9b89abd15fb37851ca77e162b42b7989889bd537e802b09",
+            "3dfc215f99ef1578e2465c8c504523b8a193d7cebfb56fce2c9242472243be1a",
             "tx_ibc.wasm",
-            //include_bytes!("tx_ibc.ae9b900edd6437461addd1fe1c723c4b1a8ac8d2fce30e1e4c417ef34f299f73.wasm"),
-            &[0xDE, 0xAD, 0xBE, 0xEF],
+            include_bytes!("../wasm/tx_ibc.7b0d43f4a277aadd02562d811c755e09d7f191c601ca3bffb89a7f8b599dab1e.wasm"),
         ),
     ];
 
     // Update the tx allowlist parameter
     let tx_allowlist_key = get_tx_allowlist_storage_key();
     let tx_allowlist: Vec<&str> = vec![
-        "ec357c39e05677da3d8da359fee6e3a8b9012dd1a7e7def51f4e484132f68c77",
-        "a324288bdc7a7d3cb15ca5ef3ebb04b9121b1d5804478dabd1ef4533459d7069",
-        "6012fff1d191a545d6f7960f1dd9b2df5fcdfc9dbb8dfd22bb1458f3983144b9",
-        "4fe1bb1e76c21eacd5eb84782c51aebd683643eefbd1034e4e13aa7284f508f8",
-        "23eec5e1bad79387e57d052840b86ff061aa3182638f690a642126183788f0e3",
-        "5a31f468d03207a8e566a55072ddad7aad018fc635621564fb1c105b0f089f4d",
-        "9eb40c4b40b5af540f9a32f8bd377a53cd3b5e0c3c799b4381ef6475f333e33d",
-        "2b3cf66f49093f674793fcdba72d45f1d7c0e34556800f597d3d5242d97091e0",
-        "6ff3c2a2ebc65061a9b89abd15fb37851ca77e162b42b7989889bd537e802b09",
-        "31a7199befce4226faad7fe1744895fb6845ee0749016c3a2a0a31b26088aff9",
-        "f0d270cab3357124eb8894c1e7cb0e775056ed613e41d075e23467bcaa36a1f7",
-        "51c4d0149807597c1c7981cf28cb8b078c93843b7ae91a6cd9e6b422f343e9a3",
-        "a07d722db5d3d06b0c65cb0c20811ce2a95105cebe2456a3ea6334eb2438fbab",
-        "f1cdb278dae8b7ab28fd850dcf9746b03aee2b42444ec9e39ae3a0bd46f3e17c",
-        "b48de32b91a58d8e63cd283bd96276f38736822ca8f90bfec2093eefdcdf5148",
-        "83afcbf97c35188991ae2e73db2f48cb8d019c4295fe5323d9c3dfebcd5dbec0",
-        "8293cecc00c63bb4b6216eec912c57c72544f42203ba1ff5a42ae098c9e921e4",
-        "f0e37af0417f5d54f20c81c2cf1b9301bd13ce79695b78c85d11b2ba187fa86d",
-        "0c650c7869da1ac3e734a4367557a499c937962effde4f7e7cc609278000ebd1",
-        "dbb6f005883075ab4133d8bd367af914a899946e7ae532f816be48c77044a512",
-        "bf4716b590b68562ee2c872757a0c370daf1504596d4350fffc0b94a566072ca",
-        "f6330d8c8bc92d9f8ea0f023688873722b65291bc6db9bb11ab3a0836e1be86b",
-        "c4357f5548c43086e56f22ac2e951ee2500368d8ed2479c0d0046b6e59f8a8e5",
-        "b4261ecafcfb0254efb39165311268d99bb5aa85ac47514913317d20f1791790",
+        "3e00e65b91d9dd492dcc81a7866dbcff3eb4695c6699a0de2faa821f97307df1",
+        "a128bca753095fcdc63c2df39ab68871265353ed8080edf5ed6a564e8fcd6230",
+        "18900f074a145abf8cdd11834aaf241fd91ac469b51a3cc120e5c54fbb695094",
+        "8048cbf1e818d2b26fc8053974f9e9d370fe72f60a08b7caa301ec3a9581c6c8",
+        "ee131caf1524007b802db378eefc60e6b4cbb1ba61bc8a1e34da9314ffdb949c",
+        "6413c972303853839fc0cd83ce92ab7f54aa579381d7e188849f7121812ede24",
+        "b74104949ac0c35ee922fdc3f3db454627742e2483d79550c12fcf31755c6d01",
+        "e65656bc670cc04f7427f5010c4aa984626e63b41ba4e533ae8f1e8db01d4b42",
+        "3dfc215f99ef1578e2465c8c504523b8a193d7cebfb56fce2c9242472243be1a",
+        "25b000933b3b351e1fb53232a5274dd6f47798f037ed708501b0c75dcdf6a485",
+        "d58a7cf49253379841bc2a6e083f67458de4420c716213313d208770b189564b",
+        "a0acc398febb33d22fcfdca513fc94e82dc7af9e4dc8f8bb7a6cf3d1be1890b3",
+        "23bdb65eb8e5c05a7c19ca4302bf3741088ec88ad657c7b83c645d389788ef81",
+        "b5e1d111a0406768fe2333c5fe2df670926733d2e8e54ede5a155408e836fba1",
+        "15b33763ce4448f5a7daf86f8deb112f99ad6590346a51070b72c0b77fb58c79",
+        "a7930353bb14bf4533f7c646765f699351d9651f80ebf445d69aa0a698f93034",
+        "8fb6b8bad4eb411a03284f31532189853e91ea1952e354422dec2193db44738f",
+        "0730eb90a8fbfd9c504dbc9ac36f532b6fb4ba44fa9284eea04d2914079a4bbe",
+        "276db651c908a5728907aaa4e0d76eeccdb62a10a247b225d682ddcc745c0873",
+        "231e48a14c23da4cf0bdc0afeb1f113e8d9699b5787a16f188dda79e38eef6bb",
+        "60547d6ead8e0c8dc925f3abd6c0c97b2e45d4904ab4ca4b986e63ff68a98f5b",
+        "27c6c1565e6e984c01d6a6f47c26468f6b42e917ac16e6b997681b119d08d2fe",
     ];
     let mut tx_allowlist: Vec<String> = tx_allowlist
         .into_iter()
