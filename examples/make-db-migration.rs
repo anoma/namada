@@ -34,6 +34,8 @@ use sha2::{Digest, Sha256};
 pub type ChannelId = &'static str;
 /// Represents the base token of an IBC token
 pub type BaseToken = &'static str;
+/// Represents a Namada address in Bech32m encoding
+pub type AddressBech32m = &'static str;
 /// The type hash of the conversion state structure in v0.31.9
 pub const OLD_CONVERSION_STATE_TYPE_HASH: &str =
     "05E2FD0BEBD54A05AAE349BBDE61F90893F09A72850EFD4F69060821EC5DE65F";
@@ -132,7 +134,7 @@ pub enum TokenAddress {
     // Self::Address variant.
     Ibc(ChannelId, BaseToken),
     // Directly specify a Namada address
-    Address(Address),
+    Address(AddressBech32m),
 }
 
 /// Demonstrate clearing MASP rewards for the given IBC tokens by overwriting
@@ -141,35 +143,57 @@ pub fn shielded_reward_reset_migration(
     updates: &mut Vec<migrations::DbUpdateType>,
 ) {
     // The address of the native token. This is what rewards are denominated in.
-    const NATIVE_TOKEN_BECH32M: &str =
+    const NATIVE_TOKEN_BECH32M: AddressBech32m =
         "tnam1qxgfw7myv4dh0qna4hq0xdg6lx77fzl7dcem8h7e";
     let native_token = Address::from_str(NATIVE_TOKEN_BECH32M)
         .expect("unable to construct native token address");
     // The MASP epoch in which this migration will be applied. This number
     // controls the number of epochs of conversions created.
     const TARGET_MASP_EPOCH: MaspEpoch = MaspEpoch::new(2000);
-    // The denomination of the targetted token. Since all tokens here are IBC
-    // tokens, this is 0.
-    const DENOMINATION: Denomination = Denomination(0u8);
     // The tokens whose rewarrds will be reset.
-    const TOKENS: [(TokenAddress, Precision); 6] = [
-        (TokenAddress::Ibc("channel-1", "uosmo"), 1000u128),
-        (TokenAddress::Ibc("channel-2", "uatom"), 1000u128),
-        (TokenAddress::Ibc("channel-3", "utia"), 1000u128),
-        (TokenAddress::Ibc("channel-0", "stuosmo"), 1000u128),
-        (TokenAddress::Ibc("channel-0", "stuatom"), 1000u128),
-        (TokenAddress::Ibc("channel-0", "stutia"), 1000u128),
+    const TOKENS: [(TokenAddress, Denomination, Precision); 6] = [
+        (
+            TokenAddress::Ibc("channel-1", "uosmo"),
+            Denomination(0u8),
+            1000u128,
+        ),
+        (
+            TokenAddress::Ibc("channel-2", "uatom"),
+            Denomination(0u8),
+            1000u128,
+        ),
+        (
+            TokenAddress::Ibc("channel-3", "utia"),
+            Denomination(0u8),
+            1000u128,
+        ),
+        (
+            TokenAddress::Ibc("channel-0", "stuosmo"),
+            Denomination(0u8),
+            1000u128,
+        ),
+        (
+            TokenAddress::Ibc("channel-0", "stuatom"),
+            Denomination(0u8),
+            1000u128,
+        ),
+        (
+            TokenAddress::Ibc("channel-0", "stutia"),
+            Denomination(0u8),
+            1000u128,
+        ),
     ];
 
     // Reset the allowed conversions for the above tokens
-    for (token_address, precision) in TOKENS {
+    for (token_address, denomination, precision) in TOKENS {
         // Compute the Namada address
         let token_address = match token_address {
             TokenAddress::Ibc(channel_id, base_token) => {
                 let ibc_denom = format!("transfer/{channel_id}/{base_token}");
                 ibc_token(&ibc_denom).clone()
             }
-            TokenAddress::Address(addr) => addr,
+            TokenAddress::Address(addr) => Address::from_str(addr)
+                .expect("unable to construct token address"),
         };
         // Erase the TOK rewards that have been distributed so far
         let mut asset_types = BTreeMap::new();
@@ -180,7 +204,7 @@ pub fn shielded_reward_reset_migration(
             *asset_types.entry((epoch, digit)).or_insert_with(|| {
                 encode_asset_type(
                     token_address.clone(),
-                    DENOMINATION,
+                    denomination,
                     digit,
                     Some(epoch),
                 )
@@ -248,7 +272,7 @@ pub fn shielded_reward_reset_migration(
                 // TOK[ep, digit]
                 let asset_type = encode_asset_type(
                     token_address.clone(),
-                    DENOMINATION,
+                    denomination,
                     digit,
                     Some(epoch),
                 )
