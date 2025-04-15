@@ -124,6 +124,26 @@ impl Display for MaspTxData {
     }
 }
 
+/// FMD flag ciphertexts.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+#[derive(
+    Serialize,
+    Deserialize,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Debug,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+)]
+pub struct FlagCiphertext {
+    inner: Vec<u8>,
+}
+
 /// Wrapper type around `Epoch` for type safe operations involving the masp
 /// epoch
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
