@@ -2529,6 +2529,8 @@ fn masp_txs_and_queries() -> Result<()> {
                     "automation:DEBUG",
                     "--display",
                     "headless",
+                    "--api-port",
+                    "0" // Disables REST API
                 ])
                 .spawn()
                 .unwrap(),
