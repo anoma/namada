@@ -38,6 +38,7 @@ pub type ChannelId = &'static str;
 pub type BaseToken = &'static str;
 /// Represents a Namada address in Bech32m encoding
 pub type AddressBech32m = &'static str;
+<<<<<<< HEAD
 /// Represents the hash of a WASM binary
 pub type WasmHash = &'static str;
 /// Represents the bytes of a WASM binary
@@ -50,6 +51,8 @@ pub type TargetLockedAmount = u64;
 pub type KpGain = &'static str;
 /// Represents a nominal derivative gain
 pub type KdGain = &'static str;
+=======
+>>>>>>> 088486132 (Allow denomination to be specified separately for each token.)
 /// The type hash of the conversion state structure in v0.31.9
 pub const OLD_CONVERSION_STATE_TYPE_HASH: &str =
     "05E2FD0BEBD54A05AAE349BBDE61F90893F09A72850EFD4F69060821EC5DE65F";
@@ -158,6 +161,19 @@ pub fn shielded_reward_precision_migration(
     }
 }
 
+<<<<<<< HEAD
+=======
+/// A convenience data structure to allow token addresses to be more readably
+/// expressed as a channel ID and base token instead of a raw Namada address.
+pub enum TokenAddress {
+    // Specify an IBC address. This can also be done more directly using the
+    // Self::Address variant.
+    Ibc(ChannelId, BaseToken),
+    // Directly specify a Namada address
+    Address(AddressBech32m),
+}
+
+>>>>>>> 088486132 (Allow denomination to be specified separately for each token.)
 /// Demonstrate clearing MASP rewards for the given IBC tokens by overwriting
 /// their allowed conversions with conversions that do not contain rewards.
 pub fn shielded_reward_reset_migration(
