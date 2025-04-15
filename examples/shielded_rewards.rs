@@ -1,7 +1,7 @@
 use std::io::Write;
 
-use namada_core::dec::Dec;
 use namada_core::token::DenominatedAmount;
+use namada_core::uint::Uint;
 
 /// Default value for the native currency code
 const DEFAULT_NATIVE_CODE: &str = "NAM";
@@ -68,6 +68,16 @@ pub fn main() -> std::io::Result<()> {
             .map_err(std::io::Error::other)?
     };
 
+    // Get the exchange rate for the native token
+    print!("Exchange rate USD/{}: ", native_code);
+    std::io::stdout().flush()?;
+    let mut native_exchange_rate = String::new();
+    stdin.read_line(&mut native_exchange_rate)?;
+    let native_exchange_rate = native_exchange_rate
+        .trim()
+        .parse::<DenominatedAmount>()
+        .map_err(std::io::Error::other)?;
+
     // Let S be the total supply of NAM
     print!("Native token supply in {}: ", native_code);
     std::io::stdout().flush()?;
@@ -112,6 +122,16 @@ pub fn main() -> std::io::Result<()> {
             .parse::<u8>()
             .map_err(std::io::Error::other)?
     };
+
+    // Get the exchange rate for the incentivised token
+    print!("Exchange rate USD/{}: ", incent_code);
+    std::io::stdout().flush()?;
+    let mut incent_exchange_rate = String::new();
+    stdin.read_line(&mut incent_exchange_rate)?;
+    let incent_exchange_rate = incent_exchange_rate
+        .trim()
+        .parse::<DenominatedAmount>()
+        .map_err(std::io::Error::other)?;
 
     // Let X be the target amount of TOK locked in the MASP
     print!("Target locked amount in {}: ", incent_code);
@@ -169,11 +189,12 @@ pub fn main() -> std::io::Result<()> {
         .increase_precision(native_decimals.into())
         .map_err(std::io::Error::other)?;
 
-    // A necessary condition for there to be inflation is that floor(I*P/X)>=1.
+    // Let P be the precision of the token TOK. A necessary condition for there
+    // to be inflation is that floor(I*P/X)>=1.
     let min_precision =
         lock_target.amount().raw_amount() / inflation.amount().raw_amount();
     // A necessary condition for users holding more than the threshold to get
-    // rewards is that P<=M.
+    // rewards is that P <= M.
     let max_precision = incent_threshold.amount().raw_amount();
     println!(
         "At an inflation of {} {}, the precision must be between {} and {} in \
@@ -181,23 +202,55 @@ pub fn main() -> std::io::Result<()> {
         inflation, native_code, min_precision, max_precision
     );
 
-    // Let P be the precision of the token TOK
+    // Get a precision, P, in the computed range from the user
     print!("Precision ([{}, {}]): ", min_precision, max_precision);
     std::io::stdout().flush()?;
     let mut precision = String::new();
     stdin.read_line(&mut precision)?;
-    let precision = precision
-        .trim()
-        .parse::<Dec>()
+    let precision = Uint::from_str_radix(precision.trim(), 10)
         .map_err(std::io::Error::other)?;
+
+    // A reward of I*P/X uNAM is obtained for every P TOK locked in the pool
+    let reward_per_precision = (inflation.amount().raw_amount() * precision)
+        / lock_target.amount().raw_amount();
+    let precision =
+        DenominatedAmount::new(precision.into(), incent_decimals.into());
+    let reward_per_precision = DenominatedAmount::new(
+        reward_per_precision.into(),
+        native_decimals.into(),
+    );
+    let precision_usd = precision.checked_mul(incent_exchange_rate).ok_or(
+        std::io::Error::other("unable to multiply precision by exchange rate"),
+    )?;
+    let reward_usd_per_precision = reward_per_precision
+        .checked_mul(native_exchange_rate)
+        .ok_or(std::io::Error::other(
+            "unable to multiply minimum reward by exchange rate",
+        ))?;
+    let exchanged_reward_rate = reward_usd_per_precision
+        .checked_div(precision_usd)
+        .ok_or(std::io::Error::other("unable to divide "))?;
+    // Summarise the rewards from the perrspective of end-users
     println!(
-        "Users holding at least {} {} in the shielded pool will receive \
-         rewards.",
-        precision, incent_code
+        "For every {} {} held in the shielded pool, a shielded reward of {} \
+         {} will be distributed every MASP epoch. Concretely this means that \
+         for every {} USD worth of {} held in the shielded pool, a {} \
+         shielded reward worth {} USD will be rewarded. Hence there's \
+         effectively a reward rate of {} when all quantities are expressed in \
+         the same units.",
+        precision,
+        incent_code,
+        reward_per_precision,
+        native_code,
+        precision_usd,
+        incent_code,
+        native_code,
+        reward_usd_per_precision,
+        exchanged_reward_rate,
     );
 
-    // It must be that S*C/Y >= I, which implies that the reward rate
-    // C >= (I*Y)/S
+    // Let C be the maximum reward rate for the token TOK. It must be that
+    // S*C/Y >= I, which implies that the reward rate C >= (I*Y)/S
     let inflation_per_year = inflation
         .checked_mul(DenominatedAmount::new(
             masp_epochs_per_year.into(),
@@ -220,7 +273,7 @@ pub fn main() -> std::io::Result<()> {
         max_reward_rate_threshold, inflation, native_code
     );
 
-    // Let C be the maximum reward rate for the token TOK
+    // Get the maximum reward rate, C, from the user.
     print!("Maximum reward rate (>= {}): ", max_reward_rate_threshold);
     std::io::stdout().flush()?;
     let mut maximum_reward_rate = String::new();

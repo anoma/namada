@@ -625,7 +625,7 @@ impl DenominatedAmount {
         })
     }
 
-    /// Checked division computed to the given precission. Returns `None` on
+    /// Checked division computed to the given precision. Returns `None` on
     /// overflow.
     pub fn checked_div_precision(
         &self,
