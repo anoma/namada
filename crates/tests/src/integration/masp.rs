@@ -6818,7 +6818,6 @@ fn get_shielded_hash(tx: &namada_sdk::tx::Tx) -> Option<MaspTxId> {
 // that both the protocol and the shielded sync command behave correctly. Since
 // the batches are not atomic check that the valid transactions get committed
 // and the balances are correctly updated
-// FIXME: should test masp fee payment for failing atomic batches? Yes
 #[test]
 fn masp_batch() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
@@ -7227,7 +7226,7 @@ fn masp_atomic_batch() -> Result<()> {
     {
         let codes = node.tx_result_codes.lock().unwrap();
         // If empty then failed in process proposal
-        assert!(!codes.is_empty());
+        assert_eq!(codes.len(), 2);
 
         // Both batches must fail
         for code in codes.iter() {
@@ -7300,6 +7299,314 @@ fn masp_atomic_batch() -> Result<()> {
         (AA_VIEWING_KEY, 0),
         (adam_alias.as_ref(), 500_000),
         (bradley_alias.as_ref(), 500_000),
+    ] {
+        let captured = CapturedOutput::of(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    owner,
+                    "--token",
+                    NAM,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )
+        });
+        assert!(captured.result.is_ok());
+        assert!(captured.contains(&format!("nam: {balance}")));
+    }
+
+    Ok(())
+}
+
+// Test a failing atomic batch involving MASP fee payment. The MASP fee payment
+// tx is applied while the second one fails. Verify that even if the batch is
+// atomic, the fee paying transaction gets committed and only the second one is
+// rejected.
+#[test]
+fn masp_failing_atomic_batch() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::setup()?;
+    _ = node.next_masp_epoch();
+    let tempdir = tempfile::tempdir().unwrap();
+
+    // Initialize accounts we can access the secret keys of
+    let (adam_alias, adam_key) =
+        make_temp_account(&node, validator_one_rpc, "Adam", NAM, 0)?;
+
+    // Assert reference NAM balances at VK(A), Albert and Bertha are unchanged
+    for owner in [AA_VIEWING_KEY, adam_alias.as_ref()] {
+        let captured = CapturedOutput::of(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    owner,
+                    "--token",
+                    NAM,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )
+        });
+        assert!(captured.result.is_ok());
+        assert!(captured.contains("nam: 0"));
+    }
+
+    // Shield some tokens
+    for target in [AA_PAYMENT_ADDRESS, AC_PAYMENT_ADDRESS] {
+        let captured = CapturedOutput::of(|| {
+            run(
+                &node,
+                Bin::Client,
+                apply_use_device(vec![
+                    "shield",
+                    "--source",
+                    ALBERT,
+                    "--target",
+                    target,
+                    "--token",
+                    NAM,
+                    "--amount",
+                    "1000",
+                    "--node",
+                    validator_one_rpc,
+                ]),
+            )
+        });
+        assert!(captured.result.is_ok());
+        assert!(captured.contains(TX_APPLIED_SUCCESS));
+    }
+
+    // Sync the shielded context and check the balance
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            AC_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+    for owner in [AA_VIEWING_KEY, AC_VIEWING_KEY] {
+        let captured = CapturedOutput::of(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    owner,
+                    "--token",
+                    NAM,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )
+        });
+        assert!(captured.result.is_ok());
+        assert!(captured.contains("nam: 1000"));
+    }
+
+    // Generate txs for the batch
+    let mut batch = vec![];
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "unshield",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                adam_alias.as_ref(),
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                // This gas limit is manually set to allow for the execution of
+                // the first tx only (the second one will run out of gas
+                // leading to the failure of the atomic batch)
+                "--gas-limit",
+                "50000",
+                "--gas-price",
+                "0.00001",
+                "--gas-spending-key",
+                A_SPENDING_KEY,
+                "--gas-payer",
+                adam_alias.as_ref(),
+                "--output-folder-path",
+                tempdir.path().to_str().unwrap(),
+                "--dump-wrapper-tx",
+                "--ledger-address",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    batch.push(std::fs::read(&file_path).unwrap());
+    std::fs::remove_file(&file_path).unwrap();
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "transfer",
+                "--source",
+                C_SPENDING_KEY,
+                "--target",
+                AB_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                // Fake a transparent gas payer, fees will actually be paid by
+                // the first tx of this batch
+                "--gas-payer",
+                CHRISTEL_KEY,
+                "--output-folder-path",
+                tempdir.path().to_str().unwrap(),
+                "--dump-wrapper-tx",
+                "--ledger-address",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    batch.push(std::fs::read(&file_path).unwrap());
+    std::fs::remove_file(&file_path).unwrap();
+
+    // Create the batch
+    let tx0: namada_sdk::tx::Tx = serde_json::from_slice(&batch[0]).unwrap();
+    let tx1: namada_sdk::tx::Tx = serde_json::from_slice(&batch[1]).unwrap();
+
+    let signing_data = SigningTxData {
+        owner: None,
+        public_keys: vec![adam_key.to_public()],
+        threshold: 1,
+        account_public_keys_map: None,
+        fee_payer: adam_key.to_public(),
+        shielded_hash: None,
+    };
+
+    let (mut batched_tx, _signing_data) = namada_sdk::tx::build_batch(vec![
+        (
+            tx0.clone(),
+            SigningTxData {
+                shielded_hash: get_shielded_hash(&tx0),
+                ..signing_data.clone()
+            },
+        ),
+        (
+            tx1.clone(),
+            SigningTxData {
+                shielded_hash: get_shielded_hash(&tx1),
+                ..signing_data.clone()
+            },
+        ),
+    ])
+    .unwrap();
+    batched_tx.header.atomic = true;
+
+    batched_tx.sign_wrapper(adam_key.clone());
+    let wrapper_hash = batched_tx.wrapper_hash();
+
+    let mut inner_cmts = vec![];
+    for cmt in batched_tx.commitments() {
+        inner_cmts.push(cmt.to_owned());
+    }
+
+    node.clear_results();
+    node.submit_txs(vec![batched_tx.to_bytes()]);
+
+    // Check the block result
+    {
+        let codes = node.tx_result_codes.lock().unwrap();
+        // If empty then failed in process proposal
+        assert_eq!(codes.len(), 1);
+
+        // Batch must fail
+        assert!(matches!(
+            codes[0],
+            NodeResults::Failed(
+                namada_node::shell::ResultCode::WasmRuntimeError
+            )
+        ));
+
+        let results = node.tx_results.lock().unwrap();
+        // We submitted one batch
+        assert_eq!(results.len(), 1);
+
+        // Check inner tx results
+        let res0 = &results[0];
+        assert_eq!(res0.len(), 2);
+        let inner_tx_result = res0
+            .get_inner_tx_result(
+                wrapper_hash.as_ref(),
+                itertools::Either::Right(&inner_cmts[0]),
+            )
+            .expect("Missing expected tx result")
+            .as_ref()
+            .expect("Result is supposed to be Ok");
+        assert!(inner_tx_result.is_accepted());
+        let inner_tx_result = res0
+            .get_inner_tx_result(
+                wrapper_hash.as_ref(),
+                itertools::Either::Right(&inner_cmts[1]),
+            )
+            .expect("Missing expected tx result")
+            .as_ref();
+        assert!(inner_tx_result.is_err());
+    }
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            AB_VIEWING_KEY,
+            AC_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+
+    // Assert NAM balances at VK(A), Albert and Bertha are unchanged
+    for (owner, balance) in [
+        (AA_VIEWING_KEY, 998.5),
+        (adam_alias.as_ref(), 1.0),
+        (AB_VIEWING_KEY, 0.0),
+        (AC_VIEWING_KEY, 1000.0),
     ] {
         let captured = CapturedOutput::of(|| {
             run(
@@ -7836,7 +8143,7 @@ fn speculative_context() -> Result<()> {
 // protocol (by means of events) and reconstructed in the correct order by the
 // client
 #[test]
-fn mixed_masp_txs_same_block() -> Result<()> {
+fn masp_events() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
