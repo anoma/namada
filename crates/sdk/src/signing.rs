@@ -71,7 +71,7 @@ pub struct SigningTxData {
     /// The address owning the transaction
     pub owner: Option<Address>,
     /// The public keys associated to an account
-    pub public_keys: Vec<common::PublicKey>,
+    pub public_keys: HashSet<common::PublicKey>,
     /// The threshold associated to an account
     pub threshold: u8,
     /// The public keys to index map associated to an account
@@ -102,27 +102,12 @@ impl PartialEq for SigningTxData {
             shielded_hash: other_shielded_hash,
         } = other;
 
-        if !(owner == other_owner
+        owner == other_owner
             && threshold == other_threshold
             && account_public_keys_map == other_account_public_keys_map
             && fee_payer == other_fee_payer
-            && shielded_hash == other_shielded_hash)
-        {
-            return false;
-        }
-
-        // Check equivalence of the public keys ignoring the specific ordering
-        // and duplicates (the PartialEq implementation of IndexSet ignores the
-        // order)
-        let unique_public_keys = HashSet::<
-            &namada_account::common::CommonPublicKey,
-        >::from_iter(public_keys.iter());
-        let unique_other_public_keys =
-            HashSet::<&namada_account::common::CommonPublicKey>::from_iter(
-                other_public_keys.iter(),
-            );
-
-        unique_public_keys == unique_other_public_keys
+            && shielded_hash == other_shielded_hash
+            && public_keys == other_public_keys
     }
 }
 
@@ -199,23 +184,23 @@ pub async fn tx_signers(
     context: &impl Namada,
     args: &args::Tx<SdkTypes>,
     default: Option<Address>,
-) -> Result<Vec<common::PublicKey>, Error> {
+) -> Result<HashSet<common::PublicKey>, Error> {
     let signer = if !args.signing_keys.is_empty() {
-        return Ok(args.signing_keys.clone());
+        return Ok(args.signing_keys.clone().into_iter().collect());
     } else if args.signatures.is_empty() {
         // Otherwise use the signer determined by the caller
         default
     } else {
         // If explicit signature(s) are provided signing keys are not required
         // anymore
-        return Ok(vec![]);
+        return Ok(Default::default());
     };
 
     // Now actually fetch the signing key and apply it
     match signer {
         // No signature needed if the source is MASP
-        Some(MASP) => Ok(vec![]),
-        Some(signer) => Ok(vec![find_pk(context, &signer).await?]),
+        Some(MASP) => Ok(Default::default()),
+        Some(signer) => Ok([find_pk(context, &signer).await?].into()),
         None => other_err(
             "All transactions must be signed; please either specify the key \
              or the address from which to look up the signing key."
@@ -2589,7 +2574,7 @@ mod test_signing {
         let mut tx = Tx::new(ChainId::default(), None);
         let signing_data = SigningTxData {
             owner: None,
-            public_keys: vec![public_key.clone()],
+            public_keys: [public_key.clone()].into(),
             threshold: 1,
             account_public_keys_map: Some(Default::default()),
             fee_payer: public_key_fee.clone(),
@@ -2625,7 +2610,7 @@ mod test_signing {
             Wallet::<TestWalletUtils>::new(TestWalletUtils, Default::default());
         let signing_data = SigningTxData {
             owner: None,
-            public_keys: vec![public_key.clone()],
+            public_keys: [public_key.clone()].into(),
             threshold: 1,
             account_public_keys_map: Some(Default::default()),
             fee_payer: public_key.clone(),
