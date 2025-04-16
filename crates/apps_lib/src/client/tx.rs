@@ -1945,7 +1945,11 @@ pub async fn gen_ibc_shielding_transfer(
         };
         let mut out = File::create(&output_path)
             .expect("Creating a new file for IBC MASP transaction failed.");
-        let bytes = convert_masp_tx_to_ibc_memo(&masp_tx);
+        let bytes = convert_masp_tx_to_ibc_memo(
+            masp_tx,
+            // TODO: add actual flag ciphertext
+            Default::default(),
+        );
         out.write_all(bytes.as_bytes())
             .expect("Writing IBC MASP transaction file failed.");
         println!(
