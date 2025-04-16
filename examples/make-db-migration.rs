@@ -39,10 +39,14 @@ pub type BaseToken = &'static str;
 /// Represents a Namada address in Bech32m encoding
 pub type AddressBech32m = &'static str;
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 104a724a4 (Increased the usage of constants in migrations.)
 /// Represents the hash of a WASM binary
 pub type WasmHash = &'static str;
 /// Represents the bytes of a WASM binary
 pub type WasmBytes = &'static [u8];
+<<<<<<< HEAD
 /// Represents a maximum reward rate
 pub type MaxRewardRate = &'static str;
 /// Represents a target locked amount
@@ -53,6 +57,8 @@ pub type KpGain = &'static str;
 pub type KdGain = &'static str;
 =======
 >>>>>>> 088486132 (Allow denomination to be specified separately for each token.)
+=======
+>>>>>>> 104a724a4 (Increased the usage of constants in migrations.)
 /// The type hash of the conversion state structure in v0.31.9
 pub const OLD_CONVERSION_STATE_TYPE_HASH: &str =
     "05E2FD0BEBD54A05AAE349BBDE61F90893F09A72850EFD4F69060821EC5DE65F";
@@ -528,15 +534,27 @@ pub fn wasm_migration(updates: &mut Vec<migrations::DbUpdateType>) {
         (
             "83afcbf97c35188991ae2e73db2f48cb8d019c4295fe5323d9c3dfebcd5dbec0",
             "tx_transfer.wasm",
+<<<<<<< HEAD
             // The following bytes are just an example. Usually the following
             // line will be: include_bytes!("<path to Wasm binary>"),
+=======
+            // include_bytes!("tx_transfer.
+            // 5c7e44e61c00df351fa7c497cd2e186d71909f1a18db0c8d362dff36057e0fbf.
+            // wasm"),
+>>>>>>> 104a724a4 (Increased the usage of constants in migrations.)
             &[0xDE, 0xAD, 0xBE, 0xEF],
         ),
         (
             "6ff3c2a2ebc65061a9b89abd15fb37851ca77e162b42b7989889bd537e802b09",
             "tx_ibc.wasm",
+<<<<<<< HEAD
             // The following bytes are just an example. Usually the following
             // line will be: include_bytes!("<path to Wasm binary>"),
+=======
+            // include_bytes!("tx_ibc.
+            // ae9b900edd6437461addd1fe1c723c4b1a8ac8d2fce30e1e4c417ef34f299f73.
+            // wasm"),
+>>>>>>> 104a724a4 (Increased the usage of constants in migrations.)
             &[0xDE, 0xAD, 0xBE, 0xEF],
         ),
     ];
