@@ -752,7 +752,11 @@ impl TxOsmosisSwap<SdkTypes> {
                     serde_json::to_value(&NamadaMemo {
                         namada: NamadaMemoData::OsmosisSwap {
                             shielding_data: StringEncoded::new(
-                                IbcShieldingData(shielding_tx),
+                                IbcShieldingData {
+                                    masp_tx: shielding_tx,
+                                    // TODO: add actual flag ciphertext here
+                                    flag_ciphertext: Default::default(),
+                                },
                             ),
                             shielded_amount: amount_to_shield,
                             overflow_receiver,

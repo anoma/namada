@@ -140,6 +140,8 @@ impl Display for MaspTxData {
     PartialOrd,
     Hash,
 )]
+// TODO: remove Default derive
+#[derive(Default)]
 pub struct FlagCiphertext {
     inner: Vec<u8>,
 }

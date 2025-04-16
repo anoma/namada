@@ -20,6 +20,7 @@ use ibc::core::host::types::identifiers::PortId;
 use ibc::primitives::proto::Protobuf;
 use masp_primitives::transaction::Transaction as MaspTransaction;
 use namada_core::borsh::BorshSerializeExt;
+use namada_core::masp::FlagCiphertext;
 use namada_core::string_encoding::StringEncoded;
 use serde::{Deserialize, Serialize};
 
@@ -238,8 +239,12 @@ impl<Transfer: BorshSchema> BorshSchema for MsgNftTransfer<Transfer> {
 
 /// Shielding data in IBC packet memo
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
-// TODO: add flag ciphertext here
-pub struct IbcShieldingData(pub MaspTransaction);
+pub struct IbcShieldingData {
+    /// MASP transaction forwarded over IBC.
+    pub masp_tx: MaspTransaction,
+    /// Flag ciphertext to signal the owner of the new note(s).
+    pub flag_ciphertext: FlagCiphertext,
+}
 
 impl From<&IbcShieldingData> for String {
     fn from(data: &IbcShieldingData) -> Self {
@@ -302,7 +307,9 @@ pub fn decode_ibc_shielding_data(
 /// Extract MASP transaction from IBC packet memo
 pub fn extract_masp_tx_from_packet(packet: &Packet) -> Option<MaspTransaction> {
     let memo = extract_memo_from_packet(packet, &packet.port_id_on_b)?;
-    decode_ibc_shielding_data(memo).map(|data| data.0)
+
+    decode_ibc_shielding_data(memo)
+        .map(|IbcShieldingData { masp_tx, .. }| masp_tx)
 }
 
 fn extract_memo_from_packet(
@@ -367,6 +374,13 @@ pub fn extract_traces_from_recv_msg(
 }
 
 /// Get IBC memo string from MASP transaction for receiving
-pub fn convert_masp_tx_to_ibc_memo(transaction: &MaspTransaction) -> String {
-    IbcShieldingData(transaction.clone()).into()
+pub fn convert_masp_tx_to_ibc_memo(
+    masp_tx: MaspTransaction,
+    flag_ciphertext: FlagCiphertext,
+) -> String {
+    IbcShieldingData {
+        masp_tx,
+        flag_ciphertext,
+    }
+    .into()
 }
