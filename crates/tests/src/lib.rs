@@ -9,6 +9,7 @@ mod vm_host_env;
 pub use vm_host_env::{tx, vp};
 #[cfg(test)]
 mod e2e;
+#[cfg(test)]
 pub mod hw_wallet_automation;
 #[cfg(test)]
 mod integration;
