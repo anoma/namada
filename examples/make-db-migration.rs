@@ -36,6 +36,10 @@ pub type ChannelId = &'static str;
 pub type BaseToken = &'static str;
 /// Represents a Namada address in Bech32m encoding
 pub type AddressBech32m = &'static str;
+/// Represents the hash of a WASM binary
+pub type WasmHash = &'static str;
+/// Represents the bytes of a WASM binary
+pub type WasmBytes = &'static [u8];
 /// The type hash of the conversion state structure in v0.31.9
 pub const OLD_CONVERSION_STATE_TYPE_HASH: &str =
     "05E2FD0BEBD54A05AAE349BBDE61F90893F09A72850EFD4F69060821EC5DE65F";
@@ -293,56 +297,60 @@ pub fn shielded_reward_reset_migration(
 /// Demonstrate replacing the entire conversion state with a new state that does
 /// not contain rewards.
 pub fn conversion_state_migration(updates: &mut Vec<migrations::DbUpdateType>) {
-    // Valid precisions must be in the intersection of i128 and u128
-    pub type Precision = u128;
-
     // The MASP epoch in which this migration will be applied. This number
     // controls the number of epochs of conversions created.
     const TARGET_MASP_EPOCH: MaspEpoch = MaspEpoch::new(4);
     // Precision to use for the native token
     const NATIVE_PRECISION: Precision = 1000;
     // The tokens whose rewarrds will be reset.
-    let tokens: [(Address, Denomination, Precision); 7] = [
+    const TOKENS: [(TokenAddress, Denomination, Precision); 7] = [
         (
-            Address::from_str("tnam1qyvfwdkz8zgs9n3qn9xhp8scyf8crrxwuq26r6gy")
-                .unwrap(),
-            6.into(),
+            TokenAddress::Address(
+                "tnam1qyvfwdkz8zgs9n3qn9xhp8scyf8crrxwuq26r6gy",
+            ),
+            Denomination(6),
             1000u128,
         ),
         (
-            Address::from_str("tnam1qy8qgxlcteehlk70sn8wx2pdlavtayp38vvrnkhq")
-                .unwrap(),
-            8.into(),
+            TokenAddress::Address(
+                "tnam1qy8qgxlcteehlk70sn8wx2pdlavtayp38vvrnkhq",
+            ),
+            Denomination(8),
             10000u128,
         ),
         (
-            Address::from_str("tnam1qyfl072lhaazfj05m7ydz8cr57zdygk375jxjfwx")
-                .unwrap(),
-            10.into(),
+            TokenAddress::Address(
+                "tnam1qyfl072lhaazfj05m7ydz8cr57zdygk375jxjfwx",
+            ),
+            Denomination(10),
             10000000u128,
         ),
         (
-            Address::from_str("tnam1qxvnvm2t9xpceu8rup0n6espxyj2ke36yv4dw6q5")
-                .unwrap(),
-            18.into(),
+            TokenAddress::Address(
+                "tnam1qxvnvm2t9xpceu8rup0n6espxyj2ke36yv4dw6q5",
+            ),
+            Denomination(18),
             10000u128,
         ),
         (
-            Address::from_str("tnam1qyx93z5ma43jjmvl0xhwz4rzn05t697f3vfv8yuj")
-                .unwrap(),
-            6.into(),
+            TokenAddress::Address(
+                "tnam1qyx93z5ma43jjmvl0xhwz4rzn05t697f3vfv8yuj",
+            ),
+            Denomination(6),
             1000u128,
         ),
         (
-            Address::from_str("tnam1qxgfw7myv4dh0qna4hq0xdg6lx77fzl7dcem8h7e")
-                .unwrap(),
-            6.into(),
+            TokenAddress::Address(
+                "tnam1qxgfw7myv4dh0qna4hq0xdg6lx77fzl7dcem8h7e",
+            ),
+            Denomination(6),
             NATIVE_PRECISION,
         ),
         (
-            Address::from_str("tnam1q9f5yynt5qfxe28ae78xxp7wcgj50fn4syetyrj6")
-                .unwrap(),
-            6.into(),
+            TokenAddress::Address(
+                "tnam1q9f5yynt5qfxe28ae78xxp7wcgj50fn4syetyrj6",
+            ),
+            Denomination(6),
             1000u128,
         ),
     ];
@@ -350,7 +358,16 @@ pub fn conversion_state_migration(updates: &mut Vec<migrations::DbUpdateType>) {
     let mut assets = BTreeMap::new();
     let mut conv_notes = Vec::new();
     // Reset the allowed conversions for the above tokens
-    for (token_address, denomination, precision) in tokens {
+    for (token_address, denomination, precision) in TOKENS {
+        // Compute the Namada address
+        let token_address = match token_address {
+            TokenAddress::Ibc(channel_id, base_token) => {
+                let ibc_denom = format!("transfer/{channel_id}/{base_token}");
+                ibc_token(&ibc_denom).clone()
+            }
+            TokenAddress::Address(addr) => Address::from_str(addr)
+                .expect("unable to construct token address"),
+        };
         // Erase the TOK rewards that have been distributed so far
         let mut asset_types = BTreeMap::new();
         let mut precision_toks = BTreeMap::new();
@@ -474,25 +491,28 @@ pub fn wasm_migration(updates: &mut Vec<migrations::DbUpdateType>) {
     // wasm_updates[x].0) The WASM hash that is being replaced
     // wasm_updates[x].1) The name of WASM being updated
     // wasm_updates[x].2) The bytes of the new WASM code
-    let wasm_updates: Vec<(&str, &str, &[u8])> =
-        vec![
+    const WASM_UPDATES: [(WasmHash, &str, WasmBytes); 2] = [
         (
             "83afcbf97c35188991ae2e73db2f48cb8d019c4295fe5323d9c3dfebcd5dbec0",
             "tx_transfer.wasm",
-            //include_bytes!("tx_transfer.5c7e44e61c00df351fa7c497cd2e186d71909f1a18db0c8d362dff36057e0fbf.wasm"),
+            // include_bytes!("tx_transfer.
+            // 5c7e44e61c00df351fa7c497cd2e186d71909f1a18db0c8d362dff36057e0fbf.
+            // wasm"),
             &[0xDE, 0xAD, 0xBE, 0xEF],
         ),
         (
             "6ff3c2a2ebc65061a9b89abd15fb37851ca77e162b42b7989889bd537e802b09",
             "tx_ibc.wasm",
-            //include_bytes!("tx_ibc.ae9b900edd6437461addd1fe1c723c4b1a8ac8d2fce30e1e4c417ef34f299f73.wasm"),
+            // include_bytes!("tx_ibc.
+            // ae9b900edd6437461addd1fe1c723c4b1a8ac8d2fce30e1e4c417ef34f299f73.
+            // wasm"),
             &[0xDE, 0xAD, 0xBE, 0xEF],
         ),
     ];
 
     // Update the tx allowlist parameter
     let tx_allowlist_key = get_tx_allowlist_storage_key();
-    let tx_allowlist: Vec<&str> = vec![
+    const TX_ALLOWLIST: [WasmHash; 24] = [
         "ec357c39e05677da3d8da359fee6e3a8b9012dd1a7e7def51f4e484132f68c77",
         "a324288bdc7a7d3cb15ca5ef3ebb04b9121b1d5804478dabd1ef4533459d7069",
         "6012fff1d191a545d6f7960f1dd9b2df5fcdfc9dbb8dfd22bb1458f3983144b9",
@@ -518,14 +538,14 @@ pub fn wasm_migration(updates: &mut Vec<migrations::DbUpdateType>) {
         "c4357f5548c43086e56f22ac2e951ee2500368d8ed2479c0d0046b6e59f8a8e5",
         "b4261ecafcfb0254efb39165311268d99bb5aa85ac47514913317d20f1791790",
     ];
-    let mut tx_allowlist: Vec<String> = tx_allowlist
+    let mut tx_allowlist: Vec<String> = TX_ALLOWLIST
         .into_iter()
         .map(|hash_str| {
             Hash::from_str(hash_str).unwrap().to_string().to_lowercase()
         })
         .collect();
     // Replace the targetted old hashes
-    for (old_code_hash, name, code) in wasm_updates {
+    for (old_code_hash, name, code) in WASM_UPDATES {
         let old_code_hash = Hash::from_str(old_code_hash).unwrap();
         let new_code_hash = Hash(*Sha256::digest(code).as_ref());
         let new_code_len = u64::try_from(code.len()).unwrap();
