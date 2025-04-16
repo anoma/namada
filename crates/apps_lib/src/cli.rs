@@ -500,6 +500,7 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    #[allow(clippy::large_enum_variant)]
     pub enum NamadaClientWithContext {
         // Ledger cmds
         TxCustom(TxCustom),
