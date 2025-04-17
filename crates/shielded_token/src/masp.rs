@@ -80,7 +80,7 @@ pub struct ShieldedTransfer {
 #[allow(missing_docs)]
 #[derive(Debug)]
 pub struct MaspFeeData {
-    pub source: Option<PseudoExtendedKey>,
+    pub source: PseudoExtendedKey,
     pub target: Address,
     pub token: Address,
     pub amount: token::DenominatedAmount,
