@@ -12,8 +12,14 @@
 //!   automation: getting actions for "Please" (46, 29)
 //!   automation: getting actions for "review" (45, 43)
 
+use std::path::Path;
+use std::process;
+use std::process::Command;
+
 use serde::Serialize;
 use serde_tuple::Serialize_tuple;
+
+use crate::e2e::setup::{speculos_app_elf, speculos_path};
 
 /// The seed used to generate `genesis/hardware`
 pub const SEED: &str =
@@ -892,5 +898,36 @@ impl ActionSetBool {
             varname,
             value,
         }
+    }
+}
+
+/// Speculos process wrapper with a cleanup on drop
+pub struct Speculos(process::Child);
+
+impl Speculos {
+    pub fn spawn(automation_path: &Path) -> Self {
+        Self(
+            Command::new(speculos_path())
+                .args([
+                    &speculos_app_elf(),
+                    "--seed",
+                    SEED,
+                    "--automation",
+                    &format!("file:{}", automation_path.to_string_lossy()),
+                    "--log-level",
+                    "automation:DEBUG",
+                    "--display",
+                    "headless",
+                ])
+                .spawn()
+                .unwrap(),
+        )
+    }
+}
+
+impl Drop for Speculos {
+    fn drop(&mut self) {
+        let Self(process) = self;
+        process.kill().unwrap();
     }
 }
