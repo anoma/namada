@@ -67,7 +67,7 @@ namada_sdk = { path = "../sdk", default-features = false, features = [
   "testing",
   "migrations",
 ] }
-namada_vm_env.path = "../vm_env"
+namada_vm_env = { path = "../vm_env", features = ["c_unwind"] }
 
 assert_cmd.workspace = true
 assert_matches.workspace = true
