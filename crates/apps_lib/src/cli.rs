@@ -4838,6 +4838,7 @@ pub mod args {
                         .def()
                         .help(wrap!("The amount to transfer in decimal.")),
                 )
+                // FIXME: need to update all these messages
                 .arg(GAS_SPENDING_KEY.def().help(wrap!(
                     "The optional spending key that will be used for gas \
                      payment."
@@ -4849,7 +4850,6 @@ pub mod args {
                             "Generates an ephemeral, disposable keypair to \
                              sign the wrapper transaction."
                         ))
-                        .requires(GAS_SPENDING_KEY.name)
                         .conflicts_with(FEE_PAYER_OPT.name),
                 )
         }
@@ -5014,7 +5014,6 @@ pub mod args {
                             "Generates an ephemeral, disposable keypair to \
                              sign the wrapper transaction."
                         ))
-                        .requires(GAS_SPENDING_KEY.name)
                         .conflicts_with(FEE_PAYER_OPT.name),
                 )
         }
@@ -5146,7 +5145,6 @@ pub mod args {
                             "Generates an ephemeral, disposable keypair to \
                              sign the wrapper transaction."
                         ))
-                        .requires(GAS_SPENDING_KEY.name)
                         .conflicts_with(FEE_PAYER_OPT.name),
                 )
         }

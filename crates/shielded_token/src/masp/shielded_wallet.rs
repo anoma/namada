@@ -1365,18 +1365,19 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 .increase_precision(denom)
                 .map_err(|e| TransferErr::General(e.to_string()))?
                 .amount();
-            if let Some(source) = fee_data.source {
-                source_data.insert(
-                    MaspSourceTransferData {
-                        source: TransferSource::ExtendedKey(source),
-                        token: fee_data.token.clone(),
-                    },
-                    amount,
-                );
-            }
+
+            source_data.insert(
+                MaspSourceTransferData {
+                    source: TransferSource::ExtendedKey(fee_data.source),
+                    token: fee_data.token.clone(),
+                },
+                amount,
+            );
             target_data.insert(
                 MaspTargetTransferData {
-                    source: fee_data.source.map(TransferSource::ExtendedKey),
+                    // FIXME: is this ever None? It seems it's not, remove the
+                    // Option
+                    source: Some(TransferSource::ExtendedKey(fee_data.source)),
                     target: TransferTarget::Address(fee_data.target),
                     token: fee_data.token,
                 },
