@@ -34,6 +34,14 @@ pub fn calc_ibc_token_hash(trace: impl AsRef<str>) -> IbcTokenHash {
     IbcTokenHash(output)
 }
 
+/// Hash the denom
+pub fn calc_ibc_denom(trace: impl AsRef<str>) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(trace.as_ref());
+    let hash = hasher.finalize();
+    format!("ibc/{hash:X}")
+}
+
 /// Obtain the IbcToken with the hash from the given denom
 pub fn ibc_token(trace: impl AsRef<str>) -> Address {
     let hash = calc_ibc_token_hash(&trace);
