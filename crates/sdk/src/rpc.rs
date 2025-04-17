@@ -47,7 +47,7 @@ use namada_ibc::storage::{
     ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key, mint_limit_key,
     throughput_limit_key,
 };
-use namada_ibc::trace::calc_ibc_token_hash;
+use namada_ibc::trace::calc_ibc_denom;
 use namada_io::{Client, Io, display_line, edisplay_line};
 use namada_parameters::{EpochDuration, storage as params_storage};
 use namada_proof_of_stake::parameters::PosParams;
@@ -1889,27 +1889,25 @@ pub async fn query_osmosis_pool_routes(
         let token_denom = if trace_path.is_empty() {
             base_denom.to_string()
         } else {
-            format!(
-                "ibc/{}",
-                calc_ibc_token_hash(
-                    PrefixedDenom {
-                        trace_path,
-                        base_denom
-                    }
-                    .to_string()
-                )
+            calc_ibc_denom(
+                PrefixedDenom {
+                    trace_path,
+                    base_denom,
+                }
+                .to_string(),
             )
         };
 
         format!("{amount}{token_denom}")
     };
+    let output_denom = calc_ibc_denom(output_denom);
 
     let client = reqwest::Client::new();
     let response = client
         .get(format!("{osmosis_sqs_server_url}/router/quote"))
         .query(&[
             ("tokenIn", coin.as_str()),
-            ("tokenOutDenom", output_denom),
+            ("tokenOutDenom", output_denom.as_str()),
             ("humanDenoms", "false"),
             ("singleRoute", "true"),
         ])
