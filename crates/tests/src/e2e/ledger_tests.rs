@@ -52,8 +52,9 @@ use crate::e2e::helpers::{
 };
 use crate::e2e::setup::{
     self, Bin, Who, allow_duplicate_ips, apply_use_device, default_port_offset,
-    sleep, speculos_app_elf, speculos_path,
+    sleep,
 };
+use crate::hw_wallet_automation::Speculos;
 use crate::strings::{
     LEDGER_SHUTDOWN, LEDGER_STARTED, NON_VALIDATOR_NODE, TX_APPLIED_SUCCESS,
     TX_REJECTED, VALIDATOR_NODE,
@@ -582,8 +583,7 @@ fn pos_bonds() -> Result<()> {
     );
 
     // If used, keep Speculos alive for duration of the test
-    let mut speculos: Option<std::process::Child> = None;
-    if hw_wallet_automation::uses_automation() {
+    let _speculos = if hw_wallet_automation::uses_automation() {
         // Gen automation for Speculos
         let automation = hw_wallet_automation::gen_automation_e2e_pos_bonds();
         let json = serde_json::to_vec_pretty(&automation).unwrap();
@@ -591,23 +591,10 @@ fn pos_bonds() -> Result<()> {
         std::fs::write(&path, json).unwrap();
 
         // Start Speculos with the automation
-        speculos = Some(
-            Command::new(speculos_path())
-                .args([
-                    &speculos_app_elf(),
-                    "--seed",
-                    hw_wallet_automation::SEED,
-                    "--automation",
-                    &format!("file:{}", path.to_string_lossy()),
-                    "--log-level",
-                    "automation:DEBUG",
-                    "--display",
-                    "headless",
-                ])
-                .spawn()
-                .unwrap(),
-        );
-    }
+        Some(Speculos::spawn(&path))
+    } else {
+        None
+    };
 
     // 1. Run the ledger node
     let _bg_validator_0 =
@@ -808,10 +795,6 @@ fn pos_bonds() -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
-
-    if let Some(mut process) = speculos {
-        process.kill().unwrap()
-    }
 
     Ok(())
 }
@@ -2507,8 +2490,7 @@ fn masp_txs_and_queries() -> Result<()> {
     )?;
 
     // If used, keep Speculos alive for duration of the test
-    let mut speculos: Option<std::process::Child> = None;
-    if hw_wallet_automation::uses_automation() {
+    let _speculos = if hw_wallet_automation::uses_automation() {
         // Gen automation for Speculos
         let automation =
             hw_wallet_automation::gen_automation_e2e_masp_tx_and_queries();
@@ -2517,23 +2499,10 @@ fn masp_txs_and_queries() -> Result<()> {
         std::fs::write(&path, json).unwrap();
 
         // Start Speculos with the automation
-        speculos = Some(
-            Command::new(speculos_path())
-                .args([
-                    &speculos_app_elf(),
-                    "--seed",
-                    hw_wallet_automation::SEED,
-                    "--automation",
-                    &format!("file:{}", path.to_string_lossy()),
-                    "--log-level",
-                    "automation:DEBUG",
-                    "--display",
-                    "headless",
-                ])
-                .spawn()
-                .unwrap(),
-        );
-    }
+        Some(Speculos::spawn(&path))
+    } else {
+        None
+    };
 
     // Run all cmds on the first validator
     let who = Who::Validator(0);
@@ -2659,10 +2628,6 @@ fn masp_txs_and_queries() -> Result<()> {
 
             client.exp_string(tx_result)?;
         }
-    }
-
-    if let Some(mut process) = speculos {
-        process.kill().unwrap()
     }
 
     Ok(())
