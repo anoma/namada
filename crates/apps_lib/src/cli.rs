@@ -4838,10 +4838,10 @@ pub mod args {
                         .def()
                         .help(wrap!("The amount to transfer in decimal.")),
                 )
-                // FIXME: need to update all these messages
                 .arg(GAS_SPENDING_KEY.def().help(wrap!(
                     "The optional spending key that will be used for gas \
-                     payment."
+                     payment. When not provided the source spending key will \
+                     be used."
                 )))
                 .arg(
                     DISPOSABLE_SIGNING_KEY
@@ -5005,7 +5005,8 @@ pub mod args {
                 )
                 .arg(GAS_SPENDING_KEY.def().help(wrap!(
                     "The optional spending key that will be used for gas \
-                     payment."
+                     payment. When not provided the source spending key will \
+                     be used."
                 )))
                 .arg(
                     DISPOSABLE_SIGNING_KEY
@@ -5136,7 +5137,8 @@ pub mod args {
                 )
                 .arg(GAS_SPENDING_KEY.def().help(wrap!(
                     "The optional spending key that will be used for gas \
-                     payment (if this is a shielded action)."
+                     payment (if this is a shielded action).  When not \
+                     provided the source spending key will be used."
                 )))
                 .arg(
                     DISPOSABLE_SIGNING_KEY
