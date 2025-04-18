@@ -1241,7 +1241,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             self.add_outputs(
                 context,
                 &mut builder,
-                source,
+                &source,
                 &target,
                 token,
                 amount,
@@ -1375,9 +1375,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             );
             target_data.insert(
                 MaspTargetTransferData {
-                    // FIXME: is this ever None? It seems it's not, remove the
-                    // Option
-                    source: Some(TransferSource::ExtendedKey(fee_data.source)),
+                    source: TransferSource::ExtendedKey(fee_data.source),
                     target: TransferTarget::Address(fee_data.target),
                     token: fee_data.token,
                 },
@@ -1421,7 +1419,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             }
 
             let key = MaspTargetTransferData {
-                source: Some(source),
+                source,
                 target,
                 token,
             };
@@ -1674,7 +1672,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         &mut self,
         context: &impl NamadaIo,
         builder: &mut Builder<Network, PseudoExtendedKey>,
-        source: Option<TransferSource>,
+        source: &TransferSource,
         target: &TransferTarget,
         token: Address,
         amount: Amount,
@@ -1720,9 +1718,8 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 let contr = std::cmp::min(u128::from(*rem_amount), val) as u64;
                 // If we are sending to a shielded address, we need the outgoing
                 // viewing key in the following computations.
-                let ovk_opt = source.clone().and_then(|source| {
-                    source.spending_key().map(|x| x.to_viewing_key().fvk.ovk)
-                });
+                let ovk_opt =
+                    source.spending_key().map(|x| x.to_viewing_key().fvk.ovk);
                 // Make transaction output tied to the current token,
                 // denomination, and epoch.
                 if let Some(pa) = payment_address {
