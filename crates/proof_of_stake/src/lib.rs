@@ -1206,7 +1206,7 @@ type EagerRedelegatedUnbonds = BTreeMap<Epoch, EagerRedelegatedBondsMap>;
 ///
 /// 1. `modified.epoch` is not in the `epochs_to_remove` set.
 /// 2. `modified.validator_to_modify` is in `modified.vals_to_remove`.
-/// 3. `modified.epoch_to_modify` is in in `modified.epochs_to_remove`.
+/// 3. `modified.epoch_to_modify` is in `modified.epochs_to_remove`.
 // `def computeNewRedelegatedUnbonds` from Quint
 fn compute_new_redelegated_unbonds<S>(
     storage: &S,
