@@ -130,6 +130,7 @@ pub fn find_address(test: &Test, alias: impl AsRef<str>) -> Result<Address> {
 }
 
 /// Find the address of an account by its alias from the wallet
+#[allow(dead_code)]
 pub fn find_payment_address(
     test: &Test,
     alias: impl AsRef<str>,
