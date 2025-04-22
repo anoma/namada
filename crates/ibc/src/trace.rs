@@ -34,7 +34,8 @@ pub fn calc_ibc_token_hash(trace: impl AsRef<str>) -> IbcTokenHash {
     IbcTokenHash(output)
 }
 
-/// Hash the denom
+/// Hash an ICS-20 trace path with one or more hops, returning a string
+/// of the form `ibc/<sha256-digest>`.
 pub fn calc_ibc_denom(trace: impl AsRef<str>) -> String {
     let mut hasher = Sha256::new();
     hasher.update(trace.as_ref());
