@@ -66,7 +66,7 @@ use crate::wallet::{Wallet, WalletIo};
 use crate::{Namada, args, rpc};
 
 /// A structure holding the signing data to craft a transaction
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct SigningTxData {
     /// The address owning the transaction
     pub owner: Option<Address>,
@@ -80,35 +80,6 @@ pub struct SigningTxData {
     pub fee_payer: common::PublicKey,
     /// ID of the Transaction needing signing
     pub shielded_hash: Option<MaspTxId>,
-}
-
-impl PartialEq for SigningTxData {
-    fn eq(&self, other: &Self) -> bool {
-        // Deconstruct the two instances to ensure we don't forget any new field
-        let SigningTxData {
-            owner,
-            public_keys,
-            threshold,
-            account_public_keys_map,
-            fee_payer,
-            shielded_hash,
-        } = self;
-        let SigningTxData {
-            owner: other_owner,
-            public_keys: other_public_keys,
-            threshold: other_threshold,
-            account_public_keys_map: other_account_public_keys_map,
-            fee_payer: other_fee_payer,
-            shielded_hash: other_shielded_hash,
-        } = other;
-
-        owner == other_owner
-            && threshold == other_threshold
-            && account_public_keys_map == other_account_public_keys_map
-            && fee_payer == other_fee_payer
-            && shielded_hash == other_shielded_hash
-            && public_keys == other_public_keys
-    }
 }
 
 /// Find the public key for the given address and try to load the keypair
