@@ -1,5 +1,7 @@
 //! MASP types
 
+mod fmd;
+
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::num::ParseIntError;
@@ -20,6 +22,7 @@ use ripemd::Digest as RipemdDigest;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::Sha256;
 
+pub use self::fmd::FlagCiphertext;
 use crate::address::{Address, DecodeError, HASH_HEX_LEN, IBC, MASP};
 use crate::borsh::BorshSerializeExt;
 use crate::chain::Epoch;
@@ -122,28 +125,6 @@ impl Display for MaspTxData {
             .field("flag_ciphertext_sechash", &self.flag_ciphertext_sechash)
             .finish()
     }
-}
-
-/// FMD flag ciphertexts.
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(
-    Serialize,
-    Deserialize,
-    Clone,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshSchema,
-    Debug,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-)]
-// TODO: remove Default derive
-#[derive(Default)]
-pub struct FlagCiphertext {
-    inner: Vec<u8>,
 }
 
 /// Wrapper type around `Epoch` for type safe operations involving the masp
