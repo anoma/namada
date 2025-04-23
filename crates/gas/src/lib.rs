@@ -52,7 +52,7 @@ pub enum GasParseError {
 
 // RAW GAS COSTS
 // =============================================================================
-// The raw gas costs exctracted from the benchmarks.
+// The raw gas costs extracted from the benchmarks.
 //
 const COMPILE_GAS_PER_BYTE_RAW: u64 = 1_664;
 const WASM_CODE_VALIDATION_GAS_PER_BYTE_RAW: u64 = 59;
