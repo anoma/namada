@@ -25,6 +25,25 @@ pub mod parameters {
     /// extra compressed curve points (32 bytes each), to allow
     /// flagging note ownership to their respective owner.
     pub const THRESHOLD: usize = 1;
+
+    /// Evaluate whether the given compressed bit ciphertext is valid.
+    #[allow(clippy::arithmetic_side_effects)]
+    pub const fn valid_compressed_bit_ciphertext(bits: &[u8]) -> bool {
+        // Number of bytes required to represent a polyfuzzy bit ciphertext
+        // with a `GAMMA` parameter.
+        const COMPRESSED_BIT_CIPHERTEXT_LEN: usize =
+            GAMMA / 8 + (GAMMA % 8 != 0) as usize;
+
+        // Mask with the padding bits that should be set to 0 (or,
+        // in other words, unset) in the bit ciphertext produced
+        // by polyfuzzy. Since the library doesn't set any of the
+        // upper bits, if they have been set it means someone has
+        // tampered with the flag ciphertext.
+        const UNSET_BITS_MASK: u8 = 0xff << (GAMMA % 8);
+
+        bits.len() == COMPRESSED_BIT_CIPHERTEXT_LEN
+            && bits[COMPRESSED_BIT_CIPHERTEXT_LEN - 1] & UNSET_BITS_MASK == 0
+    }
 }
 
 /// FMD flag ciphertexts.
@@ -110,5 +129,64 @@ fn from_bincode_err(err: bincode::Error) -> io::Error {
     match *err {
         bincode::ErrorKind::Io(err) => err,
         other => io::Error::other(other),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_flag_ciphertext_bits_validation() {
+        let mut bits: Vec<u8> = {
+            let mut bits = [false; parameters::GAMMA];
+
+            // set some random bits
+            bits[0] = true;
+            bits[5] = true;
+            bits[10] = true;
+            bits[parameters::GAMMA - 1] = true;
+            bits[parameters::GAMMA - 2] = true;
+            bits[parameters::GAMMA - 3] = true;
+
+            // compress the bits
+            bits.chunks(8)
+                .map(|bits| {
+                    bits.iter().copied().enumerate().fold(
+                        0u8,
+                        |accum_byte, (i, bit)| {
+                            #[allow(clippy::cast_lossless)]
+                            {
+                                accum_byte ^ ((bit as u8) << i)
+                            }
+                        },
+                    )
+                })
+                .collect()
+        };
+
+        // check validation of a proper flag ciphertext
+        assert!(parameters::valid_compressed_bit_ciphertext(&bits));
+
+        let all_bits_unset = (0..8 - (parameters::GAMMA % 8))
+            .map(|i| bits[bits.len() - 1] & (0b1000_0000_u8 >> i))
+            .all(|bit| bit == 0);
+
+        assert!(all_bits_unset, "Invalid bit ciphertext");
+
+        if parameters::GAMMA % 8 != 0 {
+            let n = bits.len();
+            bits[n - 1] |= 0b1000_0000_u8;
+
+            // check validation of a flag ciphertext with padding bits
+            // that has been tampered with
+            assert!(!parameters::valid_compressed_bit_ciphertext(&bits));
+
+            let some_bit_unset = (0..8 - (parameters::GAMMA % 8))
+                .map(|i| bits[bits.len() - 1] & (0b1000_0000_u8 >> i))
+                .any(|bit| bit != 0);
+
+            assert!(some_bit_unset, "Valid bit ciphertext");
+        }
     }
 }
