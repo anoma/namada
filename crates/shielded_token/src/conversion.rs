@@ -189,7 +189,7 @@ where
     Ok(reward_precision)
 }
 
-/// Get the balance of the given token at the MASP address that is eligble to
+/// Get the balance of the given token at the MASP address that is eligible to
 /// receive rewards.
 fn get_masp_dated_balance<S, TransToken>(
     storage: &mut S,
