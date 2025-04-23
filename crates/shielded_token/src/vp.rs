@@ -602,7 +602,7 @@ where
                     return Err(error);
                 }
 
-                // The action is required becuse the target vp might have been
+                // The action is required because the target vp might have been
                 // triggered for other reasons but we need to signal it that it
                 // is required to validate a discrepancy in its balance change
                 // because of a masp transaction, which might require a
