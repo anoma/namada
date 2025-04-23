@@ -204,6 +204,7 @@ owo-colors = "4.1"
 parity-wasm = { version = "0.45", features = ["sign_ext"] }
 paste = "1.0"
 patricia_tree = "0.8"
+polyfuzzy = "0.5.0"
 pretty_assertions = "1.4"
 primitive-types = "0.13"
 proc-macro2 = "1.0"
