@@ -18,7 +18,6 @@ use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::hash::Hash;
 use namada_core::ibc::IbcTokenHash;
-use namada_core::ibc::apps::nft_transfer::types::TracePrefix;
 use namada_core::ibc::apps::transfer::types::PrefixedDenom;
 use namada_core::ibc::core::host::types::identifiers::ChannelId;
 use namada_core::key::common;
@@ -41,13 +40,12 @@ use namada_governance::storage::proposal::{
 use namada_governance::utils::{
     ProposalResult, ProposalVotes, Vote, compute_proposal_result,
 };
-use namada_ibc::core::host::types::identifiers::PortId;
 use namada_ibc::parameters::{IbcParameters, IbcTokenRateLimits};
 use namada_ibc::storage::{
     ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key, mint_limit_key,
     throughput_limit_key,
 };
-use namada_ibc::trace::calc_ibc_token_hash;
+use namada_ibc::trace::calc_ibc_denom;
 use namada_io::{Client, Io, display_line, edisplay_line};
 use namada_parameters::{EpochDuration, storage as params_storage};
 use namada_proof_of_stake::parameters::PosParams;
@@ -74,7 +72,6 @@ use crate::queries::vp::pos::{
 use crate::tendermint::block::Height;
 use crate::tendermint::merkle::proof::ProofOps;
 use crate::tendermint_rpc::query::Query;
-use crate::tx::get_ibc_src_port_channel;
 use crate::{Namada, Tx, error};
 
 /// Query an estimate of the maximum block time.
@@ -1817,9 +1814,9 @@ pub async fn osmosis_denom_from_namada_denom(
 /// assets.
 pub async fn query_osmosis_pool_routes(
     ctx: &impl Namada,
-    token: &Address,
+    input_token: &Address,
+    input_denom: &str,
     amount: InputAmount,
-    channel_id: ChannelId,
     output_denom: &str,
     osmosis_sqs_server_url: &str,
 ) -> Result<Vec<Vec<OsmosisPoolHop>>, Error> {
@@ -1854,54 +1851,42 @@ pub async fn query_osmosis_pool_routes(
     }
 
     let coin = {
-        let denom = query_ibc_denom(ctx, token.to_string(), None).await;
-        let amount = validate_amount(ctx, amount, token, false).await?;
+        let amount = validate_amount(ctx, amount, input_token, false).await?;
 
         let PrefixedDenom {
-            mut trace_path,
+            trace_path,
             base_denom,
-        } = PrefixedDenom::from_str(&denom).map_err(|_| {
+        } = PrefixedDenom::from_str(input_denom).map_err(|_| {
             Error::Other(format!(
-                "Could not decode {token} as an IBC token address"
+                "Could not decode input {input_denom} as an IBC denom"
             ))
         })?;
-
-        let prefix_on_namada =
-            TracePrefix::new(PortId::transfer(), channel_id.clone());
-
-        if trace_path.starts_with(&prefix_on_namada) {
-            // we received an asset from osmosis, so the asset we
-            // send back won't have our `transfer/channel` prefix
-            trace_path.remove_prefix(&prefix_on_namada);
-        } else {
-            // in this case, osmosis will prefix the asset it receives
-            // with the channel to namada
-            let channel =
-                get_ibc_src_port_channel(ctx, &PortId::transfer(), &channel_id)
-                    .await?
-                    .1;
-            trace_path
-                .add_prefix(TracePrefix::new(PortId::transfer(), channel));
-        }
 
         let amount = amount.redenominate(0);
 
         let token_denom = if trace_path.is_empty() {
             base_denom.to_string()
         } else {
-            format!(
-                "ibc/{}",
-                calc_ibc_token_hash(
-                    PrefixedDenom {
-                        trace_path,
-                        base_denom
-                    }
-                    .to_string()
-                )
-            )
+            calc_ibc_denom(input_denom)
         };
 
         format!("{amount}{token_denom}")
+    };
+    let output_denom = {
+        let PrefixedDenom {
+            trace_path,
+            base_denom,
+        } = PrefixedDenom::from_str(output_denom).map_err(|_| {
+            Error::Other(format!(
+                "Could not decode output {output_denom} as an IBC denom"
+            ))
+        })?;
+
+        if trace_path.is_empty() {
+            base_denom.to_string()
+        } else {
+            calc_ibc_denom(output_denom)
+        }
     };
 
     let client = reqwest::Client::new();
@@ -1909,7 +1894,7 @@ pub async fn query_osmosis_pool_routes(
         .get(format!("{osmosis_sqs_server_url}/router/quote"))
         .query(&[
             ("tokenIn", coin.as_str()),
-            ("tokenOutDenom", output_denom),
+            ("tokenOutDenom", output_denom.as_str()),
             ("humanDenoms", "false"),
             ("singleRoute", "true"),
         ])
