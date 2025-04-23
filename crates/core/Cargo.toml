@@ -39,6 +39,7 @@ namada_migrations = { workspace = true, optional = true }
 arbitrary = { workspace = true, optional = true }
 arse-merkle-tree.workspace = true
 bech32.workspace = true
+bincode.workspace = true
 borsh.workspace = true
 chrono.workspace = true
 data-encoding.workspace = true
@@ -60,6 +61,7 @@ num_enum.workspace = true
 num-integer.workspace = true
 num-rational.workspace = true
 num-traits.workspace = true
+polyfuzzy = { workspace = true, features = ["serde"] }
 primitive-types.workspace = true
 proptest = { workspace = true, optional = true }
 prost-types.workspace = true

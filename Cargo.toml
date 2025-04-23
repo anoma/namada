@@ -117,13 +117,14 @@ base58 = "0.2"
 base64 = "0.22"
 bech32 = "0.11"
 bimap = {version = "0.6", features = ["serde"]}
+bincode = "1.3.3"
 bit-set = "0.8"
 bitflags = { version = "2.5", features = ["serde"] }
 blake2b-rs = "0.2"
+borsh = {version = "1.2", features = ["unstable__schema", "derive"]}
 byte-unit = "5.1"
 byteorder = "1.4"
 bytes = "1.1"
-borsh = {version = "1.2", features = ["unstable__schema", "derive"]}
 cargo_metadata = "0.19"
 chrono = {version = "0.4", default-features = false, features = ["clock", "std"]}
 circular-queue = "0.2"
