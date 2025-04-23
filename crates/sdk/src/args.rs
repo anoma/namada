@@ -37,7 +37,7 @@ use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::ibc::{NamadaMemo, NamadaMemoData};
 use crate::rpc::{
     get_registry_from_xcs_osmosis_contract, osmosis_denom_from_namada_denom,
-    query_osmosis_pool_routes,
+    query_ibc_denom, query_osmosis_pool_routes,
 };
 use crate::signing::{SigningTxData, gen_disposable_signing_key};
 use crate::wallet::{DatedSpendingKey, DatedViewingKey};
@@ -662,6 +662,16 @@ impl TxOsmosisSwap<SdkTypes> {
         )
         .await?;
 
+        let namada_input_denom =
+            query_ibc_denom(ctx, transfer.token.to_string(), None).await;
+
+        let (osmosis_input_denom, _) = osmosis_denom_from_namada_denom(
+            &osmosis_rest_rpc,
+            &registry_xcs_addr,
+            &namada_input_denom,
+        )
+        .await?;
+
         let (osmosis_output_denom, namada_output_addr) =
             osmosis_denom_from_namada_denom(
                 &osmosis_rest_rpc,
@@ -676,8 +686,8 @@ impl TxOsmosisSwap<SdkTypes> {
             query_osmosis_pool_routes(
                 ctx,
                 &transfer.token,
+                &osmosis_input_denom,
                 transfer.amount,
-                transfer.channel_id.clone(),
                 &osmosis_output_denom,
                 OSMOSIS_SQS_SERVER,
             )
