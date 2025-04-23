@@ -16,13 +16,14 @@ rust-version.workspace = true
 [features]
 default = []
 mainnet = []
-rand = ["dep:rand", "rand_core"]
+rand = ["dep:rand", "dep:rand_core"]
+default-flag-ciphertext = ["dep:rand_core", "polyfuzzy/random-flag-ciphertexts"]
 ethers-derive = ["ethbridge-structs/ethers-derive"]
 # for tests and test utilities
 testing = ["rand", "proptest"]
 migrations = ["namada_migrations", "linkme"]
 benches = ["proptest"]
-control_flow = ["lazy_static", "tokio", "wasmtimer"]
+control_flow = ["dep:lazy_static", "tokio", "wasmtimer"]
 arbitrary = [
   "dep:arbitrary",
   "chrono/arbitrary",

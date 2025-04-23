@@ -51,22 +51,14 @@ impl PartialEq for FlagCiphertext {
     }
 }
 
-#[cfg(feature = "rand")]
+#[cfg(feature = "default-flag-ciphertext")]
 impl Default for FlagCiphertext {
-    // TODO: improve this default impl
     fn default() -> Self {
-        use polyfuzzy::fmd2_compact::MultiFmd2CompactScheme;
-        use polyfuzzy::{FmdKeyGen, MultiFmdScheme};
-        use rand_core::OsRng;
-
-        let mut scheme = MultiFmd2CompactScheme::new(
-            parameters::GAMMA,
-            parameters::THRESHOLD,
-        );
-        let (_sk, pk) = scheme.generate_keys(&mut OsRng);
-
         Self {
-            inner: scheme.flag(&pk, &mut OsRng),
+            inner: PolyfuzzyFlagCiphertext::random(
+                &mut rand_core::OsRng,
+                parameters::GAMMA,
+            ),
         }
     }
 }
