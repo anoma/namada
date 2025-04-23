@@ -5,6 +5,8 @@ use std::str::FromStr;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use masp_primitives::convert::AllowedConversion;
+use masp_primitives::merkle_tree::CommitmentTree;
+use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
 use namada_apps_lib::wallet::defaults::{
     get_unencrypted_keypair, is_use_device,
@@ -8240,6 +8242,18 @@ fn masp_events() -> Result<()> {
     //     3. shielded transfer (with masp fee payment)
     let tempdir = tempfile::tempdir().unwrap();
     let mut txs_bytes = vec![];
+    let mut notes = BTreeMap::new();
+    let tree_key = token::storage_key::masp_commitment_tree_key();
+    let mut commitment_tree: CommitmentTree<Node> = node
+        .shell
+        .lock()
+        .unwrap()
+        .state
+        .read(&tree_key)
+        .unwrap()
+        .unwrap();
+    // We've produced 4 notes so far from the previous shielding operations
+    assert_eq!(commitment_tree.size(), 4);
 
     _ = node.next_epoch();
     let captured = CapturedOutput::of(|| {
@@ -8274,7 +8288,19 @@ fn masp_events() -> Result<()> {
         .unwrap()
         .unwrap()
         .path();
-    txs_bytes.push(std::fs::read(&file_path).unwrap());
+    let bytes = std::fs::read(&file_path).unwrap();
+    let tx = Tx::try_from_json_bytes(&bytes).unwrap();
+    let outputs = tx
+        .sections
+        .iter()
+        .find_map(|section| section.masp_tx())
+        .unwrap()
+        .sapling_bundle()
+        .unwrap()
+        .shielded_outputs
+        .clone();
+    notes.insert(2, outputs);
+    txs_bytes.push(bytes);
     std::fs::remove_file(&file_path).unwrap();
 
     // Construct the batch
@@ -8365,6 +8391,26 @@ fn masp_events() -> Result<()> {
         serde_json::from_slice(&batch_tx0_bytes).unwrap();
     let tx1: namada_sdk::tx::Tx =
         serde_json::from_slice(&batch_tx1_bytes).unwrap();
+    let outputs = tx0
+        .sections
+        .iter()
+        .find_map(|section| section.masp_tx())
+        .unwrap()
+        .sapling_bundle()
+        .unwrap()
+        .shielded_outputs
+        .clone();
+    notes.insert(0, outputs);
+    let outputs = tx1
+        .sections
+        .iter()
+        .find_map(|section| section.masp_tx())
+        .unwrap()
+        .sapling_bundle()
+        .unwrap()
+        .shielded_outputs
+        .clone();
+    notes.insert(3, outputs);
 
     let signing_data = SigningTxData {
         owner: None,
@@ -8436,7 +8482,19 @@ fn masp_events() -> Result<()> {
         .unwrap()
         .unwrap()
         .path();
-    txs_bytes.push(std::fs::read(&file_path).unwrap());
+    let bytes = std::fs::read(&file_path).unwrap();
+    let tx = Tx::try_from_json_bytes(&bytes).unwrap();
+    let outputs = tx
+        .sections
+        .iter()
+        .find_map(|section| section.masp_tx())
+        .unwrap()
+        .sapling_bundle()
+        .unwrap()
+        .shielded_outputs
+        .clone();
+    notes.insert(1, outputs);
+    txs_bytes.push(bytes);
     std::fs::remove_file(&file_path).unwrap();
 
     let mut txs = vec![];
@@ -8472,6 +8530,24 @@ fn masp_events() -> Result<()> {
     // If empty then failed in process proposal
     assert!(!node.tx_result_codes.lock().unwrap().is_empty());
     node.assert_success();
+
+    // Check that the commitment tree in storage matches the expected one
+    for (_, note_collection) in notes {
+        for description in note_collection {
+            commitment_tree
+                .append(Node::from_scalar(description.cmu))
+                .unwrap();
+        }
+    }
+    let storage_commitment_tree: CommitmentTree<Node> = node
+        .shell
+        .lock()
+        .unwrap()
+        .state
+        .read(&tree_key)
+        .unwrap()
+        .unwrap();
+    assert_eq!(commitment_tree, storage_commitment_tree);
 
     // 4. Sync the shielded context and check the balances
     run(
