@@ -530,16 +530,16 @@ impl MockNode {
         let mut result_codes = resp
             .events
             .iter()
-            .map(|e| {
-                let code = e
-                    .read_attribute_opt::<CodeAttr>()
+            .filter_map(|e| {
+                e.read_attribute_opt::<CodeAttr>()
                     .unwrap()
-                    .unwrap_or_default();
-                if code == ResultCode::Ok {
-                    NodeResults::Ok
-                } else {
-                    NodeResults::Failed(code)
-                }
+                    .map(|result_code| {
+                        if result_code == ResultCode::Ok {
+                            NodeResults::Ok
+                        } else {
+                            NodeResults::Failed(result_code)
+                        }
+                    })
             })
             .collect::<Vec<_>>();
         let mut tx_results = resp
@@ -675,16 +675,16 @@ impl MockNode {
         let mut error_codes = resp
             .events
             .iter()
-            .map(|e| {
-                let code = e
-                    .read_attribute_opt::<CodeAttr>()
+            .filter_map(|e| {
+                e.read_attribute_opt::<CodeAttr>()
                     .unwrap()
-                    .unwrap_or_default();
-                if code == ResultCode::Ok {
-                    NodeResults::Ok
-                } else {
-                    NodeResults::Failed(code)
-                }
+                    .map(|result_code| {
+                        if result_code == ResultCode::Ok {
+                            NodeResults::Ok
+                        } else {
+                            NodeResults::Failed(result_code)
+                        }
+                    })
             })
             .collect::<Vec<_>>();
         let mut txs_results = resp
