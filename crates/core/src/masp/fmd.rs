@@ -8,13 +8,22 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use polyfuzzy::fmd2_compact::FlagCiphertexts as PolyfuzzyFlagCiphertext;
 use serde::{Deserialize, Serialize};
 
+#[allow(dead_code)]
 pub mod parameters {
     //! Fuzzy message detection parameters used by Namada.
 
     /// Gamma parameter.
+    ///
+    /// This parameter defines the minimum false positive rate,
+    /// which is given by `2^-GAMMA`.
     pub const GAMMA: usize = 20;
 
     /// Threshold parameter.
+    ///
+    /// This parameter affects the length of payment addresses.
+    /// The raw data of payment addresses will contain `THRESHOLD + 1`
+    /// extra compressed curve points (32 bytes each), to allow
+    /// flagging note ownership to their respective owner.
     pub const THRESHOLD: usize = 1;
 }
 
