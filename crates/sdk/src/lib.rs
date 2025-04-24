@@ -52,8 +52,8 @@ use namada_core::ethereum_events::EthAddress;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::key::*;
 pub use namada_core::masp::{
-    ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress, TransferSource,
-    TransferTarget,
+    ExtendedSpendingKey, ExtendedViewingKey, FlagCiphertext, PaymentAddress,
+    TransferSource, TransferTarget,
 };
 pub use namada_core::{control_flow, task_env};
 use namada_io::{Client, Io, NamadaIo};
