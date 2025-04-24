@@ -275,6 +275,12 @@ impl Data {
         }
     }
 
+    /// Make a new data section with the given borsh encodable data
+    #[inline]
+    pub fn from_borsh_encoded<T: BorshSerialize>(data: &T) -> Self {
+        Self::new(data.serialize_to_vec())
+    }
+
     /// Hash this data section
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         hasher.update(self.serialize_to_vec());
