@@ -59,6 +59,8 @@ pub struct OsmosisSwapMemoDataInner {
     /// The receiver of the difference between the transferred tokens and
     /// the minimum output amount.
     pub overflow_receiver: namada_core::address::Address,
+    /// The overflow trace on namada.
+    pub overflow_trace: String,
 }
 
 impl From<NamadaMemo<OsmosisSwapMemoData>> for NamadaMemo<NamadaMemoData> {
@@ -75,6 +77,7 @@ impl From<OsmosisSwapMemoData> for NamadaMemo<NamadaMemoData> {
                     shielding_data,
                     shielded_amount,
                     overflow_receiver,
+                    overflow_trace,
                 },
         }: OsmosisSwapMemoData,
     ) -> Self {
@@ -83,6 +86,7 @@ impl From<OsmosisSwapMemoData> for NamadaMemo<NamadaMemoData> {
                 overflow_receiver,
                 shielded_amount,
                 shielding_data,
+                overflow_trace,
             },
         }
     }
@@ -121,6 +125,8 @@ pub enum NamadaMemoData {
         /// The receiver of the difference between the transferred tokens and
         /// the minimum output amount.
         overflow_receiver: namada_core::address::Address,
+        /// The overflow trace on namada.
+        overflow_trace: String,
     },
 }
 

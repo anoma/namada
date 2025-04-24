@@ -730,7 +730,7 @@ impl TxOsmosisSwap<SdkTypes> {
                                 payment_addr,
                             ),
                         asset: IbcShieldingTransferAsset::Address(
-                            namada_output_addr,
+                            namada_output_addr.clone(),
                         ),
                         amount: InputAmount::Validated(
                             token::DenominatedAmount::new(
@@ -756,6 +756,7 @@ impl TxOsmosisSwap<SdkTypes> {
                             ),
                             shielded_amount: amount_to_shield,
                             overflow_receiver,
+                            overflow_trace: namada_output_denom,
                         },
                     })
                     .unwrap(),
