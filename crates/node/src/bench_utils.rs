@@ -115,8 +115,8 @@ pub use namada_sdk::tx::{
 };
 use namada_sdk::wallet::{DatedSpendingKey, Wallet};
 use namada_sdk::{
-    Namada, NamadaImpl, PaymentAddress, TransferSource, TransferTarget,
-    parameters, proof_of_stake, tendermint,
+    FlagCiphertext, Namada, NamadaImpl, PaymentAddress, TransferSource,
+    TransferTarget, parameters, proof_of_stake, tendermint,
 };
 use namada_test_utils::tx_data::TxWriteData;
 use namada_vm::wasm::run;
@@ -188,7 +188,7 @@ impl BenchShellInner {
 
         if let Some(sections) = extra_sections {
             for section in sections {
-                if let Section::ExtraData(_) = section {
+                if let Section::ExtraData(_) | Section::Data(_) = section {
                     tx.add_section(section);
                 }
             }
@@ -1281,12 +1281,14 @@ impl BenchShieldedCtx {
             )
             .expect("MASP must have shielded part");
 
+        let fmd_section = Section::Data(Data::from_borsh_encoded(&vec![
+            FlagCiphertext::default(),
+        ]));
         let shielded_data = MaspTxData {
             masp_tx_id: shielded.txid().into(),
-            // TODO: change this to the actual sechash
-            // of the fmd flag
-            flag_ciphertext_sechash: Default::default(),
+            flag_ciphertext_sechash: fmd_section.get_hash(),
         };
+
         let tx = if source.effective_address() == MASP
             && target.effective_address() == MASP
         {
@@ -1294,7 +1296,7 @@ impl BenchShieldedCtx {
                 TX_TRANSFER_WASM,
                 Transfer::masp(shielded_data),
                 Some(shielded),
-                None,
+                Some(vec![fmd_section]),
                 vec![&defaults::albert_keypair()],
             )
         } else if target.effective_address() == MASP {
@@ -1309,7 +1311,7 @@ impl BenchShieldedCtx {
                     )
                     .unwrap(),
                 Some(shielded),
-                None,
+                Some(vec![fmd_section]),
                 vec![&defaults::albert_keypair()],
             )
         } else {
@@ -1324,7 +1326,7 @@ impl BenchShieldedCtx {
                     )
                     .unwrap(),
                 Some(shielded),
-                None,
+                Some(vec![fmd_section]),
                 vec![&defaults::albert_keypair()],
             )
         };
@@ -1398,14 +1400,15 @@ impl BenchShieldedCtx {
             vec![vectorized_transfer.targets.into_iter().next().unwrap()]
                 .into_iter()
                 .collect();
+        let fmd_section = Section::Data(Data::from_borsh_encoded(&vec![
+            FlagCiphertext::default(),
+        ]));
         let transfer = Transfer {
             sources,
             targets,
             shielded_data: Some(MaspTxData {
                 masp_tx_id,
-                // TODO: change this to the actual sechash
-                // of the fmd flag
-                flag_ciphertext_sechash: Default::default(),
+                flag_ciphertext_sechash: fmd_section.get_hash(),
             }),
         };
         let masp_tx = tx.tx.get_masp_section(&masp_tx_id).unwrap().clone();
@@ -1419,6 +1422,7 @@ impl BenchShieldedCtx {
             .read()
             .generate_ibc_tx(TX_IBC_WASM, msg.serialize_to_vec());
         ibc_tx.tx.add_masp_tx_section(masp_tx);
+        ibc_tx.tx.add_section(fmd_section);
 
         (ctx, ibc_tx)
     }
