@@ -6609,7 +6609,7 @@ fn identical_output_descriptions() -> Result<()> {
 
     let signing_data = SigningTxData {
         owner: None,
-        public_keys: vec![adam_key.to_public()],
+        public_keys: [adam_key.to_public()].into(),
         threshold: 1,
         account_public_keys_map: None,
         fee_payer: adam_key.to_public(),
@@ -6913,7 +6913,7 @@ fn masp_batch() -> Result<()> {
 
     let signing_data = SigningTxData {
         owner: None,
-        public_keys: vec![adam_key.to_public()],
+        public_keys: [adam_key.to_public()].into(),
         threshold: 1,
         account_public_keys_map: None,
         fee_payer: adam_key.to_public(),
@@ -7168,7 +7168,7 @@ fn masp_atomic_batch() -> Result<()> {
 
     let signing_data = SigningTxData {
         owner: None,
-        public_keys: vec![adam_key.to_public()],
+        public_keys: [adam_key.to_public()].into(),
         threshold: 1,
         account_public_keys_map: None,
         fee_payer: adam_key.to_public(),
