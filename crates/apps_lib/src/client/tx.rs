@@ -1244,6 +1244,16 @@ pub async fn submit_shielded_transfer(
          to date, make sure to run `namadac shielded-sync` before running \
          this command.",
     );
+    if !args.disposable_signing_key {
+        display_line!(
+            namada.io(),
+            "{}: {}\n",
+            "WARNING".bold().underline().yellow(),
+            "Using a transparent gas payer for a shielded transaction will \
+             most likely leak information: please consider paying the gas \
+             fees via the MASP with a disposable gas payer.",
+        );
+    }
 
     let sources = args
         .data
@@ -1378,6 +1388,16 @@ pub async fn submit_unshielding_transfer(
          to date, make sure to run `namadac shielded-sync` before running \
          this command.",
     );
+    if !args.disposable_signing_key {
+        display_line!(
+            namada.io(),
+            "{}: {}\n",
+            "WARNING".bold().underline().yellow(),
+            "Using a transparent gas payer for an unshielding transaction \
+             will most likely leak information: please consider paying the \
+             gas fees via the MASP with a disposable gas payer.",
+        );
+    }
 
     let sources = std::iter::once(&mut args.source)
         .chain(args.gas_spending_key.iter_mut());
@@ -1421,6 +1441,16 @@ pub async fn submit_ibc_transfer<N: Namada>(
 where
     <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
+    if args.source.spending_key().is_some() && !args.disposable_signing_key {
+        display_line!(
+            namada.io(),
+            "{}: {}\n",
+            "WARNING".bold().underline().yellow(),
+            "Using a transparent gas payer for an unshielding ibc transaction \
+             will most likely leak information: please consider paying the \
+             gas fees via the MASP with a disposable gas payer.",
+        );
+    }
     let sources = args
         .source
         .spending_key_mut()

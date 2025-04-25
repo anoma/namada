@@ -4848,9 +4848,13 @@ pub mod args {
                         .def()
                         .help(wrap!(
                             "Generates an ephemeral, disposable keypair to \
-                             sign the wrapper transaction."
+                             sign the wrapper transaction. This is the \
+                             recommended way to pay fees."
                         ))
-                        .conflicts_with(FEE_PAYER_OPT.name),
+                        .conflicts_with_all([
+                            FEE_PAYER_OPT.name,
+                            SIGNING_KEYS.name,
+                        ]),
                 )
         }
     }
@@ -5013,9 +5017,13 @@ pub mod args {
                         .def()
                         .help(wrap!(
                             "Generates an ephemeral, disposable keypair to \
-                             sign the wrapper transaction."
+                             sign the wrapper transaction. This is the \
+                             recommended way to pay fees."
                         ))
-                        .conflicts_with(FEE_PAYER_OPT.name),
+                        .conflicts_with_all([
+                            FEE_PAYER_OPT.name,
+                            SIGNING_KEYS.name,
+                        ]),
                 )
         }
     }
@@ -5145,9 +5153,14 @@ pub mod args {
                         .def()
                         .help(wrap!(
                             "Generates an ephemeral, disposable keypair to \
-                             sign the wrapper transaction."
+                             sign the wrapper transaction. This is the \
+                             recommended way to pay fees if the source of the \
+                             transaction is shielded."
                         ))
-                        .conflicts_with(FEE_PAYER_OPT.name),
+                        .conflicts_with_all([
+                            FEE_PAYER_OPT.name,
+                            SIGNING_KEYS.name,
+                        ]),
                 )
         }
     }
@@ -7817,9 +7830,7 @@ pub mod args {
                     .help(wrap!(
                         "The implicit address of the gas payer. It defaults \
                          to the address associated to the first key passed to \
-                         --signing-keys. If the specific transaction supports \
-                         --disposable-signing-key, then this one will \
-                         overwrite this argument."
+                         --signing-keys."
                     ))
                     .conflicts_with(WRAPPER_SIGNATURE_OPT.name),
             )
