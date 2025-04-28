@@ -436,7 +436,7 @@ impl Service {
 }
 
 /// The ABCI tower service implementation sends and receives messages to and
-/// from the [`AbcippShim`] for requests from Tendermint.
+/// from the [`Service`] for requests from Tendermint.
 impl tower::Service<Request> for Service {
     type Error = BoxError;
     type Future = Pin<
