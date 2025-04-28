@@ -357,9 +357,6 @@ pub struct TxShieldedTransfer<C: NamadaTypes = SdkTypes> {
     pub data: Vec<TxShieldedTransferData<C>>,
     /// Optional additional keys for gas payment
     pub gas_spending_key: Option<C::SpendingKey>,
-    /// Generate an ephemeral signing key to be used only once to sign the
-    /// wrapper tx
-    pub disposable_signing_key: bool,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -456,9 +453,7 @@ pub struct TxUnshieldingTransfer<C: NamadaTypes = SdkTypes> {
     pub data: Vec<TxUnshieldingTransferData<C>>,
     /// Optional additional keys for gas payment
     pub gas_spending_key: Option<C::SpendingKey>,
-    /// Generate an ephemeral signing key to be used only once to sign the
-    /// wrapper tx
-    pub disposable_signing_key: bool,
+
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -840,9 +835,6 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub ibc_memo: Option<String>,
     /// Optional additional keys for gas payment
     pub gas_spending_key: Option<C::SpendingKey>,
-    /// Generate an ephemeral signing key to be used only once to sign the
-    /// wrapper tx
-    pub disposable_signing_key: bool,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -2648,6 +2640,9 @@ impl TxExpiration {
 
 /// Common transaction arguments
 #[derive(Clone, Debug)]
+// FIXME: there might be another solution. I could make this type generic over
+// the gas payer so that I can control wether the fee payer is optional or
+// unsafe
 pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// Simulate applying the transaction
     pub dry_run: bool,
@@ -2673,6 +2668,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub wallet_alias_force: bool,
     /// The amount being paid (for gas unit) to include the transaction
     pub fee_amount: Option<InputAmount>,
+    // FIXME: this should be unsafe when source is the masp
     /// The fee payer signing key
     pub wrapper_fee_payer: Option<C::PublicKey>,
     /// The token in which the fee is being paid
@@ -2685,8 +2681,10 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub chain_id: Option<ChainId>,
     /// Sign the tx with the key for the given alias from your wallet
     pub signing_keys: Vec<C::PublicKey>,
+    // FIXME: maybe also this one is only needed for custom txs?
     /// List of signatures to attach to the transaction
     pub signatures: Vec<C::Data>,
+    // FIXME: this is only needed for custom txs
     /// Optional path to a serialized wrapper signature
     pub wrapper_signature: Option<C::Data>,
     /// Path to the TX WASM code file to reveal PK

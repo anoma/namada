@@ -1244,16 +1244,6 @@ pub async fn submit_shielded_transfer(
          to date, make sure to run `namadac shielded-sync` before running \
          this command.",
     );
-    if !args.disposable_signing_key {
-        display_line!(
-            namada.io(),
-            "{}: {}\n",
-            "WARNING".bold().underline().yellow(),
-            "Using a transparent gas payer for a shielded transaction will \
-             most likely leak information: please consider paying the gas \
-             fees via the MASP with a disposable gas payer.",
-        );
-    }
 
     let sources = args
         .data
@@ -1271,6 +1261,16 @@ pub async fn submit_shielded_transfer(
     .await?;
     let (mut tx, signing_data) =
         args.clone().build(namada, &mut bparams).await?;
+    if !signing_data.disposable_fee_payer {
+        display_line!(
+            namada.io(),
+            "{}: {}\n",
+            "WARNING".bold().underline().yellow(),
+            "Using a transparent gas payer for a shielded transaction will \
+             most likely leak information: please consider paying the gas \
+             fees via the MASP with a disposable gas payer.",
+        );
+    }
     masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
 
     let masp_section = tx
@@ -1388,16 +1388,6 @@ pub async fn submit_unshielding_transfer(
          to date, make sure to run `namadac shielded-sync` before running \
          this command.",
     );
-    if !args.disposable_signing_key {
-        display_line!(
-            namada.io(),
-            "{}: {}\n",
-            "WARNING".bold().underline().yellow(),
-            "Using a transparent gas payer for an unshielding transaction \
-             will most likely leak information: please consider paying the \
-             gas fees via the MASP with a disposable gas payer.",
-        );
-    }
 
     let sources = std::iter::once(&mut args.source)
         .chain(args.gas_spending_key.iter_mut());
@@ -1412,6 +1402,16 @@ pub async fn submit_unshielding_transfer(
     .await?;
     let (mut tx, signing_data) =
         args.clone().build(namada, &mut bparams).await?;
+    if !signing_data.disposable_fee_payer {
+        display_line!(
+            namada.io(),
+            "{}: {}\n",
+            "WARNING".bold().underline().yellow(),
+            "Using a transparent gas payer for an unshielding transaction \
+             will most likely leak information: please consider paying the \
+             gas fees via the MASP with a disposable gas payer.",
+        );
+    }
     masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
 
     let masp_section = tx
@@ -1441,16 +1441,6 @@ pub async fn submit_ibc_transfer<N: Namada>(
 where
     <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
-    if args.source.spending_key().is_some() && !args.disposable_signing_key {
-        display_line!(
-            namada.io(),
-            "{}: {}\n",
-            "WARNING".bold().underline().yellow(),
-            "Using a transparent gas payer for an unshielding ibc transaction \
-             will most likely leak information: please consider paying the \
-             gas fees via the MASP with a disposable gas payer.",
-        );
-    }
     let sources = args
         .source
         .spending_key_mut()
@@ -1479,6 +1469,18 @@ where
         .build(namada, &mut bparams)
         .await
         .map_err(|e| bparams_err.unwrap_or(e))?;
+    if args.source.spending_key().is_some()
+        && !signing_data.disposable_fee_payer
+    {
+        display_line!(
+            namada.io(),
+            "{}: {}\n",
+            "WARNING".bold().underline().yellow(),
+            "Using a transparent gas payer for an unshielding ibc transaction \
+             will most likely leak information: please consider paying the \
+             gas fees via the MASP with a disposable gas payer.",
+        );
+    }
     // Any effects of a MASP build parameter generation failure would have
     // manifested during transaction building. So we discount that as a root
     // cause from now on.

@@ -2680,7 +2680,7 @@ pub async fn build_ibc_transfer(
         Some(source.clone()),
         Some(source.clone()),
         vec![],
-        args.disposable_signing_key,
+        args.source.spending_key().is_some(),
     )
     .await?;
     let (fee_per_gas_unit, updated_balance) =
@@ -3181,7 +3181,7 @@ pub async fn build_shielded_transfer<N: Namada>(
         Some(MASP),
         Some(MASP),
         vec![],
-        args.disposable_signing_key,
+        true,
     )
     .await?;
 
@@ -3474,7 +3474,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         Some(MASP),
         Some(MASP),
         vec![],
-        args.disposable_signing_key,
+        true,
     )
     .await?;
 
