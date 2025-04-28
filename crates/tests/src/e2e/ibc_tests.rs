@@ -1287,7 +1287,7 @@ fn shielded_recv_memo_value(
     masp_transfer_path: &Path,
     shielded_amount: Amount,
     overflow_receiver: namada_core::address::Address,
-    overflow_trace: String,
+    output_denom: String,
 ) -> serde_json::Map<String, serde_json::Value> {
     use namada_core::string_encoding::StringEncoded;
     use namada_sdk::ibc::{NamadaMemo, NamadaMemoData};
@@ -1301,7 +1301,7 @@ fn shielded_recv_memo_value(
         shielding_data: tx,
         shielded_amount,
         overflow_receiver,
-        overflow_trace,
+        output_denom,
     };
 
     let value = serde_json::to_value(&NamadaMemo { namada: data })

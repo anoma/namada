@@ -756,7 +756,7 @@ impl TxOsmosisSwap<SdkTypes> {
                             ),
                             shielded_amount: amount_to_shield,
                             overflow_receiver,
-                            overflow_trace: namada_output_denom,
+                            output_denom: namada_output_denom,
                         },
                     })
                     .unwrap(),
