@@ -635,6 +635,7 @@ impl MockNode {
         let processed_txs: Vec<ProcessedTx> = {
             let req = RequestPrepareProposal {
                 proposer_address: proposer_address.clone().into(),
+                txs: txs.clone().into_iter().map(|tx| tx.into()).collect(),
                 ..Default::default()
             };
             let txs = locked.prepare_proposal(req).txs;
