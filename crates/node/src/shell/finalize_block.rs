@@ -1343,8 +1343,7 @@ where
     )
 }
 
-/// This is just to be used in testing. It is not
-/// a meaningful default.
+// This is just to be used in testing. It is not a meaningful default.
 #[cfg(any(test, feature = "testing"))]
 impl Default for Request {
     fn default() -> Self {
@@ -1355,9 +1354,17 @@ impl Default for Request {
             next_validators_hash: Default::default(),
             misbehavior: Default::default(),
             txs: Default::default(),
-            proposer_address: tendermint::account::Id::new(
-                [0; tendermint::account::LENGTH],
-            ),
+            proposer_address: tendermint::account::Id::try_from(
+                HEXUPPER
+                    .decode(
+                        wallet::defaults::validator_keypair()
+                            .to_public()
+                            .tm_raw_hash()
+                            .as_bytes(),
+                    )
+                    .unwrap(),
+            )
+            .unwrap(),
             decided_last_commit: tendermint::abci::types::CommitInfo {
                 round: 0u8.into(),
                 votes: vec![],
