@@ -86,7 +86,7 @@ where
             decided_last_commit,
             misbehavior,
             hash,
-            height,
+            height: expected_height,
             time,
             next_validators_hash,
             proposer_address,
@@ -101,7 +101,7 @@ where
             time,
             next_validators_hash,
         };
-        let (expected_height, new_epoch) = self.update_state(header);
+        let (height, new_epoch) = self.update_state(header);
         if expected_height != height {
             #[cfg(not(test))]
             return Err(Error::UnexpectedBlockHeight {

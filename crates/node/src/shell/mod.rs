@@ -1728,6 +1728,7 @@ pub mod test_utils {
     use namada_sdk::state::{LastBlock, StorageWrite};
     use namada_sdk::storage::Epoch;
     use namada_sdk::tendermint::abci::types::VoteInfo;
+    use namada_sdk::time::Duration;
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
@@ -2005,8 +2006,10 @@ pub mod test_utils {
             self.state.in_mem_mut().next_epoch_min_start_height =
                 self.state.in_mem().get_last_block_height() + num_blocks;
             self.state.in_mem_mut().next_epoch_min_start_time = {
-                #[allow(clippy::disallowed_methods)]
-                DateTimeUtc::now()
+                ({
+                    #[allow(clippy::disallowed_methods)]
+                    DateTimeUtc::now()
+                }) - Duration::seconds(1)
             };
         }
 
