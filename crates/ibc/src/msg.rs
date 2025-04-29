@@ -59,7 +59,7 @@ pub struct OsmosisSwapMemoDataInner {
     /// The receiver of the difference between the transferred tokens and
     /// the minimum output amount.
     pub overflow_receiver: namada_core::address::Address,
-    /// The output denom on Namada.
+    /// The output trace path on Namada.
     pub output_denom: String,
 }
 
@@ -125,7 +125,7 @@ pub enum NamadaMemoData {
         /// The receiver of the difference between the transferred tokens and
         /// the minimum output amount.
         overflow_receiver: namada_core::address::Address,
-        /// The output denom on Namada.
+        /// The output trace path on Namada.
         output_denom: String,
     },
 }
