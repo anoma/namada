@@ -6,6 +6,7 @@ use std::io;
 use borsh::schema::Definition;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use masp_primitives::sapling::SaplingIvk;
+use masp_primitives::zip32::{ExtendedKey, PseudoExtendedKey};
 use polyfuzzy::fmd2_compact::{
     CompactSecretKey as PolyfuzzyCompactSecretKey,
     FlagCiphertexts as PolyfuzzyFlagCiphertext,
@@ -93,6 +94,18 @@ impl From<SaplingIvk> for SecretKey {
     #[inline]
     fn from(ivk: SaplingIvk) -> Self {
         (&ivk).into()
+    }
+}
+
+impl From<&PseudoExtendedKey> for SecretKey {
+    fn from(psk: &PseudoExtendedKey) -> Self {
+        psk.to_viewing_key().fvk.vk.ivk().into()
+    }
+}
+
+impl From<PseudoExtendedKey> for SecretKey {
+    fn from(psk: PseudoExtendedKey) -> Self {
+        (&psk).into()
     }
 }
 
