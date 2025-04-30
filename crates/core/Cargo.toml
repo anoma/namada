@@ -16,8 +16,8 @@ rust-version.workspace = true
 [features]
 default = []
 mainnet = []
-rand = ["dep:rand", "dep:rand_core"]
-default-flag-ciphertext = ["dep:rand_core", "polyfuzzy/random-flag-ciphertexts"]
+rand = ["dep:rand", "dep:rand_core", "polyfuzzy/random-flag-ciphertexts"]
+default-flag-ciphertext = ["rand"]
 ethers-derive = ["ethbridge-structs/ethers-derive"]
 # for tests and test utilities
 testing = ["rand", "proptest"]

@@ -6,6 +6,8 @@ use std::io;
 use borsh::schema::Definition;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use polyfuzzy::fmd2_compact::FlagCiphertexts as PolyfuzzyFlagCiphertext;
+#[cfg(feature = "rand")]
+use rand_core::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 
 #[allow(dead_code)]
@@ -61,6 +63,17 @@ impl FlagCiphertext {
     pub fn is_valid(&self) -> bool {
         parameters::valid_compressed_bit_ciphertext(self.inner.bits())
     }
+
+    /// Generate a random [`FlagCiphertext`].
+    #[cfg(feature = "rand")]
+    pub fn random<R>(rng: &mut R) -> Self
+    where
+        R: CryptoRng + RngCore,
+    {
+        Self {
+            inner: PolyfuzzyFlagCiphertext::random(rng, parameters::GAMMA),
+        }
+    }
 }
 
 impl AsRef<PolyfuzzyFlagCiphertext> for FlagCiphertext {
@@ -71,13 +84,9 @@ impl AsRef<PolyfuzzyFlagCiphertext> for FlagCiphertext {
 
 #[cfg(feature = "default-flag-ciphertext")]
 impl Default for FlagCiphertext {
+    #[inline]
     fn default() -> Self {
-        Self {
-            inner: PolyfuzzyFlagCiphertext::random(
-                &mut rand_core::OsRng,
-                parameters::GAMMA,
-            ),
-        }
+        Self::random(&mut rand_core::OsRng)
     }
 }
 
