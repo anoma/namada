@@ -248,7 +248,7 @@ test-log = {version = "0.2", default-features = false, features = ["trace"]}
 textwrap-macros = "0.3"
 tiny-bip39 = {version = "2.0"}
 tiny-hderive = {package = "nam-tiny-hderive", version = "0.3.1-nam.0"}
-tiny-keccak = { version = "2.0", features = ["keccak"] }
+tiny-keccak = { version = "2.0", features = ["keccak", "k12"] }
 thiserror = "2.0"
 tokio = {version = "1.8", default-features = false}
 tokio-test = "0.4"

@@ -5,10 +5,15 @@ use std::io;
 
 use borsh::schema::Definition;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use polyfuzzy::fmd2_compact::FlagCiphertexts as PolyfuzzyFlagCiphertext;
+use masp_primitives::sapling::SaplingIvk;
+use polyfuzzy::fmd2_compact::{
+    CompactSecretKey as PolyfuzzyCompactSecretKey,
+    FlagCiphertexts as PolyfuzzyFlagCiphertext,
+};
 #[cfg(feature = "rand")]
 use rand_core::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
+use tiny_keccak::{Hasher, IntoXof, KangarooTwelve, Xof};
 
 #[allow(dead_code)]
 pub mod parameters {
@@ -45,6 +50,49 @@ pub mod parameters {
 
         bits.len() == COMPRESSED_BIT_CIPHERTEXT_LEN
             && bits[COMPRESSED_BIT_CIPHERTEXT_LEN - 1] & UNSET_BITS_MASK == 0
+    }
+}
+
+/// FMD secret key.
+//#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct SecretKey {
+    inner: PolyfuzzyCompactSecretKey,
+}
+
+impl SecretKey {
+    /// Hash personalization string used when deriving a [`SecretKey`]
+    /// from a [`SaplingIvk`].
+    const KDF_PERSONALIZATION: &str = "Namada FMD Secret Key";
+}
+
+impl From<&SaplingIvk> for SecretKey {
+    fn from(ivk: &SaplingIvk) -> Self {
+        let mut xof_stream = {
+            let mut hasher = KangarooTwelve::new(Self::KDF_PERSONALIZATION);
+
+            // derive key material from input viewing key
+            hasher.update(&ivk.to_repr());
+
+            hasher.into_xof()
+        };
+
+        Self {
+            inner: PolyfuzzyCompactSecretKey::derive_from_xof_stream(
+                parameters::THRESHOLD,
+                |buf| {
+                    xof_stream.squeeze(buf);
+                },
+            ),
+        }
+    }
+}
+
+impl From<SaplingIvk> for SecretKey {
+    #[inline]
+    fn from(ivk: SaplingIvk) -> Self {
+        (&ivk).into()
     }
 }
 
