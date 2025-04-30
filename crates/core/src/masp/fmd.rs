@@ -56,7 +56,7 @@ pub mod parameters {
 
 /// FMD secret key.
 //#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 #[repr(transparent)]
 pub struct SecretKey {
     inner: polyfuzzy::CompactSecretKey,
