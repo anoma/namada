@@ -7,14 +7,14 @@ use borsh::schema::Definition;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use masp_primitives::sapling::SaplingIvk;
 use masp_primitives::zip32::{ExtendedKey, PseudoExtendedKey};
-use polyfuzzy::fmd2_compact::{
-    CompactSecretKey as PolyfuzzyCompactSecretKey,
-    FlagCiphertexts as PolyfuzzyFlagCiphertext,
-};
 #[cfg(feature = "rand")]
 use rand_core::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use tiny_keccak::{Hasher, IntoXof, KangarooTwelve, Xof};
+
+mod polyfuzzy {
+    pub(super) use ::polyfuzzy::fmd2_compact::*;
+}
 
 #[allow(dead_code)]
 pub mod parameters {
@@ -59,7 +59,7 @@ pub mod parameters {
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 #[repr(transparent)]
 pub struct SecretKey {
-    inner: PolyfuzzyCompactSecretKey,
+    inner: polyfuzzy::CompactSecretKey,
 }
 
 impl SecretKey {
@@ -80,7 +80,7 @@ impl From<&SaplingIvk> for SecretKey {
         };
 
         Self {
-            inner: PolyfuzzyCompactSecretKey::derive_from_xof_stream(
+            inner: polyfuzzy::CompactSecretKey::derive_from_xof_stream(
                 parameters::THRESHOLD,
                 |buf| {
                     xof_stream.squeeze(buf);
@@ -114,7 +114,7 @@ impl From<PseudoExtendedKey> for SecretKey {
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 #[repr(transparent)]
 pub struct FlagCiphertext {
-    inner: PolyfuzzyFlagCiphertext,
+    inner: polyfuzzy::FlagCiphertexts,
 }
 
 impl FlagCiphertext {
@@ -132,27 +132,27 @@ impl FlagCiphertext {
         R: CryptoRng + RngCore,
     {
         Self {
-            inner: PolyfuzzyFlagCiphertext::random(rng, parameters::GAMMA),
+            inner: polyfuzzy::FlagCiphertexts::random(rng, parameters::GAMMA),
         }
     }
 }
 
-impl From<PolyfuzzyFlagCiphertext> for FlagCiphertext {
-    fn from(flag_ciphertext: PolyfuzzyFlagCiphertext) -> Self {
+impl From<polyfuzzy::FlagCiphertexts> for FlagCiphertext {
+    fn from(flag_ciphertext: polyfuzzy::FlagCiphertexts) -> Self {
         Self {
             inner: flag_ciphertext,
         }
     }
 }
 
-impl From<FlagCiphertext> for PolyfuzzyFlagCiphertext {
+impl From<FlagCiphertext> for polyfuzzy::FlagCiphertexts {
     fn from(flag_ciphertext: FlagCiphertext) -> Self {
         flag_ciphertext.inner
     }
 }
 
-impl AsRef<PolyfuzzyFlagCiphertext> for FlagCiphertext {
-    fn as_ref(&self) -> &PolyfuzzyFlagCiphertext {
+impl AsRef<polyfuzzy::FlagCiphertexts> for FlagCiphertext {
+    fn as_ref(&self) -> &polyfuzzy::FlagCiphertexts {
         &self.inner
     }
 }
