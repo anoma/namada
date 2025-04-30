@@ -48,7 +48,7 @@ pub mod parameters {
 
 /// FMD flag ciphertexts.
 //#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 #[repr(transparent)]
 pub struct FlagCiphertext {
     inner: PolyfuzzyFlagCiphertext,
@@ -57,17 +57,6 @@ pub struct FlagCiphertext {
 impl AsRef<PolyfuzzyFlagCiphertext> for FlagCiphertext {
     fn as_ref(&self) -> &PolyfuzzyFlagCiphertext {
         &self.inner
-    }
-}
-
-// TODO: use polyfuzzy PartialEq impl once available,
-// and simply derive it in FlagCiphertext
-impl PartialEq for FlagCiphertext {
-    fn eq(&self, other: &Self) -> bool {
-        let this = bincode::serialize(&self.inner).unwrap();
-        let other = bincode::serialize(&other.inner).unwrap();
-
-        this == other
     }
 }
 
