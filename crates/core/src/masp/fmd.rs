@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 use tiny_keccak::{Hasher, IntoXof, KangarooTwelve, Xof};
 
 mod polyfuzzy {
+    #[cfg(feature = "rand")]
+    pub(super) use ::polyfuzzy::MultiFmdScheme;
     pub(super) use ::polyfuzzy::fmd2_compact::*;
 }
 
@@ -34,6 +36,9 @@ pub mod parameters {
     /// flagging note ownership to their respective owner.
     pub const THRESHOLD: usize = 1;
 
+    /// Number of bytes required to store a public key.
+    pub const PUBLIC_KEY_LEN: usize = (THRESHOLD + 1) * 32;
+
     /// Evaluate whether the given compressed bit ciphertext is valid.
     #[allow(clippy::arithmetic_side_effects)]
     pub const fn valid_compressed_bit_ciphertext(bits: &[u8]) -> bool {
@@ -54,6 +59,68 @@ pub mod parameters {
     }
 }
 
+/// FMD public key.
+//#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct PublicKey {
+    inner: polyfuzzy::CompactPublicKey,
+}
+
+impl PublicKey {
+    /// Serialize this public key into its compressed representation.
+    pub fn into_compressed_bytes(self) -> Vec<u8> {
+        self.inner.compress().to_coeff_repr()
+    }
+
+    /// Deserialize a public key from the given compressed representation and
+    /// diversifier.
+    pub fn from_parts(
+        diversifier: &[u8],
+        compressed_bytes: &[u8],
+    ) -> Option<Self> {
+        if compressed_bytes.len() != parameters::PUBLIC_KEY_LEN {
+            return None;
+        }
+
+        let compressed_pk =
+            polyfuzzy::CompressedCompactPublicKey::from_coeff_repr(
+                compressed_bytes,
+            )?;
+
+        Some(PublicKey {
+            inner: compressed_pk.var_decompress(diversifier),
+        })
+    }
+
+    /// Generate a new [`FlagCiphertext`].
+    ///
+    /// This notifies the owner of a given viewing
+    /// key that a note can be decrypted by it, with
+    /// occasional false positives returned for
+    /// non-decrypting viewing keys.
+    #[cfg(feature = "rand")]
+    pub fn flag<R>(&self, rng: &mut R) -> FlagCiphertext
+    where
+        R: CryptoRng + RngCore,
+    {
+        use polyfuzzy::MultiFmdScheme as _;
+
+        let mut scheme = polyfuzzy::MultiFmd2CompactScheme::new(
+            parameters::GAMMA,
+            parameters::THRESHOLD,
+        );
+
+        scheme.flag(&self.inner, rng).into()
+    }
+}
+
+impl AsRef<polyfuzzy::CompactPublicKey> for PublicKey {
+    fn as_ref(&self) -> &polyfuzzy::CompactPublicKey {
+        &self.inner
+    }
+}
+
 /// FMD secret key.
 //#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -66,6 +133,30 @@ impl SecretKey {
     /// Hash personalization string used when deriving a [`SecretKey`]
     /// from a [`SaplingIvk`].
     const KDF_PERSONALIZATION: &str = "Namada FMD Secret Key";
+
+    /// Return the default public key.
+    ///
+    /// Flag ciphertexts generated using the default
+    /// public key are guaranteed to be unique on
+    /// every call to [`PublicKey::flag`].
+    pub fn default_public_key(&self) -> PublicKey {
+        PublicKey {
+            inner: self.inner.master_public_key(),
+        }
+    }
+
+    /// Return a public key randomized by the given `diversifier`.
+    pub fn randomized_public_key(&self, diversifier: &[u8]) -> PublicKey {
+        PublicKey {
+            inner: self.inner.var_randomized_public_key(diversifier),
+        }
+    }
+}
+
+impl AsRef<polyfuzzy::CompactSecretKey> for SecretKey {
+    fn as_ref(&self) -> &polyfuzzy::CompactSecretKey {
+        &self.inner
+    }
 }
 
 impl From<&SaplingIvk> for SecretKey {
@@ -251,6 +342,21 @@ mod borsh_impls {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_fmd_pubkey_roundtrip_repr() {
+        let diversifier = b"bing-bong";
+        let sk = {
+            let ivk = SaplingIvk(Default::default());
+            SecretKey::from(ivk)
+        };
+
+        let pk = sk.randomized_public_key(diversifier);
+        let repr = pk.clone().into_compressed_bytes();
+        let pk2 = PublicKey::from_parts(diversifier, &repr).unwrap();
+
+        assert_eq!(pk, pk2);
+    }
 
     #[test]
     #[cfg(feature = "default-flag-ciphertext")]
