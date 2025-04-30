@@ -130,6 +130,8 @@ pub async fn syncing<
             client,
             url,
             true,
+            // TDOD: Fix,
+            None,
             args.max_concurrent_fetches,
         ))?
     } else {

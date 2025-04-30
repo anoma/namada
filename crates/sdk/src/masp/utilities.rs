@@ -1,9 +1,11 @@
 //! Helper functions and types
 
 use std::collections::BTreeMap;
+use std::ops::ControlFlow;
 use std::sync::{Arc, RwLock};
 
 use borsh::BorshDeserialize;
+use kassandra::IndexList;
 use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::Transaction as MaspTx;
@@ -20,7 +22,9 @@ use namada_token::masp::utils::{
 };
 use namada_tx::event::MaspEvent;
 use namada_tx::{IndexedTx, Tx};
+use reqwest::RequestBuilder;
 use tokio::sync::Semaphore;
+use xorf::BinaryFuse16;
 
 use crate::error::{Error, QueryError};
 use crate::masp::{extract_masp_tx, get_indexed_masp_events_at_height};
@@ -235,6 +239,9 @@ struct IndexerMaspClientShared {
     /// Bloom filter to help avoid fetching block heights
     /// with no MASP notes.
     block_index: init_once::InitOnce<Option<(BlockHeight, xorf::BinaryFuse16)>>,
+    /// Indices of masp txs flagged via fuzzy message detection as relevant for
+    /// a viewing key being synced
+    fmd_indices: Option<IndexList>,
     /// Maximum number of concurrent fetches.
     max_concurrent_fetches: usize,
 }
@@ -267,6 +274,7 @@ impl IndexerMaspClient {
         client: reqwest::Client,
         indexer_api: reqwest::Url,
         using_block_index: bool,
+        fmd_indices: Option<IndexList>,
         max_concurrent_fetches: usize,
     ) -> Self {
         let shared = Arc::new(IndexerMaspClientShared {
@@ -280,6 +288,7 @@ impl IndexerMaspClient {
                 }
                 index
             },
+            fmd_indices,
         });
         Self { client, shared }
     }
@@ -345,6 +354,19 @@ impl IndexerMaspClient {
         })?;
 
         Ok((BlockHeight(payload.block_height), payload.index))
+    }
+
+    fn fetch_request(
+        &self,
+        from_height: u64,
+        offset: u64,
+        maybe_block_index: Option<&(BlockHeight, BinaryFuse16)>,
+    ) -> ControlFlow<(), reqwest::RequestBuilder> {
+        if let Some(ix_list) = self.shared.fmd_indices.as_ref() {
+            ix_list.fetch_request(self, from_height, offset)
+        } else {
+            maybe_block_index.fetch_request(self, from_height, offset)
+        }
     }
 }
 
@@ -443,66 +465,37 @@ impl MaspClient for IndexerMaspClient {
             'do_while: {
                 const MAX_RANGE_THRES: u64 = 30;
 
-                let mut from_height = from;
-                let mut offset = (to - from).min(MAX_RANGE_THRES);
-                let mut to_height = from + offset;
+                let from_height = from;
+                let offset = (to - from).min(MAX_RANGE_THRES);
+                let to_height = from + offset;
                 from += offset;
 
-                // if the bloom filter has finished downloading, we can
-                // use it to avoid unnecessary fetches of block heights
-                // that contain no MASP notes.
-                //
-                // * `block_index_height` is the height at which the filter was
-                //   built.
-                // * `block_index` is the actual bloom filter.
-                if let Some((BlockHeight(block_index_height), block_index)) =
-                    maybe_block_index
-                {
-                    match BlockIndex::check_block_index(
-                        *block_index_height,
-                        from_height,
-                        to_height,
-                    )
-                    .needs_to_fetch(block_index)
-                    {
-                        ControlFlow::Break(()) => {
-                            // We do not need to fetch this range.
-                            //
-                            // NB: skips code below, so it's more like a
-                            // `continue`
-                            break 'do_while;
-                        }
-                        ControlFlow::Continue((from, to)) => {
-                            // the sub-range which we need to fetch.
-                            from_height = from;
-                            to_height = to;
-                            offset = to_height - from_height;
-                        }
+                let request = match self.fetch_request(
+                    from_height,
+                    offset,
+                    maybe_block_index,
+                ) {
+                    ControlFlow::Break(()) => {
+                        // We do not need to fetch this range.
+                        //
+                        // NB: skips code below, so it's more like a
+                        // `continue`
+                        break 'do_while;
                     }
-                }
+                    ControlFlow::Continue(req) => req,
+                };
 
                 fetches.push(async move {
                     let _permit =
                         self.shared.semaphore.acquire().await.unwrap();
 
                     let payload: TxResponse = {
-                        let response = self
-                            .client
-                            .get(self.endpoint("/tx"))
-                            .keep_alive()
-                            .query(&[
-                                ("height", from_height),
-                                ("height_offset", offset),
-                            ])
-                            .send()
-                            .await
-                            .map_err(|err| {
-                                Error::Other(format!(
-                                    "Failed to fetch transactions in the \
-                                     height range {from_height}-{to_height}: \
-                                     {err}"
-                                ))
-                            })?;
+                        let response = request.send().await.map_err(|err| {
+                            Error::Other(format!(
+                                "Failed to fetch transactions in the height \
+                                 range {from_height}--{to_height}: {err}"
+                            ))
+                        })?;
                         if !response.status().is_success() {
                             let err = Self::get_server_error(response).await?;
                             return Err(Error::Other(format!(
@@ -783,6 +776,95 @@ impl MaspClient for IndexerMaspClient {
             "Commitment anchor checking is not implemented by this client"
                 .to_string(),
         ))
+    }
+}
+
+pub trait Filter {
+    fn fetch_request(
+        &self,
+        masp_client: &IndexerMaspClient,
+        from_height: u64,
+        offset: u64,
+    ) -> ControlFlow<(), reqwest::RequestBuilder>;
+}
+
+impl Filter for Option<&(BlockHeight, BinaryFuse16)> {
+    fn fetch_request(
+        &self,
+        masp_client: &IndexerMaspClient,
+        from_height: u64,
+        offset: u64,
+    ) -> ControlFlow<(), reqwest::RequestBuilder> {
+        // if the bloom filter has finished downloading, we can
+        // use it to avoid unnecessary fetches of block heights
+        // that contain no MASP notes.
+        //
+        // * `block_index_height` is the height at which the filter was built.
+        // * `block_index` is the actual bloom filter.
+        let (from_height, offset) = if let Some((
+            BlockHeight(block_index_height),
+            block_index,
+        )) = self
+        {
+            match BlockIndex::check_block_index(
+                *block_index_height,
+                from_height,
+                from_height + offset,
+            )
+            .needs_to_fetch(block_index)
+            {
+                ControlFlow::Break(()) => {
+                    return ControlFlow::Break(());
+                }
+                ControlFlow::Continue((from, to)) => {
+                    // the sub-range which we need to fetch.
+                    (from, from - to)
+                }
+            }
+        } else {
+            (from_height, offset)
+        };
+
+        ControlFlow::Continue(
+            masp_client
+                .client
+                .get(masp_client.endpoint("/tx"))
+                .keep_alive()
+                .query(&[("height", from_height), ("height_offset", offset)]),
+        )
+    }
+}
+
+impl Filter for IndexList {
+    fn fetch_request(
+        &self,
+        masp_client: &IndexerMaspClient,
+        from_height: u64,
+        offset: u64,
+    ) -> ControlFlow<(), RequestBuilder> {
+        let (heights, indices) = self
+            .iter()
+            .filter(|ix| {
+                from_height <= ix.height && ix.height <= from_height + offset
+            })
+            .fold((String::new(), String::new()), |mut acc, ix| {
+                acc.0.push('.');
+                acc.0.push_str(&ix.height.to_string());
+                acc.1.push('.');
+                acc.1.push_str(&ix.tx.to_string());
+                acc
+            });
+        if heights.is_empty() {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(
+                masp_client
+                    .client
+                    .get(masp_client.endpoint("/tx_by_indices"))
+                    .keep_alive()
+                    .query(&[("heights", heights), ("block_indices", indices)]),
+            )
+        }
     }
 }
 
