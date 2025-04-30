@@ -76,6 +76,20 @@ impl FlagCiphertext {
     }
 }
 
+impl From<PolyfuzzyFlagCiphertext> for FlagCiphertext {
+    fn from(flag_ciphertext: PolyfuzzyFlagCiphertext) -> Self {
+        Self {
+            inner: flag_ciphertext,
+        }
+    }
+}
+
+impl From<FlagCiphertext> for PolyfuzzyFlagCiphertext {
+    fn from(flag_ciphertext: FlagCiphertext) -> Self {
+        flag_ciphertext.inner
+    }
+}
+
 impl AsRef<PolyfuzzyFlagCiphertext> for FlagCiphertext {
     fn as_ref(&self) -> &PolyfuzzyFlagCiphertext {
         &self.inner
