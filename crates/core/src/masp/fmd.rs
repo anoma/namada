@@ -54,6 +54,15 @@ pub struct FlagCiphertext {
     inner: PolyfuzzyFlagCiphertext,
 }
 
+impl FlagCiphertext {
+    /// Check if the flag ciphertext is valid, according to Namada's consensus
+    /// rules.
+    #[inline]
+    pub fn is_valid(&self) -> bool {
+        parameters::valid_compressed_bit_ciphertext(self.inner.bits())
+    }
+}
+
 impl AsRef<PolyfuzzyFlagCiphertext> for FlagCiphertext {
     fn as_ref(&self) -> &PolyfuzzyFlagCiphertext {
         &self.inner
@@ -125,6 +134,16 @@ fn from_bincode_err(err: bincode::Error) -> io::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(feature = "default-flag-ciphertext")]
+    fn test_random_flag_ciphertext_is_valid() {
+        // run this test a couple of times
+        for _ in 0..5 {
+            let random_flag_ciphertext = FlagCiphertext::default();
+            assert!(random_flag_ciphertext.is_valid());
+        }
+    }
 
     #[test]
     fn test_flag_ciphertext_bits_validation() {
