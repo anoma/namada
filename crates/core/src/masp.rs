@@ -22,7 +22,9 @@ use ripemd::Digest as RipemdDigest;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::Sha256;
 
-pub use self::fmd::FlagCiphertext;
+pub use self::fmd::{
+    FlagCiphertext, PublicKey as FmdPublicKey, SecretKey as FmdSecretKey,
+};
 use crate::address::{Address, DecodeError, HASH_HEX_LEN, IBC, MASP};
 use crate::borsh::BorshSerializeExt;
 use crate::chain::Epoch;

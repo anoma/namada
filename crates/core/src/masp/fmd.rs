@@ -18,8 +18,7 @@ mod polyfuzzy {
     pub(super) use ::polyfuzzy::fmd2_compact::*;
 }
 
-#[allow(dead_code)]
-pub mod parameters {
+mod parameters {
     //! Fuzzy message detection parameters used by Namada.
 
     /// Gamma parameter.
