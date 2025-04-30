@@ -193,6 +193,23 @@ mod tests {
 
     #[test]
     #[cfg(feature = "default-flag-ciphertext")]
+    fn test_flag_ciphertext_borsh_roundtrip() {
+        use crate::borsh::BorshSerializeExt;
+
+        // run this test a couple of times
+        for _ in 0..5 {
+            let random_flag_ciphertext = FlagCiphertext::default();
+
+            let serialized = random_flag_ciphertext.serialize_to_vec();
+            let deserialized =
+                FlagCiphertext::try_from_slice(&serialized).unwrap();
+
+            assert_eq!(random_flag_ciphertext, deserialized);
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "default-flag-ciphertext")]
     fn test_random_flag_ciphertext_is_valid() {
         // run this test a couple of times
         for _ in 0..5 {
