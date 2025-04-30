@@ -49,6 +49,7 @@ pub mod parameters {
 /// FMD flag ciphertexts.
 //#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Serialize, Deserialize, Clone, Debug)]
+#[repr(transparent)]
 pub struct FlagCiphertext {
     inner: PolyfuzzyFlagCiphertext,
 }
