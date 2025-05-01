@@ -398,8 +398,9 @@ impl MaspClient for TestingMaspClient {
         to: BlockHeight,
     ) -> Result<Vec<IndexedNoteEntry>, Self::Error> {
         let mut txs = vec![];
-
-        for _height in from.0..=to.0 {
+        // all keys are already synced to height 1.
+        let from = std::cmp::max(from.0, 2);
+        for _height in from..=to.0 {
             if let Some(tx) = self.tx_recv.recv_async().await.unwrap() {
                 txs.push(tx);
             } else {

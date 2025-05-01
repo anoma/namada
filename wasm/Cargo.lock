@@ -4803,6 +4803,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.8",
+ "shared",
  "smooth-operator",
  "tempfile",
  "thiserror 2.0.12",
@@ -6868,8 +6869,9 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.0.1"
-source = "git+https://github.com/anoma/kassandra-service?rev=1f5dfe2ec13d8f0a826cbf7445276f8ff638af09#1f5dfe2ec13d8f0a826cbf7445276f8ff638af09"
+source = "git+https://github.com/anoma/kassandra-service?rev=cba929550964787f28f4225f2d2e1f9616619b02#cba929550964787f28f4225f2d2e1f9616619b02"
 dependencies = [
+ "borsh",
  "chacha20poly1305",
  "cobs 0.3.0",
  "hex",

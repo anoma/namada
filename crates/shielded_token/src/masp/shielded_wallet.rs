@@ -2,6 +2,7 @@
 use std::collections::{BTreeMap, BTreeSet, btree_map};
 
 use eyre::{Context, eyre};
+use kassandra::IndexList;
 use masp_primitives::asset_type::AssetType;
 #[cfg(feature = "mainnet")]
 use masp_primitives::consensus::MainNetwork as Network;
@@ -59,6 +60,19 @@ use crate::masp::{
 #[cfg(any(test, feature = "testing"))]
 use crate::masp::{ENV_VAR_MASP_TEST_SEED, testing};
 
+/// Struct to hold data necessary to sync viewing keys.
+#[derive(
+    BorshSerialize, BorshDeserialize, Debug, Default, Clone, PartialEq, Eq,
+)]
+pub struct KeySyncData {
+    /// Height the key is synced to
+    pub height: MaspIndexedTx,
+    /// An index representing a subset of all MASP txs
+    /// relevant to this key. Found via fuzzy message
+    /// detection.
+    pub fmd_indices: Option<IndexList>,
+}
+
 /// Represents the current state of the shielded pool from the perspective of
 /// the chosen viewing keys.
 #[derive(BorshSerialize, BorshDeserialize, Debug)]
@@ -70,7 +84,9 @@ pub struct ShieldedWallet<U: ShieldedUtils> {
     pub tree: CommitmentTree<Node>,
     /// Maps viewing keys to the block height to which they are synced.
     /// In particular, the height given by the value *has been scanned*.
-    pub vk_heights: BTreeMap<ViewingKey, Option<MaspIndexedTx>>,
+    /// Also includes an optional list of indices of txs relevant for
+    /// the key.
+    pub vk_sync: BTreeMap<ViewingKey, KeySyncData>,
     /// Maps viewing keys to applicable note positions
     pub pos_map: HashMap<ViewingKey, BTreeSet<usize>>,
     /// Maps a nullifier to the note position to which it applies
@@ -101,7 +117,7 @@ impl<U: ShieldedUtils + Default> Default for ShieldedWallet<U> {
     fn default() -> ShieldedWallet<U> {
         ShieldedWallet::<U> {
             utils: U::default(),
-            vk_heights: BTreeMap::new(),
+            vk_sync: BTreeMap::new(),
             note_index: BTreeMap::default(),
             tree: CommitmentTree::empty(),
             pos_map: HashMap::default(),
@@ -183,8 +199,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
         env: impl TaskEnvironment,
         config: ShieldedSyncConfig<M, T, I>,
         last_query_height: Option<BlockHeight>,
-        sks: &[DatedSpendingKey],
-        fvks: &[DatedKeypair<ViewingKey>],
+        sks: &[(DatedSpendingKey, Option<IndexList>)],
+        fvks: &[(DatedKeypair<ViewingKey>, Option<IndexList>)],
     ) -> Result<(), eyre::Error>
     where
         M: MaspClient + Send + Sync + Unpin + 'static,
@@ -208,8 +224,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
     pub(crate) fn min_height_to_sync_from(
         &self,
     ) -> Result<BlockHeight, eyre::Error> {
-        let Some(maybe_least_synced_vk_height) =
-            self.vk_heights.values().min().cloned()
+        let Some(maybe_least_synced_vk_height) = self
+            .vk_sync
+            .values()
+            .map(|s| s.height.indexed_tx.block_height)
+            .min()
         else {
             return Err(eyre!(
                 "No viewing keys are available in the shielded context to \
@@ -217,8 +236,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
                     .to_string(),
             ));
         };
-        Ok(maybe_least_synced_vk_height
-            .map_or_else(BlockHeight::first, |itx| itx.indexed_tx.block_height))
+        Ok(maybe_least_synced_vk_height)
     }
 
     #[allow(missing_docs)]

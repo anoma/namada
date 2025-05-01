@@ -11,6 +11,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::{WrapErr, eyre};
 use futures::future::{Either, select};
 use futures::task::AtomicWaker;
+use kassandra::IndexList;
 use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
 use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::transaction::Transaction;
@@ -26,6 +27,7 @@ use namada_wallet::{DatedKeypair, DatedSpendingKey};
 
 use super::utils::{IndexedNoteEntry, MaspClient, MaspIndexedTx, MaspTxKind};
 use crate::masp::shielded_sync::trial_decrypt;
+use crate::masp::shielded_wallet::KeySyncData;
 use crate::masp::utils::{
     DecryptedData, Fetched, RetryStrategy, TrialDecrypted, blocks_left_to_fetch,
 };
@@ -321,8 +323,8 @@ where
         mut self,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
-        sks: &[DatedSpendingKey],
-        fvks: &[DatedKeypair<ViewingKey>],
+        sks: &[(DatedSpendingKey, Option<IndexList>)],
+        fvks: &[(DatedKeypair<ViewingKey>, Option<IndexList>)],
     ) -> Result<Option<ShieldedWallet<U>>, eyre::Error> {
         let initial_state = self
             .perform_initial_setup(
@@ -413,11 +415,11 @@ where
             }
             let first_note_pos = self.ctx.note_index[&masp_indexed_tx];
             let mut vk_heights = BTreeMap::new();
-            std::mem::swap(&mut vk_heights, &mut self.ctx.vk_heights);
+            std::mem::swap(&mut vk_heights, &mut self.ctx.vk_sync);
             for (vk, _) in vk_heights
                 .iter()
                 // NB: skip keys that are synced past the given `indexed_tx`
-                .filter(|(_vk, h)| h.as_ref() < Some(&masp_indexed_tx))
+                .filter(|(_vk, h)| h.height < masp_indexed_tx)
             {
                 for (note_pos_offset, (note, pa, memo)) in self
                     .cache
@@ -435,24 +437,26 @@ where
                     self.config.applied_tracker.increment_by(1);
                 }
             }
-            std::mem::swap(&mut vk_heights, &mut self.ctx.vk_heights);
+            std::mem::swap(&mut vk_heights, &mut self.ctx.vk_sync);
         }
 
         for (_, h) in self
             .ctx
-            .vk_heights
+            .vk_sync
             .iter_mut()
             // NB: skip keys that are synced past the last input height
             .filter(|(_vk, h)| {
-                h.as_ref().map(|itx| &itx.indexed_tx.block_height)
-                    < Some(last_query_height)
+                h.height.indexed_tx.block_height < *last_query_height
             })
         {
             // NB: the entire block is synced
-            *h = Some(MaspIndexedTx {
-                indexed_tx: IndexedTx::entire_block(*last_query_height),
-                kind: MaspTxKind::Transfer,
-            });
+            *h = KeySyncData {
+                height: MaspIndexedTx {
+                    indexed_tx: IndexedTx::entire_block(*last_query_height),
+                    kind: MaspTxKind::Transfer,
+                },
+                fmd_indices: h.fmd_indices.take(),
+            };
         }
 
         Ok(())
@@ -462,8 +466,8 @@ where
         &mut self,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
-        sks: &[DatedSpendingKey],
-        fvks: &[DatedKeypair<ViewingKey>],
+        sks: &[(DatedSpendingKey, Option<IndexList>)],
+        fvks: &[(DatedKeypair<ViewingKey>, Option<IndexList>)],
     ) -> Result<InitialState, eyre::Error> {
         if start_query_height > last_query_height {
             return Err(eyre!(
@@ -473,27 +477,39 @@ where
             ));
         }
 
-        for vk in sks
+        for (vk, mut fmd) in sks
             .iter()
-            .map(|esk| {
-                esk.map(|k| {
-                    to_viewing_key(&MaspExtendedSpendingKey::from(k)).vk
-                })
-            })
-            .chain(fvks.iter().copied())
-        {
-            if let Some(h) = self.ctx.vk_heights.entry(vk.key).or_default() {
-                let birthday = IndexedTx::entire_block(vk.birthday);
-                if birthday > h.indexed_tx {
-                    h.indexed_tx = birthday;
-                }
-            } else if vk.birthday >= BlockHeight::first() {
-                self.ctx.vk_heights.insert(
-                    vk.key,
-                    Some(MaspIndexedTx {
-                        indexed_tx: IndexedTx::entire_block(vk.birthday),
-                        kind: MaspTxKind::Transfer,
+            .map(|(esk, fmd)| {
+                (
+                    esk.map(|k| {
+                        to_viewing_key(&MaspExtendedSpendingKey::from(k)).vk
                     }),
+                    fmd.clone(),
+                )
+            })
+            .chain(fvks.iter().cloned())
+        {
+            if let Some(h) = self.ctx.vk_sync.get_mut(&vk.key) {
+                let birthday = IndexedTx::entire_block(vk.birthday);
+                if birthday > h.height.indexed_tx {
+                    h.height.indexed_tx = birthday;
+                }
+                if let Some(ixs) = fmd.as_mut() {
+                    ixs.retain(|ix| {
+                        ix.height >= h.height.indexed_tx.block_height.0
+                    });
+                }
+                h.fmd_indices = fmd;
+            } else {
+                self.ctx.vk_sync.insert(
+                    vk.key,
+                    KeySyncData {
+                        height: MaspIndexedTx {
+                            indexed_tx: IndexedTx::entire_block(vk.birthday),
+                            kind: MaspTxKind::Transfer,
+                        },
+                        fmd_indices: fmd,
+                    },
                 );
             }
         }
@@ -805,8 +821,8 @@ where
     }
 
     fn spawn_trial_decryptions(&self, itx: MaspIndexedTx, tx: &Transaction) {
-        for (vk, vk_height) in self.ctx.vk_heights.iter() {
-            let key_is_outdated = vk_height.as_ref() < Some(&itx);
+        for (vk, vk_height) in self.ctx.vk_sync.iter() {
+            let key_is_outdated = vk_height.height < itx;
             let cached = self.cache.trial_decrypted.get(&itx, vk).is_some();
 
             if key_is_outdated && !cached {
@@ -918,10 +934,10 @@ mod dispatcher_tests {
             .expect("Test failed")
             .run(|s| async {
                 let mut dispatcher = config.dispatcher(s, &utils).await;
-                dispatcher.ctx.vk_heights =
-                    BTreeMap::from([(arbitrary_vk(), None)]);
+                dispatcher.ctx.vk_sync =
+                    BTreeMap::from([(arbitrary_vk(), Default::default())]);
                 // fill up the dispatcher's cache
-                for h in 0u64..10 {
+                for h in 2u64..=10 {
                     let itx = MaspIndexedTx {
                         indexed_tx: IndexedTx {
                             block_height: h.into(),
@@ -943,7 +959,7 @@ mod dispatcher_tests {
                     .apply_cache_to_shielded_context(&InitialState {
                         last_witnessed_tx: None,
                         start_height: Default::default(),
-                        last_query_height: 9.into(),
+                        last_query_height: 10.into(),
                     })
                     .await
                     .expect("Test failed");
@@ -951,12 +967,15 @@ mod dispatcher_tests {
                 assert!(dispatcher.cache.trial_decrypted.is_empty());
                 let expected = BTreeMap::from([(
                     arbitrary_vk(),
-                    Some(MaspIndexedTx {
-                        indexed_tx: IndexedTx::entire_block(9.into()),
-                        kind: MaspTxKind::Transfer,
-                    }),
+                    KeySyncData {
+                        height: MaspIndexedTx {
+                            indexed_tx: IndexedTx::entire_block(10.into()),
+                            kind: MaspTxKind::Transfer,
+                        },
+                        ..Default::default()
+                    },
                 )]);
-                assert_eq!(expected, dispatcher.ctx.vk_heights);
+                assert_eq!(expected, dispatcher.ctx.vk_sync);
             })
             .await;
     }
@@ -1114,7 +1133,7 @@ mod dispatcher_tests {
 
     /// Test that upon each retry, we either resume from the
     /// latest height that had been previously stored in the
-    /// `vk_heights`.
+    /// `vk_sync`.
     #[test]
     fn test_min_height_to_sync_from() {
         let temp_dir = tempdir().unwrap();
@@ -1129,20 +1148,20 @@ mod dispatcher_tests {
 
         // the min height here should be 1, since
         // this vk hasn't decrypted any note yet
-        shielded_ctx.vk_heights.insert(vk, None);
+        shielded_ctx.vk_sync.insert(vk, KeySyncData::default());
 
         let height = shielded_ctx.min_height_to_sync_from().unwrap();
         assert_eq!(height, BlockHeight(1));
 
         // let's bump the vk height
-        *shielded_ctx.vk_heights.get_mut(&vk).unwrap() = Some(MaspIndexedTx {
+        shielded_ctx.vk_sync.get_mut(&vk).unwrap().height = MaspIndexedTx {
             indexed_tx: IndexedTx {
                 block_height: 6.into(),
                 block_index: TxIndex(0),
                 batch_index: None,
             },
             kind: MaspTxKind::Transfer,
-        });
+        };
 
         // the min height should now be 6
         let height = shielded_ctx.min_height_to_sync_from().unwrap();
@@ -1176,7 +1195,7 @@ mod dispatcher_tests {
         let utils = FsShieldedUtils {
             context_dir: temp_dir.path().to_path_buf(),
         };
-        let (client, masp_tx_sender) = TestingMaspClient::new(2.into());
+        let (client, masp_tx_sender) = TestingMaspClient::new(3.into());
         let (_send, shutdown_sig) = shutdown_signal();
         let mut config = ShieldedSyncConfig::builder()
             .fetched_tracker(DevNullProgressBar)
@@ -1196,7 +1215,8 @@ mod dispatcher_tests {
                 masp_tx_sender.send(None).expect("Test failed");
                 let dispatcher = config.clone().dispatcher(s, &utils).await;
 
-                let result = dispatcher.run(None, None, &[], &[vk]).await;
+                let result =
+                    dispatcher.run(None, None, &[], &[(vk, None)]).await;
                 match result {
                     Err(msg) => assert_eq!(
                         msg.to_string(),
@@ -1220,7 +1240,7 @@ mod dispatcher_tests {
                     .send(Some((
                         MaspIndexedTx {
                             indexed_tx: IndexedTx {
-                                block_height: 1.into(),
+                                block_height: 2.into(),
                                 block_index: TxIndex(1),
                                 batch_index: None,
                             },
@@ -1233,7 +1253,7 @@ mod dispatcher_tests {
                     .send(Some((
                         MaspIndexedTx {
                             indexed_tx: IndexedTx {
-                                block_height: 1.into(),
+                                block_height: 2.into(),
                                 block_index: TxIndex(2),
                                 batch_index: None,
                             },
@@ -1246,7 +1266,7 @@ mod dispatcher_tests {
                 let dispatcher = config.dispatcher(s, &utils).await;
                 // This should complete successfully
                 let ctx = dispatcher
-                    .run(None, None, &[], &[vk])
+                    .run(None, None, &[], &[(vk, None)])
                     .await
                     .expect("Test failed")
                     .expect("Test failed");
@@ -1255,7 +1275,7 @@ mod dispatcher_tests {
                 let expected = BTreeSet::from([
                     MaspIndexedTx {
                         indexed_tx: IndexedTx {
-                            block_height: 1.into(),
+                            block_height: 2.into(),
                             block_index: TxIndex(1),
                             batch_index: None,
                         },
@@ -1263,7 +1283,7 @@ mod dispatcher_tests {
                     },
                     MaspIndexedTx {
                         indexed_tx: IndexedTx {
-                            block_height: 1.into(),
+                            block_height: 2.into(),
                             block_index: TxIndex(2),
                             batch_index: None,
                         },
@@ -1273,9 +1293,9 @@ mod dispatcher_tests {
 
                 assert_eq!(keys, expected);
                 assert_eq!(
-                    *ctx.vk_heights[&vk.key].as_ref().unwrap(),
+                    ctx.vk_sync[&vk.key].height,
                     MaspIndexedTx {
-                        indexed_tx: IndexedTx::entire_block(2.into(),),
+                        indexed_tx: IndexedTx::entire_block(3.into(),),
                         kind: MaspTxKind::Transfer
                     }
                 );
@@ -1292,7 +1312,7 @@ mod dispatcher_tests {
         let utils = FsShieldedUtils {
             context_dir: temp_dir.path().to_path_buf(),
         };
-        let (client, masp_tx_sender) = TestingMaspClient::new(3.into());
+        let (client, masp_tx_sender) = TestingMaspClient::new(4.into());
         let (_send, shutdown_sig) = shutdown_signal();
         let config = ShieldedSyncConfig::builder()
             .fetched_tracker(DevNullProgressBar)
@@ -1315,7 +1335,7 @@ mod dispatcher_tests {
                     .send(Some((
                         MaspIndexedTx {
                             indexed_tx: IndexedTx {
-                                block_height: 1.into(),
+                                block_height: 2.into(),
                                 block_index: TxIndex(1),
                                 batch_index: None,
                             },
@@ -1328,7 +1348,7 @@ mod dispatcher_tests {
                     .send(Some((
                         MaspIndexedTx {
                             indexed_tx: IndexedTx {
-                                block_height: 1.into(),
+                                block_height: 2.into(),
                                 block_index: TxIndex(2),
                                 batch_index: None,
                             },
@@ -1338,7 +1358,8 @@ mod dispatcher_tests {
                     )))
                     .expect("Test failed");
                 masp_tx_sender.send(None).expect("Test failed");
-                let result = dispatcher.run(None, None, &[], &[vk]).await;
+                let result =
+                    dispatcher.run(None, None, &[], &[(vk, None)]).await;
                 match result {
                     Err(msg) => assert_eq!(
                         msg.to_string(),
@@ -1353,7 +1374,7 @@ mod dispatcher_tests {
                     (
                         MaspIndexedTx {
                             indexed_tx: IndexedTx {
-                                block_height: 1.into(),
+                                block_height: 2.into(),
                                 block_index: TxIndex(1),
                                 batch_index: None,
                             },
@@ -1364,7 +1385,7 @@ mod dispatcher_tests {
                     (
                         MaspIndexedTx {
                             indexed_tx: IndexedTx {
-                                block_height: 1.into(),
+                                block_height: 2.into(),
                                 block_index: TxIndex(2),
                                 batch_index: None,
                             },
@@ -1386,7 +1407,7 @@ mod dispatcher_tests {
         let utils = FsShieldedUtils {
             context_dir: temp_dir.path().to_path_buf(),
         };
-        let (client, masp_tx_sender) = TestingMaspClient::new(2.into());
+        let (client, masp_tx_sender) = TestingMaspClient::new(3.into());
         let (send, shutdown_sig) = shutdown_signal();
         let config = ShieldedSyncConfig::builder()
             .fetched_tracker(DevNullProgressBar)
@@ -1409,7 +1430,7 @@ mod dispatcher_tests {
                     .send(Some((
                         MaspIndexedTx {
                             indexed_tx: IndexedTx {
-                                block_height: 1.into(),
+                                block_height: 2.into(),
                                 block_index: TxIndex(1),
                                 batch_index: None,
                             },
@@ -1421,7 +1442,7 @@ mod dispatcher_tests {
 
                 send.send_replace(true);
                 let res = dispatcher
-                    .run(None, None, &[], &[dated_arbitrary_vk()])
+                    .run(None, None, &[], &[(dated_arbitrary_vk(), None)])
                     .await
                     .expect("Test failed");
                 assert!(res.is_none());
@@ -1482,27 +1503,27 @@ mod dispatcher_tests {
                 MaspLocalTaskEnv::new(4).unwrap(),
                 config.clone(),
                 None,
-                &[sk],
-                &[vk],
+                &[(sk, None)],
+                &[(vk, None)],
             )
             .await
             .expect("Test failed");
         let birthdays = shielded_ctx
-            .vk_heights
+            .vk_sync
             .values()
-            .cloned()
+            .map(|s| s.height)
             .collect::<Vec<_>>();
         assert_eq!(
             birthdays,
             vec![
-                Some(MaspIndexedTx {
+                MaspIndexedTx {
                     indexed_tx: IndexedTx::entire_block(BlockHeight(30)),
                     kind: MaspTxKind::Transfer
-                }),
-                Some(MaspIndexedTx {
+                },
+                MaspIndexedTx {
                     indexed_tx: IndexedTx::entire_block(BlockHeight(10)),
                     kind: MaspTxKind::Transfer
-                })
+                }
             ]
         );
 
@@ -1529,27 +1550,27 @@ mod dispatcher_tests {
                 MaspLocalTaskEnv::new(4).unwrap(),
                 config,
                 None,
-                &[sk],
-                &[vk],
+                &[(sk, None)],
+                &[(vk, None)],
             )
             .await
             .expect("Test failed");
         let birthdays = shielded_ctx
-            .vk_heights
+            .vk_sync
             .values()
-            .cloned()
+            .map(|s| s.height)
             .collect::<Vec<_>>();
         assert_eq!(
             birthdays,
             vec![
-                Some(MaspIndexedTx {
+                MaspIndexedTx {
                     indexed_tx: IndexedTx::entire_block(BlockHeight(60)),
                     kind: MaspTxKind::Transfer
-                }),
-                Some(MaspIndexedTx {
+                },
+                MaspIndexedTx {
                     indexed_tx: IndexedTx::entire_block(BlockHeight(10)),
                     kind: MaspTxKind::Transfer
-                })
+                }
             ]
         )
     }
