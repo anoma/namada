@@ -582,7 +582,7 @@ jobs:
           name: wasm-cov-${{ github.event.pull_request.head.sha || github.sha }}
           path: wasm-cov
       - name: Upload coverage to codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: integration-cov/lcov.info, unit-cov/lcov.info, wasm-cov/lcov.info
           fail_ci_if_error: true
