@@ -2,7 +2,7 @@
 use std::collections::{BTreeMap, BTreeSet, btree_map};
 
 use eyre::{Context, eyre};
-use kassandra::IndexList;
+use kassandra::{Index, IndexList};
 use masp_primitives::asset_type::AssetType;
 #[cfg(feature = "mainnet")]
 use masp_primitives::consensus::MainNetwork as Network;
@@ -71,6 +71,25 @@ pub struct KeySyncData {
     /// relevant to this key. Found via fuzzy message
     /// detection.
     pub fmd_indices: Option<IndexList>,
+}
+
+impl KeySyncData {
+    /// Check if a MASP transaction is flagged as relevant for the
+    /// associated key
+    pub fn flagged(
+        &self,
+        MaspIndexedTx {
+            indexed_tx: itx, ..
+        }: &MaspIndexedTx,
+    ) -> bool {
+        match self.fmd_indices.as_ref() {
+            None => true,
+            Some(indices) => indices.contains(&Index {
+                height: itx.block_height.0,
+                tx: itx.block_index.0,
+            }),
+        }
+    }
 }
 
 /// Represents the current state of the shielded pool from the perspective of

@@ -414,9 +414,9 @@ where
                 self.ctx.update_witness_map(masp_indexed_tx, &stx_batch)?;
             }
             let first_note_pos = self.ctx.note_index[&masp_indexed_tx];
-            let mut vk_heights = BTreeMap::new();
-            std::mem::swap(&mut vk_heights, &mut self.ctx.vk_sync);
-            for (vk, _) in vk_heights
+            let mut vk_sync = BTreeMap::new();
+            std::mem::swap(&mut vk_sync, &mut self.ctx.vk_sync);
+            for (vk, _) in vk_sync
                 .iter()
                 // NB: skip keys that are synced past the given `indexed_tx`
                 .filter(|(_vk, h)| h.height < masp_indexed_tx)
@@ -437,7 +437,7 @@ where
                     self.config.applied_tracker.increment_by(1);
                 }
             }
-            std::mem::swap(&mut vk_heights, &mut self.ctx.vk_sync);
+            std::mem::swap(&mut vk_sync, &mut self.ctx.vk_sync);
         }
 
         for (_, h) in self
@@ -824,11 +824,10 @@ where
     }
 
     fn spawn_trial_decryptions(&self, itx: MaspIndexedTx, tx: &Transaction) {
-        for (vk, vk_height) in self.ctx.vk_sync.iter() {
-            let key_is_outdated = vk_height.height < itx;
+        for (vk, vk_sync) in self.ctx.vk_sync.iter() {
+            let key_is_outdated = vk_sync.height < itx;
             let cached = self.cache.trial_decrypted.get(&itx, vk).is_some();
-
-            if key_is_outdated && !cached {
+            if key_is_outdated && !cached && vk_sync.flagged(&itx) {
                 let tx = tx.clone();
                 let vk = *vk;
 
@@ -1613,6 +1612,81 @@ mod dispatcher_tests {
                     ),
                 ]);
                 assert_eq!(cache.fetched.txs, expected);
+            })
+            .await;
+    }
+
+    /// Test that notes in the fetched cache are not trial
+    /// decrypted against viewing keys for which they are not
+    /// flagged via FMD.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_fmd_with_trial_decryption() {
+        let temp_dir = tempdir().unwrap();
+        let utils = FsShieldedUtils {
+            context_dir: temp_dir.path().to_path_buf(),
+        };
+        let (client, _masp_tx_sender) = TestingMaspClient::new(2.into());
+        let (_send, shutdown_sig) = shutdown_signal();
+        let config = ShieldedSyncConfig::builder()
+            .fetched_tracker(DevNullProgressBar)
+            .scanned_tracker(DevNullProgressBar)
+            .applied_tracker(DevNullProgressBar)
+            .shutdown_signal(shutdown_sig)
+            .client(client)
+            .retry_strategy(RetryStrategy::Times(0))
+            .block_batch_size(1)
+            .build();
+        let vk = dated_arbitrary_vk();
+        MaspLocalTaskEnv::new(4)
+            .expect("Test failed")
+            .run(|s| async {
+                let mut dispatcher = config.clone().dispatcher(s, &utils).await;
+                let masp_tx = arbitrary_masp_tx();
+                // insert MASP txs that will not be flagged for the viewing key
+                dispatcher.cache.fetched.txs.insert(
+                    MaspIndexedTx {
+                        indexed_tx: IndexedTx {
+                            block_height: 2.into(),
+                            block_index: TxIndex(1),
+                            batch_index: None,
+                        },
+                        kind: MaspTxKind::Transfer,
+                    },
+                    masp_tx.clone(),
+                );
+                dispatcher.cache.fetched.txs.insert(
+                    MaspIndexedTx {
+                        indexed_tx: IndexedTx {
+                            block_height: 2.into(),
+                            block_index: TxIndex(3),
+                            batch_index: None,
+                        },
+                        kind: MaspTxKind::Transfer,
+                    },
+                    masp_tx.clone(),
+                );
+
+                let ctx = dispatcher
+                    .run(
+                        Some(2.into()),
+                        Some(2.into()),
+                        &[],
+                        &[(
+                            vk,
+                            Some(
+                                [Index { height: 2, tx: 0 }]
+                                    .into_iter()
+                                    .collect(),
+                            ),
+                        )],
+                    )
+                    .await
+                    .expect("Test failed")
+                    .expect("Test failed");
+                // check that no notes have been trial decrypted
+                assert!(ctx.pos_map.is_empty());
+                assert!(ctx.note_map.is_empty());
+                assert!(ctx.vk_map.is_empty());
             })
             .await;
     }
