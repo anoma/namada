@@ -336,6 +336,7 @@ pub async fn build_reveal_pk(
         Some(public_key.into()),
         vec![],
         false,
+        &[],
     )
     .await?;
     let (fee_amount, _) =
@@ -703,6 +704,7 @@ pub async fn build_change_consensus_key(
         None,
         vec![consensus_key.clone()],
         false,
+        &[],
     )
     .await?;
 
@@ -741,6 +743,7 @@ pub async fn build_validator_commission_change(
         default_signer,
         vec![],
         false,
+        &[],
     )
     .await?;
     let (fee_amount, _) =
@@ -884,6 +887,7 @@ pub async fn build_validator_metadata_change(
         default_signer,
         vec![],
         false,
+        &[],
     )
     .await?;
     let (fee_amount, _) =
@@ -1110,6 +1114,7 @@ pub async fn build_update_steward_commission(
         default_signer,
         vec![],
         false,
+        &[],
     )
     .await?;
     let (fee_amount, _) =
@@ -1179,6 +1184,7 @@ pub async fn build_resign_steward(
         default_signer,
         vec![],
         false,
+        &[],
     )
     .await?;
     let (fee_amount, _) =
@@ -1228,6 +1234,7 @@ pub async fn build_unjail_validator(
         default_signer,
         vec![],
         false,
+        &[],
     )
     .await?;
     let (fee_amount, _) =
@@ -1333,6 +1340,7 @@ pub async fn build_deactivate_validator(
         default_signer,
         vec![],
         false,
+        &[],
     )
     .await?;
     let (fee_amount, _) =
@@ -1409,6 +1417,7 @@ pub async fn build_reactivate_validator(
         default_signer,
         vec![],
         false,
+        &[],
     )
     .await?;
     let (fee_amount, _) =
@@ -1637,6 +1646,7 @@ pub async fn build_redelegation(
         default_signer,
         vec![],
         false,
+        &[],
     )
     .await?;
     let (fee_amount, _) =
@@ -1682,6 +1692,7 @@ pub async fn build_withdraw(
         default_signer,
         vec![],
         false,
+        &[],
     )
     .await?;
     let (fee_amount, _) =
@@ -1770,6 +1781,7 @@ pub async fn build_claim_rewards(
         default_signer,
         vec![],
         false,
+        &[],
     )
     .await?;
     let (fee_amount, _) =
@@ -1875,6 +1887,7 @@ pub async fn build_unbond(
         default_signer,
         vec![],
         false,
+        &[],
     )
     .await?;
     let (fee_amount, _) =
@@ -2111,6 +2124,7 @@ pub async fn build_bond(
         default_signer,
         vec![],
         false,
+        &[],
     )
     .await?;
     let (fee_amount, updated_balance) =
@@ -2177,6 +2191,7 @@ pub async fn build_default_proposal(
         default_signer,
         vec![],
         false,
+        &[],
     )
     .await?;
     let (fee_amount, _updated_balance) =
@@ -2238,6 +2253,7 @@ pub async fn build_vote_proposal(
         default_signer.clone(),
         vec![],
         false,
+        &[],
     )
     .await?;
     let (fee_amount, _) =
@@ -2540,9 +2556,16 @@ pub async fn build_become_validator(
     all_pks.push(eth_hot_key.clone().unwrap());
     all_pks.push(protocol_key.clone().unwrap().clone());
 
-    let signing_data =
-        signing::aux_signing_data(context, tx_args, None, None, all_pks, false)
-            .await?;
+    let signing_data = signing::aux_signing_data(
+        context,
+        tx_args,
+        None,
+        None,
+        all_pks,
+        false,
+        &[],
+    )
+    .await?;
 
     let (fee_amount, _updated_balance) =
         validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
@@ -2581,6 +2604,7 @@ pub async fn build_pgf_funding_proposal(
         default_signer,
         vec![],
         false,
+        &[],
     )
     .await?;
     let (fee_amount, _updated_balance) =
@@ -2628,6 +2652,7 @@ pub async fn build_pgf_stewards_proposal(
         default_signer,
         vec![],
         false,
+        &[],
     )
     .await?;
     let (fee_amount, _updated_balance) =
@@ -2681,6 +2706,7 @@ pub async fn build_ibc_transfer(
         Some(source.clone()),
         vec![],
         args.source.spending_key().is_some(),
+        &[],
     )
     .await?;
     let (fee_per_gas_unit, updated_balance) =
@@ -3090,6 +3116,7 @@ pub async fn build_transparent_transfer<N: Namada>(
             source,
             vec![],
             false,
+            &[],
         )
         .await?;
 
@@ -3182,6 +3209,7 @@ pub async fn build_shielded_transfer<N: Namada>(
         Some(MASP),
         vec![],
         true,
+        &[],
     )
     .await?;
 
@@ -3346,6 +3374,7 @@ pub async fn build_shielding_transfer<N: Namada>(
         source,
         vec![],
         false,
+        &[],
     )
     .await?;
 
@@ -3475,6 +3504,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         Some(MASP),
         vec![],
         true,
+        &[],
     )
     .await?;
 
@@ -3641,9 +3671,16 @@ pub async fn build_init_account(
         threshold,
     }: &args::TxInitAccount,
 ) -> Result<(Tx, SigningTxData)> {
-    let signing_data =
-        signing::aux_signing_data(context, tx_args, None, None, vec![], false)
-            .await?;
+    let signing_data = signing::aux_signing_data(
+        context,
+        tx_args,
+        None,
+        None,
+        vec![],
+        false,
+        &[],
+    )
+    .await?;
     let (fee_amount, _) =
         validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
             .await?;
@@ -3731,6 +3768,7 @@ pub async fn build_update_account(
         default_signer,
         vec![],
         false,
+        &[],
     )
     .await?;
     let (fee_amount, _) =
@@ -3847,6 +3885,8 @@ pub async fn build_custom(
         data_path,
         serialized_tx,
         owner,
+        signatures,
+        wrapper_signature,
     }: &args::TxCustom,
 ) -> Result<(Tx, Option<SigningTxData>)> {
     let mut tx = if let Some(serialized_tx) = serialized_tx {
@@ -3889,9 +3929,7 @@ pub async fn build_custom(
     //    3. If the wrapper signature was provided then we also expect the inner
     //       signature(s) to have been provided, in this case we attach all the
     //       signatures here and return no SigningTxData
-    let signing_data = if let Some(wrapper_signature) =
-        &tx_args.wrapper_signature
-    {
+    let signing_data = if let Some(wrapper_signature) = &wrapper_signature {
         if tx.header.wrapper().is_none() {
             return Err(Error::Other(
                 "A wrapper signature was provided but the transaction is not \
@@ -3901,7 +3939,7 @@ pub async fn build_custom(
         }
         // Attach the provided signatures to the tx without the need to produce
         // any more signatures
-        let signatures = tx_args.signatures.iter().try_fold(
+        let signatures = signatures.iter().try_fold(
             vec![],
             |mut acc, bytes| -> Result<Vec<_>> {
                 let sig = SignatureIndex::try_from_json_bytes(bytes).map_err(
@@ -3929,6 +3967,7 @@ pub async fn build_custom(
             default_signer,
             vec![],
             false,
+            &[],
         )
         .await?;
         prepare_tx(

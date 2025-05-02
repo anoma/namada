@@ -145,8 +145,6 @@ pub trait Namada: NamadaIo {
             expiration: Default::default(),
             chain_id: None,
             signing_keys: vec![],
-            signatures: vec![],
-            wrapper_signature: None,
             tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
             password: None,
             memo: None,
@@ -593,10 +591,13 @@ pub trait Namada: NamadaIo {
             code_path: None,
             data_path: None,
             serialized_tx: None,
+            signatures: vec![],
+            wrapper_signature: None,
         }
     }
 
     /// Sign the given transaction using the given signing data
+    #[allow(clippy::too_many_arguments)]
     async fn sign<D, F>(
         &self,
         tx: &mut Tx,
@@ -606,6 +607,8 @@ pub trait Namada: NamadaIo {
         + MaybeSend
         + MaybeSync,
         user_data: D,
+        signatures: &[Vec<u8>],
+        wrapper_signature: Option<Vec<u8>>,
     ) -> crate::error::Result<()>
     where
         D: Clone + MaybeSend + MaybeSync,
@@ -620,6 +623,8 @@ pub trait Namada: NamadaIo {
             signing_data,
             with,
             user_data,
+            signatures,
+            wrapper_signature,
         )
         .await
     }
@@ -718,8 +723,6 @@ where
                 expiration: Default::default(),
                 chain_id: None,
                 signing_keys: vec![],
-                signatures: vec![],
-                wrapper_signature: None,
                 tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
                 password: None,
                 memo: None,

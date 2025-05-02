@@ -157,10 +157,11 @@ pub async fn tx_signers(
     context: &impl Namada,
     args: &args::Tx<SdkTypes>,
     default: Option<Address>,
+    signatures: &[Vec<u8>],
 ) -> Result<HashSet<common::PublicKey>, Error> {
     let signer = if !args.signing_keys.is_empty() {
         return Ok(args.signing_keys.clone().into_iter().collect());
-    } else if args.signatures.is_empty() {
+    } else if signatures.is_empty() {
         // Otherwise use the signer determined by the caller
         default
     } else {
@@ -216,6 +217,7 @@ pub async fn default_sign(
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
+#[allow(clippy::too_many_arguments)]
 pub async fn sign_tx<D, F, U>(
     wallet: &RwLock<Wallet<U>>,
     args: &args::Tx,
@@ -223,6 +225,10 @@ pub async fn sign_tx<D, F, U>(
     signing_data: SigningTxData,
     sign: impl Fn(Tx, common::PublicKey, Signable, D) -> F,
     user_data: D,
+    // FIXME: should these be embedded in SigningTxData?
+    // FIXME: should we use OfflineSignatures?
+    signatures: &[Vec<u8>],
+    wrapper_signature: Option<Vec<u8>>,
 ) -> Result<(), Error>
 where
     D: Clone + MaybeSend,
@@ -232,9 +238,8 @@ where
     let mut used_pubkeys = HashSet::new();
 
     // First try to sign the raw header with the supplied signatures
-    if !args.signatures.is_empty() {
-        let signatures = args
-            .signatures
+    if !signatures.is_empty() {
+        let signatures = signatures
             .iter()
             .map(|bytes| {
                 let sigidx =
@@ -279,7 +284,7 @@ where
     for pubkey in &signing_data.public_keys {
         if !used_pubkeys.contains(pubkey)
             && (*pubkey != signing_data.fee_payer
-                || args.wrapper_signature.is_some())
+                || wrapper_signature.is_some())
         {
             if let Ok(ntx) = sign(
                 tx.clone(),
@@ -302,7 +307,7 @@ where
     // Then try signing the wrapper header (fee payer). Check if there's a
     // provided wrapper signature, otherwise sign with the software wallet or
     // use the fallback
-    if let Some(sig_bytes) = &args.wrapper_signature {
+    if let Some(sig_bytes) = &wrapper_signature {
         let auth = serde_json::from_slice(sig_bytes)
             .map_err(|e| Error::Encode(EncodingError::Serde(e.to_string())))?;
         tx.add_section(Section::Authorization(auth));
@@ -360,9 +365,10 @@ pub async fn aux_signing_data(
     default_signer: Option<Address>,
     extra_public_keys: Vec<common::PublicKey>,
     is_shielded_source: bool,
+    signatures: &[Vec<u8>],
 ) -> Result<SigningTxData, Error> {
     let mut public_keys =
-        tx_signers(context, args, default_signer.clone()).await?;
+        tx_signers(context, args, default_signer.clone(), signatures).await?;
     public_keys.extend(extra_public_keys.clone());
 
     let (account_public_keys_map, threshold) = match &owner {
@@ -2232,8 +2238,6 @@ mod test_signing {
             expiration: Default::default(),
             chain_id: None,
             signing_keys: vec![],
-            signatures: vec![],
-            wrapper_signature: None,
             tx_reveal_code_path: Default::default(),
             password: Some(zeroize::Zeroizing::new("bingbong123".to_string())),
             memo: None,
@@ -2415,7 +2419,7 @@ mod test_signing {
     #[tokio::test]
     async fn test_tx_signers_failure() {
         let args = arbitrary_args();
-        tx_signers(&TestNamadaImpl::new(None).0, &args, None)
+        tx_signers(&TestNamadaImpl::new(None).0, &args, None, &[])
             .await
             .expect_err("Test failed");
     }
@@ -2575,6 +2579,8 @@ mod test_signing {
                 }
             },
             (),
+            &[],
+            None,
         )
         .await
         .expect_err("Test failed") else {
@@ -2600,6 +2606,8 @@ mod test_signing {
             signing_data,
             |tx, _, _, _| async { Ok(tx) },
             (),
+            &[],
+            None,
         )
         .await
         .expect("Test failed");

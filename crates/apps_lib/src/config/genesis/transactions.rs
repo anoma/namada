@@ -95,8 +95,6 @@ fn get_tx_args(use_device: bool) -> TxArgs {
         expiration: Default::default(),
         chain_id: None,
         signing_keys: vec![],
-        signatures: vec![],
-        wrapper_signature: None,
         tx_reveal_code_path: Default::default(),
         password: None,
         memo: None,
@@ -788,6 +786,8 @@ impl<T> Signed<T> {
                 signing_data,
                 utils::with_hardware_wallet,
                 (wallet_lock, &app),
+                &[],
+                None,
             )
             .await
             .expect("Failed to sign pre-genesis transaction.")
@@ -814,6 +814,8 @@ impl<T> Signed<T> {
                 signing_data,
                 software_wallet_sign,
                 (),
+                &[],
+                None,
             )
             .await
             .expect("Failed to sign pre-genesis transaction.");

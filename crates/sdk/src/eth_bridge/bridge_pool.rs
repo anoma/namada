@@ -62,6 +62,8 @@ pub async fn build_bridge_pool_tx(
     }: args::EthereumBridgePool,
 ) -> Result<(Tx, SigningTxData), Error> {
     let sender_ = sender.clone();
+    // FIXME: improve here
+    let signatures = vec![];
     let (transfer, tx_code_hash, signing_data) = futures::try_join!(
         validate_bridge_pool_tx(
             context,
@@ -85,6 +87,7 @@ pub async fn build_bridge_pool_tx(
             Some(sender_),
             vec![],
             false,
+            &signatures
         ),
     )?;
     let (fee_amount, _) =
