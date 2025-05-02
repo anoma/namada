@@ -7755,7 +7755,9 @@ pub mod args {
             )
             .arg(SIGNING_KEYS.def().help(wrap!(
                 "Sign the transaction with the key for the given public key, \
-                 public key hash or alias from your wallet."
+                 public key hash or alias from your wallet. Do not provide \
+                 this argument if the source of the transaction is a shielded \
+                 address as it isn't needed and it would leak information."
             )))
             .arg(SIGNATURES.def().help(wrap!(
                 "List of file paths containing a serialized signature to be \
@@ -7780,10 +7782,9 @@ pub mod args {
                     .help(wrap!(
                         "The implicit address of the gas payer. It defaults \
                          to the address associated to the first key passed to \
-                         --signing-keys. Do not provide any of these two \
-                         arguments if you intend to pay fees via the MASP \
-                         (recommended for transactions where the source is a \
-                         shielded address)."
+                         --signing-keys. Do not provide this argument if you \
+                         intend to pay fees via the MASP (recommended for \
+                         transactions where the source is a shielded address)."
                     ))
                     .conflicts_with(WRAPPER_SIGNATURE_OPT.name),
             )
