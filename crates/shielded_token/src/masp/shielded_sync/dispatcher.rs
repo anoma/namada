@@ -514,6 +514,9 @@ where
             }
         }
 
+        // Add the fmd indices to the client
+        self.client.add_fmd_indices(self.ctx.combined_fmd_indices());
+
         // the latest block height which has been added to the witness Merkle
         // tree
         let last_witnessed_tx = self.ctx.note_index.keys().max().cloned();
@@ -896,6 +899,7 @@ mod dispatcher_tests {
     use std::hint::spin_loop;
 
     use futures::join;
+    use kassandra::Index;
     use namada_core::chain::BlockHeight;
     use namada_core::control_flow::testing::shutdown_signal;
     use namada_core::storage::TxIndex;
@@ -914,6 +918,87 @@ mod dispatcher_tests {
     };
     use crate::masp::utils::MaspIndexedTx;
     use crate::masp::{MaspLocalTaskEnv, ShieldedSyncConfig};
+
+    /// Test that we prune the fmd indices based on the
+    /// height a key is synced to when starting up.
+    #[tokio::test]
+    async fn test_fmd_filtered_on_initial_setup() {
+        let (client, _) = TestingMaspClient::new(BlockHeight::first());
+        let (_sender, shutdown_sig) = shutdown_signal();
+        let config = ShieldedSyncConfig::builder()
+            .client(client)
+            .fetched_tracker(DevNullProgressBar)
+            .scanned_tracker(DevNullProgressBar)
+            .applied_tracker(DevNullProgressBar)
+            .shutdown_signal(shutdown_sig)
+            .build();
+        let temp_dir = tempdir().unwrap();
+        let utils = FsShieldedUtils {
+            context_dir: temp_dir.path().to_path_buf(),
+        };
+        MaspLocalTaskEnv::new(4)
+            .expect("Test failed")
+            .run(|s| async {
+                let mut dispatcher = config.dispatcher(s, &utils).await;
+                dispatcher.ctx.vk_sync = BTreeMap::from([(
+                    arbitrary_vk(),
+                    KeySyncData {
+                        height: MaspIndexedTx {
+                            kind: Default::default(),
+                            indexed_tx: IndexedTx::entire_block(10.into()),
+                        },
+                        fmd_indices: Some(
+                            [
+                                Index { height: 5, tx: 0 },
+                                Index { height: 15, tx: 0 },
+                            ]
+                            .into_iter()
+                            .collect(),
+                        ),
+                    },
+                )]);
+                dispatcher
+                    .perform_initial_setup(
+                        None,
+                        None,
+                        &[],
+                        &[(
+                            arbitrary_vk().into(),
+                            Some(
+                                [
+                                    Index { height: 5, tx: 0 },
+                                    Index { height: 15, tx: 0 },
+                                    Index { height: 20, tx: 0 },
+                                ]
+                                .into_iter()
+                                .collect(),
+                            ),
+                        )],
+                    )
+                    .await
+                    .expect("Test failed");
+
+                let expected = BTreeMap::from([(
+                    arbitrary_vk(),
+                    KeySyncData {
+                        height: MaspIndexedTx {
+                            kind: Default::default(),
+                            indexed_tx: IndexedTx::entire_block(10.into()),
+                        },
+                        fmd_indices: Some(
+                            [
+                                Index { height: 15, tx: 0 },
+                                Index { height: 20, tx: 0 },
+                            ]
+                            .into_iter()
+                            .collect(),
+                        ),
+                    },
+                )]);
+                assert_eq!(expected, dispatcher.ctx.vk_sync);
+            })
+            .await;
+    }
 
     #[tokio::test]
     async fn test_applying_cache_drains_decrypted_data() {
@@ -1300,6 +1385,139 @@ mod dispatcher_tests {
                     }
                 );
                 assert_eq!(ctx.note_map.len(), 2);
+            })
+            .await;
+    }
+
+    /// Test that if fetching filters out MASP txs not
+    /// list in fmd flags.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_fetch_with_fmd_flags() {
+        let temp_dir = tempdir().unwrap();
+        let utils = FsShieldedUtils {
+            context_dir: temp_dir.path().to_path_buf(),
+        };
+        let (client, masp_tx_sender) = TestingMaspClient::new(4.into());
+        let (_send, shutdown_sig) = shutdown_signal();
+        let config = ShieldedSyncConfig::builder()
+            .fetched_tracker(DevNullProgressBar)
+            .scanned_tracker(DevNullProgressBar)
+            .applied_tracker(DevNullProgressBar)
+            .shutdown_signal(shutdown_sig)
+            .client(client)
+            .retry_strategy(RetryStrategy::Times(0))
+            .build();
+        let vk = dated_arbitrary_vk();
+
+        MaspLocalTaskEnv::new(4)
+            .expect("Test failed")
+            .run(|s| async {
+                let masp_tx = arbitrary_masp_tx();
+                masp_tx_sender
+                    .send(Some((
+                        MaspIndexedTx {
+                            indexed_tx: IndexedTx {
+                                block_height: 2.into(),
+                                block_index: TxIndex(1),
+                                batch_index: None,
+                            },
+                            kind: MaspTxKind::Transfer,
+                        },
+                        masp_tx.clone(),
+                    )))
+                    .expect("Test failed");
+                masp_tx_sender
+                    .send(Some((
+                        MaspIndexedTx {
+                            indexed_tx: IndexedTx {
+                                block_height: 3.into(),
+                                block_index: TxIndex(0),
+                                batch_index: None,
+                            },
+                            kind: MaspTxKind::Transfer,
+                        },
+                        masp_tx.clone(),
+                    )))
+                    .expect("Test failed");
+                masp_tx_sender
+                    .send(Some((
+                        MaspIndexedTx {
+                            indexed_tx: IndexedTx {
+                                block_height: 3.into(),
+                                block_index: TxIndex(1),
+                                batch_index: None,
+                            },
+                            kind: MaspTxKind::Transfer,
+                        },
+                        masp_tx.clone(),
+                    )))
+                    .expect("Test failed");
+                masp_tx_sender
+                    .send(Some((
+                        MaspIndexedTx {
+                            indexed_tx: IndexedTx {
+                                block_height: 4.into(),
+                                block_index: TxIndex(0),
+                                batch_index: None,
+                            },
+                            kind: MaspTxKind::Transfer,
+                        },
+                        masp_tx.clone(),
+                    )))
+                    .expect("Test failed");
+                let dispatcher = config.clone().dispatcher(s, &utils).await;
+
+                let ctx = dispatcher
+                    .run(
+                        None,
+                        None,
+                        &[],
+                        &[(
+                            vk,
+                            Some(
+                                [
+                                    Index { height: 3, tx: 0 },
+                                    Index { height: 3, tx: 1 },
+                                    Index { height: 5, tx: 0 },
+                                ]
+                                .into_iter()
+                                .collect(),
+                            ),
+                        )],
+                    )
+                    .await
+                    .expect("Test failed")
+                    .expect("Test failed");
+
+                let keys =
+                    ctx.note_index.keys().cloned().collect::<BTreeSet<_>>();
+                let expected = BTreeSet::from([
+                    MaspIndexedTx {
+                        indexed_tx: IndexedTx {
+                            block_height: 3.into(),
+                            block_index: TxIndex(0),
+                            batch_index: None,
+                        },
+                        kind: MaspTxKind::Transfer,
+                    },
+                    MaspIndexedTx {
+                        indexed_tx: IndexedTx {
+                            block_height: 3.into(),
+                            block_index: TxIndex(1),
+                            batch_index: None,
+                        },
+                        kind: MaspTxKind::Transfer,
+                    },
+                ]);
+
+                assert_eq!(keys, expected);
+                assert_eq!(
+                    ctx.vk_sync[&vk.key].height,
+                    MaspIndexedTx {
+                        indexed_tx: IndexedTx::entire_block(4.into()),
+                        kind: MaspTxKind::Transfer
+                    }
+                );
             })
             .await;
     }

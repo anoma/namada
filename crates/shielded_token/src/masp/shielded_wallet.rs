@@ -192,6 +192,19 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
         Ok(())
     }
 
+    /// Take the union of all FMD index lists of keys controlled by
+    /// this wallet. This represents the minimum set of MASP txs
+    /// needed to be fetched for all keys.
+    pub fn combined_fmd_indices(&self) -> Option<IndexList> {
+        self.vk_sync
+            .values()
+            .try_fold(IndexList::default(), |mut acc, ix| {
+                let next = ix.fmd_indices.as_ref()?;
+                acc.union(next);
+                Some(acc)
+            })
+    }
+
     /// Sync the current state of the multi-asset shielded pool in a
     /// ShieldedContext with the state on-chain.
     pub async fn sync<M, T, I>(

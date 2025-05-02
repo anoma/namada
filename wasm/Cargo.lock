@@ -6869,7 +6869,7 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.0.1"
-source = "git+https://github.com/anoma/kassandra-service?rev=cba929550964787f28f4225f2d2e1f9616619b02#cba929550964787f28f4225f2d2e1f9616619b02"
+source = "git+https://github.com/anoma/kassandra-service?rev=ee4a2f073982daaa1f05addbd6b78c773e3d7b1a#ee4a2f073982daaa1f05addbd6b78c773e3d7b1a"
 dependencies = [
  "borsh",
  "chacha20poly1305",

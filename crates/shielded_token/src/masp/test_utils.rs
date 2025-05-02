@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use borsh::BorshDeserialize;
 use eyre::eyre;
+use kassandra::{Index, IndexList};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::{
     CommitmentTree, IncrementalWitness, MerklePath,
@@ -357,6 +358,7 @@ pub fn arbitrary_masp_tx_with_fee_unshielding() -> Transaction {
 pub struct TestingMaspClient {
     last_height: BlockHeight,
     tx_recv: flume::Receiver<Option<IndexedNoteEntry>>,
+    fmd_indices: Option<IndexList>,
 }
 
 impl TestingMaspClient {
@@ -370,6 +372,7 @@ impl TestingMaspClient {
             Self {
                 last_height,
                 tx_recv,
+                fmd_indices: None,
             },
             sender,
         )
@@ -402,6 +405,14 @@ impl MaspClient for TestingMaspClient {
         let from = std::cmp::max(from.0, 2);
         for _height in from..=to.0 {
             if let Some(tx) = self.tx_recv.recv_async().await.unwrap() {
+                if let Some(indices) = self.fmd_indices.as_ref() {
+                    if !indices.contains(&Index {
+                        height: tx.0.indexed_tx.block_height.0,
+                        tx: tx.0.indexed_tx.block_index.0,
+                    }) {
+                        continue;
+                    }
+                }
                 txs.push(tx);
             } else {
                 return Err(TestError::FetchFailure);
@@ -446,6 +457,10 @@ impl MaspClient for TestingMaspClient {
         _: &Node,
     ) -> Result<bool, Self::Error> {
         Ok(true)
+    }
+
+    fn add_fmd_indices(&mut self, fmd_indices: Option<IndexList>) {
+        self.fmd_indices = fmd_indices;
     }
 }
 

@@ -5,7 +5,7 @@ use std::ops::ControlFlow;
 use std::sync::{Arc, RwLock};
 
 use borsh::BorshDeserialize;
-use kassandra::IndexList;
+use kassandra::{Index, IndexList};
 use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::Transaction as MaspTx;
@@ -34,6 +34,7 @@ struct LedgerMaspClientInner<C> {
     semaphore: Semaphore,
     backoff: RwLock<Duration>,
     sleep: Sleep<LinearBackoff>,
+    fmd_indices: Option<IndexList>,
 }
 
 /// An inefficient MASP client which simply uses a
@@ -68,6 +69,7 @@ impl<C> LedgerMaspClient<C> {
                         delta: linear_backoff_delta,
                     },
                 },
+                fmd_indices: None,
             }),
         }
     }
@@ -85,6 +87,11 @@ impl<C: Client + Send + Sync> LedgerMaspClient<C> {
         let mut txs = vec![];
 
         for height in from.0..=to.0 {
+            if let Some(indices) = self.inner.fmd_indices.as_ref() {
+                if !indices.contains_height(height) {
+                    continue;
+                }
+            }
             let maybe_txs_results = async {
                 get_indexed_masp_events_at_height(
                     &self.inner.client,
@@ -119,6 +126,14 @@ impl<C: Client + Send + Sync> LedgerMaspClient<C> {
                 data,
             } in txs_results
             {
+                if let Some(indices) = self.inner.fmd_indices.as_ref() {
+                    if !indices.contains(&Index {
+                        height,
+                        tx: tx_index.block_index.0,
+                    }) {
+                        continue;
+                    }
+                }
                 let tx = match &last_tx {
                     Some((tx, idx)) if idx == &tx_index.block_index => tx,
                     _ => {
@@ -226,6 +241,10 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
         let anchor_key =
             crate::token::storage_key::masp_commitment_anchor_key(*root);
         crate::rpc::query_has_storage_key(&self.inner.client, &anchor_key).await
+    }
+
+    fn add_fmd_indices(&mut self, fmd_indices: Option<IndexList>) {
+        Arc::get_mut(&mut self.inner).unwrap().fmd_indices = fmd_indices;
     }
 }
 
@@ -776,6 +795,10 @@ impl MaspClient for IndexerMaspClient {
             "Commitment anchor checking is not implemented by this client"
                 .to_string(),
         ))
+    }
+
+    fn add_fmd_indices(&mut self, fmd_indices: Option<IndexList>) {
+        Arc::get_mut(&mut self.shared).unwrap().fmd_indices = fmd_indices;
     }
 }
 
