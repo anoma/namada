@@ -336,7 +336,8 @@ pub async fn build_reveal_pk(
         Some(public_key.into()),
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, _) =
@@ -704,7 +705,8 @@ pub async fn build_change_consensus_key(
         None,
         vec![consensus_key.clone()],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
 
@@ -743,7 +745,8 @@ pub async fn build_validator_commission_change(
         default_signer,
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, _) =
@@ -887,7 +890,8 @@ pub async fn build_validator_metadata_change(
         default_signer,
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, _) =
@@ -1114,7 +1118,8 @@ pub async fn build_update_steward_commission(
         default_signer,
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, _) =
@@ -1184,7 +1189,8 @@ pub async fn build_resign_steward(
         default_signer,
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, _) =
@@ -1234,7 +1240,8 @@ pub async fn build_unjail_validator(
         default_signer,
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, _) =
@@ -1340,7 +1347,8 @@ pub async fn build_deactivate_validator(
         default_signer,
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, _) =
@@ -1417,7 +1425,8 @@ pub async fn build_reactivate_validator(
         default_signer,
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, _) =
@@ -1646,7 +1655,8 @@ pub async fn build_redelegation(
         default_signer,
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, _) =
@@ -1692,7 +1702,8 @@ pub async fn build_withdraw(
         default_signer,
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, _) =
@@ -1781,7 +1792,8 @@ pub async fn build_claim_rewards(
         default_signer,
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, _) =
@@ -1887,7 +1899,8 @@ pub async fn build_unbond(
         default_signer,
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, _) =
@@ -2124,7 +2137,8 @@ pub async fn build_bond(
         default_signer,
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, updated_balance) =
@@ -2191,7 +2205,8 @@ pub async fn build_default_proposal(
         default_signer,
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, _updated_balance) =
@@ -2253,7 +2268,8 @@ pub async fn build_vote_proposal(
         default_signer.clone(),
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, _) =
@@ -2563,7 +2579,8 @@ pub async fn build_become_validator(
         None,
         all_pks,
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
 
@@ -2604,7 +2621,8 @@ pub async fn build_pgf_funding_proposal(
         default_signer,
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, _updated_balance) =
@@ -2652,7 +2670,8 @@ pub async fn build_pgf_stewards_proposal(
         default_signer,
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, _updated_balance) =
@@ -2706,7 +2725,8 @@ pub async fn build_ibc_transfer(
         Some(source.clone()),
         vec![],
         args.source.spending_key().is_some(),
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_per_gas_unit, updated_balance) =
@@ -3116,7 +3136,8 @@ pub async fn build_transparent_transfer<N: Namada>(
             source,
             vec![],
             false,
-            &[],
+            vec![],
+            None,
         )
         .await?;
 
@@ -3209,7 +3230,8 @@ pub async fn build_shielded_transfer<N: Namada>(
         Some(MASP),
         vec![],
         true,
-        &[],
+        vec![],
+        None,
     )
     .await?;
 
@@ -3374,7 +3396,8 @@ pub async fn build_shielding_transfer<N: Namada>(
         source,
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
 
@@ -3504,7 +3527,8 @@ pub async fn build_unshielding_transfer<N: Namada>(
         Some(MASP),
         vec![],
         true,
-        &[],
+        vec![],
+        None,
     )
     .await?;
 
@@ -3678,7 +3702,8 @@ pub async fn build_init_account(
         None,
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, _) =
@@ -3768,7 +3793,8 @@ pub async fn build_update_account(
         default_signer,
         vec![],
         false,
-        &[],
+        vec![],
+        None,
     )
     .await?;
     let (fee_amount, _) =
@@ -3967,7 +3993,8 @@ pub async fn build_custom(
             default_signer,
             vec![],
             false,
-            &[],
+            vec![],
+            None,
         )
         .await?;
         prepare_tx(

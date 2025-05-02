@@ -772,6 +772,8 @@ impl<T> Signed<T> {
             fee_payer: genesis_fee_payer_pk(),
             shielded_hash: None,
             disposable_fee_payer: false,
+            signatures: vec![],
+            wrapper_signature: None,
         };
 
         let mut tx = self.data.tx_to_sign();
@@ -786,8 +788,6 @@ impl<T> Signed<T> {
                 signing_data,
                 utils::with_hardware_wallet,
                 (wallet_lock, &app),
-                &[],
-                None,
             )
             .await
             .expect("Failed to sign pre-genesis transaction.")
@@ -814,8 +814,6 @@ impl<T> Signed<T> {
                 signing_data,
                 software_wallet_sign,
                 (),
-                &[],
-                None,
             )
             .await
             .expect("Failed to sign pre-genesis transaction.");

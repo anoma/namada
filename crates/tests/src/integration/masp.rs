@@ -6601,6 +6601,8 @@ fn identical_output_descriptions() -> Result<()> {
         fee_payer: adam_key.to_public(),
         shielded_hash: None,
         disposable_fee_payer: false,
+        signatures: vec![],
+        wrapper_signature: None,
     };
 
     let (mut batched_tx, _signing_data) = namada_sdk::tx::build_batch(vec![
@@ -6906,6 +6908,8 @@ fn masp_batch() -> Result<()> {
         fee_payer: adam_key.to_public(),
         shielded_hash: None,
         disposable_fee_payer: false,
+        signatures: vec![],
+        wrapper_signature: None,
     };
 
     let mut txs = vec![];
@@ -7162,6 +7166,8 @@ fn masp_atomic_batch() -> Result<()> {
         fee_payer: adam_key.to_public(),
         shielded_hash: None,
         disposable_fee_payer: false,
+        signatures: vec![],
+        wrapper_signature: None,
     };
 
     let mut txs = vec![];
@@ -7506,6 +7512,8 @@ fn masp_failing_atomic_batch() -> Result<()> {
         fee_payer: adam_key.to_public(),
         shielded_hash: None,
         disposable_fee_payer: false,
+        signatures: vec![],
+        wrapper_signature: None,
     };
 
     let (mut batched_tx, _signing_data) = namada_sdk::tx::build_batch(vec![
@@ -8410,6 +8418,8 @@ fn masp_events() -> Result<()> {
         fee_payer: cooper_pk.clone(),
         shielded_hash: None,
         disposable_fee_payer: false,
+        signatures: vec![],
+        wrapper_signature: None,
     };
 
     let (batched_tx, _signing_data) = namada_sdk::tx::build_batch(vec![

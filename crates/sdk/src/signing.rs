@@ -82,6 +82,13 @@ pub struct SigningTxData {
     pub disposable_fee_payer: bool,
     /// ID of the Transaction needing signing
     pub shielded_hash: Option<MaspTxId>,
+    /// List of serialized signatures to attach to the transaction
+    pub signatures: Vec<Vec<u8>>,
+    /// Optional serialized wrapper signature
+    // FIXME: this should probably be an either with fee_payer
+    // FIXME: also this requires (and can only be present) if the signatures
+    // are provided and no public keys are provided
+    pub wrapper_signature: Option<Vec<u8>>,
 }
 
 /// Find the public key for the given address and try to load the keypair
@@ -217,7 +224,6 @@ pub async fn default_sign(
 /// hashes needed for monitoring the tx on chain.
 ///
 /// If it is a dry run, it is not put in a wrapper, but returned as is.
-#[allow(clippy::too_many_arguments)]
 pub async fn sign_tx<D, F, U>(
     wallet: &RwLock<Wallet<U>>,
     args: &args::Tx,
@@ -225,10 +231,6 @@ pub async fn sign_tx<D, F, U>(
     signing_data: SigningTxData,
     sign: impl Fn(Tx, common::PublicKey, Signable, D) -> F,
     user_data: D,
-    // FIXME: should these be embedded in SigningTxData?
-    // FIXME: should we use OfflineSignatures?
-    signatures: &[Vec<u8>],
-    wrapper_signature: Option<Vec<u8>>,
 ) -> Result<(), Error>
 where
     D: Clone + MaybeSend,
@@ -238,8 +240,9 @@ where
     let mut used_pubkeys = HashSet::new();
 
     // First try to sign the raw header with the supplied signatures
-    if !signatures.is_empty() {
-        let signatures = signatures
+    if !signing_data.signatures.is_empty() {
+        let signatures = signing_data
+            .signatures
             .iter()
             .map(|bytes| {
                 let sigidx =
@@ -284,7 +287,7 @@ where
     for pubkey in &signing_data.public_keys {
         if !used_pubkeys.contains(pubkey)
             && (*pubkey != signing_data.fee_payer
-                || wrapper_signature.is_some())
+                || signing_data.wrapper_signature.is_some())
         {
             if let Ok(ntx) = sign(
                 tx.clone(),
@@ -307,7 +310,7 @@ where
     // Then try signing the wrapper header (fee payer). Check if there's a
     // provided wrapper signature, otherwise sign with the software wallet or
     // use the fallback
-    if let Some(sig_bytes) = &wrapper_signature {
+    if let Some(sig_bytes) = &signing_data.wrapper_signature {
         let auth = serde_json::from_slice(sig_bytes)
             .map_err(|e| Error::Encode(EncodingError::Serde(e.to_string())))?;
         tx.add_section(Section::Authorization(auth));
@@ -358,6 +361,7 @@ where
 
 /// Return the necessary data regarding an account to be able to generate a
 /// signature section
+#[allow(clippy::too_many_arguments)]
 pub async fn aux_signing_data(
     context: &impl Namada,
     args: &args::Tx<SdkTypes>,
@@ -365,10 +369,11 @@ pub async fn aux_signing_data(
     default_signer: Option<Address>,
     extra_public_keys: Vec<common::PublicKey>,
     is_shielded_source: bool,
-    signatures: &[Vec<u8>],
+    signatures: Vec<Vec<u8>>,
+    wrapper_signature: Option<Vec<u8>>,
 ) -> Result<SigningTxData, Error> {
     let mut public_keys =
-        tx_signers(context, args, default_signer.clone(), signatures).await?;
+        tx_signers(context, args, default_signer.clone(), &signatures).await?;
     public_keys.extend(extra_public_keys.clone());
 
     let (account_public_keys_map, threshold) = match &owner {
@@ -422,6 +427,8 @@ pub async fn aux_signing_data(
         fee_payer,
         shielded_hash: None,
         disposable_fee_payer,
+        signatures,
+        wrapper_signature,
     })
 }
 
@@ -2559,6 +2566,8 @@ mod test_signing {
             fee_payer: public_key_fee.clone(),
             shielded_hash: None,
             disposable_fee_payer: false,
+            signatures: vec![],
+            wrapper_signature: None,
         };
 
         let Error::Tx(TxSubmitError::MissingSigningKeys(1, 0)) = sign_tx(
@@ -2579,8 +2588,6 @@ mod test_signing {
                 }
             },
             (),
-            &[],
-            None,
         )
         .await
         .expect_err("Test failed") else {
@@ -2598,6 +2605,8 @@ mod test_signing {
             fee_payer: public_key.clone(),
             shielded_hash: None,
             disposable_fee_payer: false,
+            signatures: vec![],
+            wrapper_signature: None,
         };
         sign_tx(
             &RwLock::new(wallet),
@@ -2606,8 +2615,6 @@ mod test_signing {
             signing_data,
             |tx, _, _, _| async { Ok(tx) },
             (),
-            &[],
-            None,
         )
         .await
         .expect("Test failed");
