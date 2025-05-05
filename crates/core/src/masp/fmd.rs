@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::io;
+use std::ops::Deref;
 
 use borsh::schema::Definition;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -58,6 +59,31 @@ mod parameters {
     }
 }
 
+/// FMD public key bytes.
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+)]
+#[repr(transparent)]
+pub struct PublicKeyBytes(Box<[u8; parameters::PUBLIC_KEY_LEN]>);
+
+impl Deref for PublicKeyBytes {
+    type Target = [u8];
+
+    #[inline]
+    fn deref(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+}
+
 /// FMD public key.
 //#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -68,8 +94,17 @@ pub struct PublicKey {
 
 impl PublicKey {
     /// Serialize this public key into its compressed representation.
-    pub fn into_compressed_bytes(self) -> Vec<u8> {
-        self.inner.compress().to_coeff_repr()
+    pub fn into_compressed_bytes(self) -> PublicKeyBytes {
+        let repr = self.inner.compress().to_coeff_repr();
+
+        PublicKeyBytes(repr.into_boxed_slice().try_into().unwrap_or_else(
+            |_| {
+                panic!(
+                    "FMD public key length should have been {}",
+                    parameters::PUBLIC_KEY_LEN
+                )
+            },
+        ))
     }
 
     /// Deserialize a public key from the given compressed representation and
