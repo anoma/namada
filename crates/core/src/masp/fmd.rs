@@ -75,6 +75,30 @@ mod parameters {
 #[repr(transparent)]
 pub struct PublicKeyBytes(Box<[u8; parameters::PUBLIC_KEY_LEN]>);
 
+impl PublicKeyBytes {
+    /// Length of the byte payload.
+    pub const LENGTH: usize = parameters::PUBLIC_KEY_LEN;
+}
+
+impl TryFrom<&[u8]> for PublicKeyBytes {
+    type Error = String;
+
+    fn try_from(slice: &[u8]) -> Result<Self, Self::Error> {
+        if slice.len() != parameters::PUBLIC_KEY_LEN {
+            return Err(format!(
+                "FMD public key length must be {}",
+                parameters::PUBLIC_KEY_LEN
+            ));
+        }
+
+        let mut bytes =
+            PublicKeyBytes(Box::new([0u8; parameters::PUBLIC_KEY_LEN]));
+        bytes.0.copy_from_slice(slice);
+
+        Ok(bytes)
+    }
+}
+
 impl Deref for PublicKeyBytes {
     type Target = [u8];
 

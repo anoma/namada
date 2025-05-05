@@ -33,7 +33,7 @@ use crate::hash::Hash;
 use crate::impl_display_and_from_str_via_format;
 use crate::string_encoding::{
     self, MASP_EXT_FULL_VIEWING_KEY_HRP, MASP_EXT_SPENDING_KEY_HRP,
-    MASP_PAYMENT_ADDRESS_HRP,
+    MASP_FMD_PAYMENT_ADDRESS_HRP, MASP_PAYMENT_ADDRESS_HRP,
 };
 use crate::token::{Denomination, MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
 
@@ -345,6 +345,10 @@ pub type Precision = u128;
 // enough capacity to store the payment address
 const PAYMENT_ADDRESS_SIZE: usize = 43;
 
+// enough capacity to store the payment address
+const FMD_PAYMENT_ADDRESS_SIZE: usize =
+    PAYMENT_ADDRESS_SIZE + FmdPublicKeyBytes::LENGTH;
+
 /// Wrapper for masp_primitive's DiversifierIndex
 #[derive(Clone, Debug, Copy, Eq, PartialEq, Default)]
 pub struct DiversifierIndex(masp_primitives::zip32::DiversifierIndex);
@@ -526,6 +530,54 @@ impl string_encoding::Format for PaymentAddress {
 
 impl_display_and_from_str_via_format!(PaymentAddress);
 
+impl string_encoding::Format for FmdPaymentAddress {
+    type EncodedBytes<'a> = Vec<u8>;
+
+    const HRP: string_encoding::Hrp =
+        string_encoding::Hrp::parse_unchecked(MASP_FMD_PAYMENT_ADDRESS_HRP);
+
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(FMD_PAYMENT_ADDRESS_SIZE);
+        bytes.extend_from_slice(&self.payment_address.to_bytes()[..]);
+        bytes.extend_from_slice(&self.fmd_public_key[..]);
+        bytes
+    }
+
+    fn decode_bytes(
+        bytes: &[u8],
+    ) -> Result<Self, string_encoding::DecodeError> {
+        if bytes.len() != FMD_PAYMENT_ADDRESS_SIZE {
+            return Err(DecodeError::InvalidInnerEncoding(format!(
+                "expected {FMD_PAYMENT_ADDRESS_SIZE} bytes for the fmd \
+                 payment address"
+            )));
+        }
+
+        let payment_address =
+            masp_primitives::sapling::PaymentAddress::from_bytes(&{
+                let mut payment_addr = [0u8; PAYMENT_ADDRESS_SIZE];
+                payment_addr.copy_from_slice(&bytes[0..PAYMENT_ADDRESS_SIZE]);
+                payment_addr
+            })
+            .ok_or_else(|| {
+                DecodeError::InvalidInnerEncoding(
+                    "invalid fmd payment address provided".to_string(),
+                )
+            })?;
+
+        let fmd_public_key = bytes[PAYMENT_ADDRESS_SIZE..]
+            .try_into()
+            .map_err(DecodeError::InvalidInnerEncoding)?;
+
+        Ok(Self {
+            payment_address,
+            fmd_public_key,
+        })
+    }
+}
+
+impl_display_and_from_str_via_format!(FmdPaymentAddress);
+
 impl From<ExtendedViewingKey>
     for masp_primitives::zip32::ExtendedFullViewingKey
 {
@@ -598,6 +650,20 @@ impl PaymentAddress {
         // hex of the first 40 chars of the hash
         format!("{:.width$X}", hasher.finalize(), width = HASH_HEX_LEN)
     }
+
+    /// Create a new [`FmdPaymentAddress`].
+    pub fn with_fmd_key(self, sk: &FmdSecretKey) -> FmdPaymentAddress {
+        let Self(payment_address) = self;
+
+        let fmd_public_key = sk
+            .randomized_public_key(&payment_address.diversifier().0)
+            .into_compressed_bytes();
+
+        FmdPaymentAddress {
+            payment_address,
+            fmd_public_key,
+        }
+    }
 }
 
 impl From<PaymentAddress> for masp_primitives::sapling::PaymentAddress {
@@ -626,6 +692,76 @@ impl serde::Serialize for PaymentAddress {
 }
 
 impl<'de> serde::Deserialize<'de> for PaymentAddress {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+        let encoded: String = serde::Deserialize::deserialize(deserializer)?;
+        Self::from_str(&encoded).map_err(D::Error::custom)
+    }
+}
+
+/// [`PaymentAddress`] with FMD public key attached.
+#[derive(
+    Clone,
+    Debug,
+    PartialOrd,
+    Ord,
+    Eq,
+    PartialEq,
+    Hash,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+)]
+pub struct FmdPaymentAddress {
+    /// Wrapped MASP payment address.
+    payment_address: masp_primitives::sapling::PaymentAddress,
+    /// FMD public key.
+    fmd_public_key: FmdPublicKeyBytes,
+}
+
+impl FmdPaymentAddress {
+    /// Recover the [`PaymentAddress`] embedded within.
+    pub fn as_payment_address(
+        &self,
+    ) -> &masp_primitives::sapling::PaymentAddress {
+        &self.payment_address
+    }
+
+    /// Recover the [`FmdPublicKey`] embedded within.
+    pub fn to_fmd_public_key(&self) -> Option<FmdPublicKey> {
+        FmdPublicKey::from_parts(
+            &self.payment_address.diversifier().0,
+            &self.fmd_public_key,
+        )
+    }
+
+    /// Hash this payment address
+    pub fn hash(&self) -> String {
+        let bytes = self.serialize_to_vec();
+        let mut hasher = Sha256::new();
+        hasher.update(bytes);
+        // hex of the first 40 chars of the hash
+        format!("{:.width$X}", hasher.finalize(), width = HASH_HEX_LEN)
+    }
+}
+
+impl serde::Serialize for FmdPaymentAddress {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let encoded = self.to_string();
+        serde::Serialize::serialize(&encoded, serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for FmdPaymentAddress {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
