@@ -3397,7 +3397,7 @@ pub async fn build_shielding_transfer<N: Namada>(
 
         transfer_data.push(MaspTransferData {
             source: TransferSource::Address(source.to_owned()),
-            target: TransferTarget::PaymentAddress(args.target),
+            target: TransferTarget::PaymentAddress(args.target.clone()),
             token: token.to_owned(),
             amount: validated_amount,
         });
@@ -4184,8 +4184,8 @@ async fn get_refund_target(
     match (source, refund_target) {
         (_, Some(TransferTarget::PaymentAddress(pa))) => {
             Err(Error::Other(format!(
-                "Supporting only a transparent address as a refund target: {}",
-                pa,
+                "Supporting only a transparent address as a refund target: \
+                 {pa}"
             )))
         }
         (

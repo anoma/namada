@@ -3402,7 +3402,9 @@ pub mod args {
 
     use data_encoding::HEXUPPER;
     use either::Either;
-    use namada_core::masp::{DiversifierIndex, MaspEpoch, PaymentAddress};
+    use namada_core::masp::{
+        DiversifierIndex, MaspEpoch, UnifiedPaymentAddress,
+    };
     use namada_sdk::address::{Address, EstablishedAddress};
     pub use namada_sdk::args::*;
     use namada_sdk::chain::{ChainId, ChainIdPrefix};
@@ -3653,8 +3655,9 @@ pub mod args {
     pub const RAW_ADDRESS_ESTABLISHED: Arg<EstablishedAddress> = arg("address");
     pub const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     pub const RAW_KEY_GEN: ArgFlag = flag("raw");
-    pub const RAW_PAYMENT_ADDRESS: Arg<PaymentAddress> = arg("payment-address");
-    pub const RAW_PAYMENT_ADDRESS_OPT: ArgOpt<PaymentAddress> =
+    pub const RAW_PAYMENT_ADDRESS: Arg<UnifiedPaymentAddress> =
+        arg("payment-address");
+    pub const RAW_PAYMENT_ADDRESS_OPT: ArgOpt<UnifiedPaymentAddress> =
         RAW_PAYMENT_ADDRESS.opt();
     pub const RAW_PUBLIC_KEY: Arg<common::PublicKey> = arg("public-key");
     pub const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> =

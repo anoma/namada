@@ -116,7 +116,8 @@ pub use namada_sdk::tx::{
 use namada_sdk::wallet::{DatedSpendingKey, Wallet};
 use namada_sdk::{
     FlagCiphertext, Namada, NamadaImpl, PaymentAddress, TransferSource,
-    TransferTarget, parameters, proof_of_stake, tendermint,
+    TransferTarget, UnifiedPaymentAddress, parameters, proof_of_stake,
+    tendermint,
 };
 use namada_test_utils::tx_data::TxWriteData;
 use namada_vm::wasm::run;
@@ -1188,7 +1189,9 @@ impl Default for BenchShieldedCtx {
                 .wallet
                 .insert_payment_addr(
                     alias,
-                    PaymentAddress::from(payment_addr),
+                    UnifiedPaymentAddress::V0(PaymentAddress::from(
+                        payment_addr,
+                    )),
                     true,
                 )
                 .unwrap();

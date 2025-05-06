@@ -52,8 +52,8 @@ use namada_core::ethereum_events::EthAddress;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::key::*;
 pub use namada_core::masp::{
-    ExtendedSpendingKey, ExtendedViewingKey, FlagCiphertext, PaymentAddress,
-    TransferSource, TransferTarget,
+    ExtendedSpendingKey, ExtendedViewingKey, FlagCiphertext, FmdPaymentAddress,
+    PaymentAddress, TransferSource, TransferTarget, UnifiedPaymentAddress,
 };
 pub use namada_core::{control_flow, task_env};
 use namada_io::{Client, Io, NamadaIo};
@@ -189,7 +189,7 @@ pub trait Namada: NamadaIo {
     /// arguments
     fn new_shielding_transfer(
         &self,
-        target: PaymentAddress,
+        target: UnifiedPaymentAddress,
         data: Vec<args::TxShieldingTransferData>,
     ) -> args::TxShieldingTransfer {
         args::TxShieldingTransfer {

@@ -12,8 +12,8 @@ use masp_primitives::zip32::{
     ExtendedSpendingKey as MaspExtendedSpendingKey,
 };
 use namada_core::masp::{
-    BalanceOwner, ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
-    TransferSource, TransferTarget,
+    BalanceOwner, ExtendedSpendingKey, ExtendedViewingKey, TransferSource,
+    TransferTarget, UnifiedPaymentAddress,
 };
 use namada_sdk::address::{Address, InternalAddress};
 use namada_sdk::chain::ChainId;
@@ -60,7 +60,7 @@ pub type WalletDatedSpendingKey = FromContext<DatedSpendingKey>;
 
 /// A raw payment address (bech32m encoding) or an alias of a payment address
 /// in the wallet
-pub type WalletPaymentAddr = FromContext<PaymentAddress>;
+pub type WalletPaymentAddr = FromContext<UnifiedPaymentAddress>;
 
 /// A raw full viewing key (bech32m encoding) or an alias of a full viewing key
 /// in the wallet
@@ -388,10 +388,11 @@ impl FromContext<TransferTarget> {
         }
     }
 
-    /// Converts this TransferTarget argument to a PaymentAddress. Call this
-    /// function only when certain that raw represents a PaymentAddress.
-    pub fn to_payment_address(&self) -> FromContext<PaymentAddress> {
-        FromContext::<PaymentAddress> {
+    /// Converts this TransferTarget argument to a UnifiedPaymentAddress. Call
+    /// this function only when certain that raw represents a
+    /// UnifiedPaymentAddress.
+    pub fn to_payment_address(&self) -> FromContext<UnifiedPaymentAddress> {
+        FromContext::<UnifiedPaymentAddress> {
             raw: self.raw.clone(),
             phantom: PhantomData,
         }
@@ -690,7 +691,7 @@ impl ArgFromMutContext for DatedViewingKey {
     }
 }
 
-impl ArgFromContext for PaymentAddress {
+impl ArgFromContext for UnifiedPaymentAddress {
     fn arg_from_ctx(
         ctx: &ChainContext,
         raw: impl AsRef<str>,
@@ -743,7 +744,8 @@ impl ArgFromContext for TransferTarget {
         Address::arg_from_ctx(ctx, raw)
             .map(Self::Address)
             .or_else(|_| {
-                PaymentAddress::arg_from_ctx(ctx, raw).map(Self::PaymentAddress)
+                UnifiedPaymentAddress::arg_from_ctx(ctx, raw)
+                    .map(Self::PaymentAddress)
             })
     }
 }

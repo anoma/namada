@@ -15,7 +15,7 @@ use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;
 use namada_core::key::{SchemeType, common};
-use namada_core::masp::{DiversifierIndex, MaspEpoch, PaymentAddress};
+use namada_core::masp::{DiversifierIndex, MaspEpoch};
 use namada_core::string_encoding::StringEncoded;
 use namada_core::time::DateTimeUtc;
 use namada_core::token::Amount;
@@ -131,7 +131,7 @@ impl NamadaTypes for SdkTypes {
     type EthereumAddress = ();
     type Keypair = namada_core::key::common::SecretKey;
     type MaspIndexerAddress = String;
-    type PaymentAddress = namada_core::masp::PaymentAddress;
+    type PaymentAddress = namada_core::masp::UnifiedPaymentAddress;
     type PublicKey = namada_core::key::common::PublicKey;
     type SpendingKey = PseudoExtendedKey;
     type TendermintAddress = tendermint_rpc::Url;
@@ -2956,7 +2956,7 @@ pub struct KeyAddressFind {
     /// Public key hash to lookup keypair with
     pub public_key_hash: Option<String>,
     /// Payment address to find
-    pub payment_address: Option<PaymentAddress>,
+    pub payment_address: Option<namada_core::masp::UnifiedPaymentAddress>,
     /// Find keys only
     pub keys_only: bool,
     /// Find addresses only

@@ -353,6 +353,13 @@ const FMD_PAYMENT_ADDRESS_SIZE: usize =
 #[derive(Clone, Debug, Copy, Eq, PartialEq, Default)]
 pub struct DiversifierIndex(masp_primitives::zip32::DiversifierIndex);
 
+impl DiversifierIndex {
+    /// Return the next payment address index.
+    pub fn increment(&mut self) {
+        self.0.increment().expect("exhausted payment addresses");
+    }
+}
+
 impl From<masp_primitives::zip32::DiversifierIndex> for DiversifierIndex {
     fn from(idx: masp_primitives::zip32::DiversifierIndex) -> Self {
         Self(idx)
@@ -986,6 +993,131 @@ pub fn addr_taddr(addr: Address) -> TransparentAddress {
     TAddrData::Addr(addr).taddress()
 }
 
+/// Unifies FMD and non-FMD payment address types.
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshDeserializer,
+    Hash,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+)]
+pub enum UnifiedPaymentAddress {
+    /// First payment address format introduced by Namada.
+    ///
+    /// Identical to a Zcash sapling payment address.
+    V0(PaymentAddress),
+    /// Payment address similar to [`Self::V0`], augmented with
+    /// [`FmdPublicKeyBytes`].
+    V1(FmdPaymentAddress),
+}
+
+impl UnifiedPaymentAddress {
+    /// Create a v0 payment address.
+    pub fn v0_from_zip32(
+        vk: ExtendedViewingKey,
+        div_index: DiversifierIndex,
+    ) -> (DiversifierIndex, Self) {
+        let (div_index, pa) =
+            masp_primitives::zip32::ExtendedFullViewingKey::from(vk)
+                .find_address(div_index.into())
+                .expect("exhausted payment address diversifier indices");
+
+        (DiversifierIndex(div_index), Self::V0(PaymentAddress(pa)))
+    }
+
+    /// Create a v1 payment address.
+    pub fn v1_from_zip32(
+        vk: ExtendedViewingKey,
+        div_index: DiversifierIndex,
+    ) -> (DiversifierIndex, Self) {
+        let fmd_sk: FmdSecretKey = vk.0.fvk.vk.ivk().into();
+
+        let (div_index, pa) =
+            masp_primitives::zip32::ExtendedFullViewingKey::from(vk)
+                .find_address(div_index.into())
+                .expect("exhausted payment address diversifier indices");
+
+        (
+            DiversifierIndex(div_index),
+            Self::V1(PaymentAddress(pa).with_fmd_key(&fmd_sk)),
+        )
+    }
+}
+
+impl serde::Serialize for UnifiedPaymentAddress {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serde::Serialize::serialize(&self.to_string(), serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for UnifiedPaymentAddress {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+        let encoded: String = serde::Deserialize::deserialize(deserializer)?;
+        Self::from_str(&encoded).map_err(D::Error::custom)
+    }
+}
+
+impl From<&UnifiedPaymentAddress> for masp_primitives::sapling::PaymentAddress {
+    fn from(pa: &UnifiedPaymentAddress) -> Self {
+        match pa {
+            UnifiedPaymentAddress::V0(pa) => pa.0,
+            UnifiedPaymentAddress::V1(pa) => *pa.as_payment_address(),
+        }
+    }
+}
+
+impl From<UnifiedPaymentAddress> for masp_primitives::sapling::PaymentAddress {
+    fn from(pa: UnifiedPaymentAddress) -> Self {
+        (&pa).into()
+    }
+}
+
+impl From<PaymentAddress> for UnifiedPaymentAddress {
+    fn from(pa: PaymentAddress) -> Self {
+        Self::V0(pa)
+    }
+}
+
+impl From<FmdPaymentAddress> for UnifiedPaymentAddress {
+    fn from(pa: FmdPaymentAddress) -> Self {
+        Self::V1(pa)
+    }
+}
+
+impl Display for UnifiedPaymentAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::V0(pa) => pa.fmt(f),
+            Self::V1(pa) => pa.fmt(f),
+        }
+    }
+}
+
+impl FromStr for UnifiedPaymentAddress {
+    type Err = DecodeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        PaymentAddress::from_str(s)
+            .map(Self::V0)
+            .or_else(|_err| FmdPaymentAddress::from_str(s).map(Self::V1))
+    }
+}
+
 /// Represents a target for the funds of a transfer
 #[derive(
     Debug,
@@ -1001,7 +1133,7 @@ pub enum TransferTarget {
     /// A transfer going to a transparent address
     Address(Address),
     /// A transfer going to a shielded address
-    PaymentAddress(PaymentAddress),
+    PaymentAddress(UnifiedPaymentAddress),
     /// A transfer going to an IBC address
     Ibc(String),
 }
@@ -1021,9 +1153,9 @@ impl TransferTarget {
     }
 
     /// Get the contained PaymentAddress, if any
-    pub fn payment_address(&self) -> Option<PaymentAddress> {
+    pub fn payment_address(&self) -> Option<UnifiedPaymentAddress> {
         match self {
-            Self::PaymentAddress(address) => Some(*address),
+            Self::PaymentAddress(address) => Some(address.clone()),
             _ => None,
         }
     }
@@ -1050,7 +1182,12 @@ impl Display for TransferTarget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Address(x) => x.fmt(f),
-            Self::PaymentAddress(address) => address.fmt(f),
+            Self::PaymentAddress(UnifiedPaymentAddress::V0(address)) => {
+                address.fmt(f)
+            }
+            Self::PaymentAddress(UnifiedPaymentAddress::V1(address)) => {
+                address.fmt(f)
+            }
             Self::Ibc(x) => x.fmt(f),
         }
     }
@@ -1109,7 +1246,7 @@ impl Display for BalanceOwner {
 #[derive(Debug, Clone)]
 pub enum MaspValue {
     /// A MASP PaymentAddress
-    PaymentAddress(PaymentAddress),
+    PaymentAddress(UnifiedPaymentAddress),
     /// A MASP ExtendedSpendingKey
     ExtendedSpendingKey(ExtendedSpendingKey),
     /// A MASP FullViewingKey
@@ -1120,9 +1257,10 @@ impl FromStr for MaspValue {
     type Err = DecodeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Try to decode this value first as a PaymentAddress, then as an
-        // ExtendedSpendingKey, then as FullViewingKey
-        PaymentAddress::from_str(s)
+        // Try to decode this value first as a UnifiedPaymentAddress,
+        // then as an ExtendedSpendingKey, then as a
+        // FullViewingKey
+        UnifiedPaymentAddress::from_str(s)
             .map(Self::PaymentAddress)
             .or_else(|_err| {
                 ExtendedSpendingKey::from_str(s).map(Self::ExtendedSpendingKey)
@@ -1262,7 +1400,7 @@ mod test {
             masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
         );
         let (_diversifier, pa) = sk.0.default_address();
-        let pa = PaymentAddress::from(pa);
+        let pa = PaymentAddress::from(pa).into();
         let target = TransferTarget::PaymentAddress(pa);
         assert_eq!(target.effective_address(), MASP);
 
@@ -1281,7 +1419,7 @@ mod test {
             masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
         );
         let (_diversifier, pa) = sk.0.default_address();
-        let pa = PaymentAddress::from(pa);
+        let pa = PaymentAddress::from(pa).into();
         let target = TransferTarget::PaymentAddress(pa).address();
         assert!(target.is_none());
 
@@ -1303,7 +1441,7 @@ mod test {
             masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
         );
         let (_diversifier, pa) = sk.0.default_address();
-        let pa = PaymentAddress::from(pa);
+        let pa = PaymentAddress::from(pa).into();
         let target = TransferTarget::PaymentAddress(pa).t_addr_data();
         assert!(target.is_none());
 
@@ -1319,7 +1457,7 @@ mod test {
             masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
         );
         let (_diversifier, pa) = sk.0.default_address();
-        let pa = PaymentAddress::from(pa);
+        let pa: UnifiedPaymentAddress = PaymentAddress::from(pa).into();
 
         const IBC_ADDR: &str = "noble18st0wqx84av8y6xdlss9d6m2nepyqwj6nfxxuv";
 
@@ -1404,7 +1542,7 @@ mod test {
             masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
         );
         let (_diversifier, pa) = sk.0.default_address();
-        let pa = PaymentAddress::from(pa);
+        let pa = PaymentAddress::from(pa).into();
 
         let target = TransferTarget::PaymentAddress(pa);
         let serialized = target.serialize_to_vec();

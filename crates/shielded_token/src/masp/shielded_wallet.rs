@@ -1724,7 +1724,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 });
                 // Make transaction output tied to the current token,
                 // denomination, and epoch.
-                if let Some(pa) = payment_address {
+                if let Some(ref pa) = payment_address {
                     // If there is a shielded output
                     builder
                         .add_sapling_output(
