@@ -5760,6 +5760,7 @@ dependencies = [
  "namada_trans_token",
  "proptest",
  "serde_json",
+ "sha2 0.10.8",
  "tokio",
 ]
 
