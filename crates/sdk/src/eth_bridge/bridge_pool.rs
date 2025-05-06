@@ -89,9 +89,12 @@ pub async fn build_bridge_pool_tx(
             None
         ),
     )?;
-    let fee_payer = signing_data.fee_payer.clone().left().ok_or_else(|| {
-        Error::Other("Missing gas payer argument".to_string())
-    })?;
+    let fee_payer = signing_data
+        .fee_payer
+        .clone()
+        .left()
+        .ok_or_else(|| Error::Other("Missing gas payer argument".to_string()))?
+        .0;
     let (fee_amount, _) =
         validate_transparent_fee(context, &tx_args, &fee_payer).await?;
 

@@ -76,12 +76,10 @@ pub struct SigningTxData {
     pub threshold: u8,
     /// The public keys to index map associated to an account
     pub account_public_keys_map: Option<AccountPublicKeysMap>,
-    /// The fee payer, either the public key to sign the wrapper tx or a
+    /// The fee payer, either a tuple with the public key to sign the wrapper
+    /// tx and a flag for the generation of a disposable fee payer or a
     /// serialized signature
-    pub fee_payer: either::Either<common::PublicKey, Vec<u8>>,
-    /// Flag for the generation of a disposable fee payer
-    // FIXME: what about this? can we also join this with fee_payer somehow?
-    pub disposable_fee_payer: bool,
+    pub fee_payer: either::Either<(common::PublicKey, bool), Vec<u8>>,
     /// ID of the Transaction needing signing
     pub shielded_hash: Option<MaspTxId>,
     /// List of serialized signatures to attach to the transaction
@@ -284,7 +282,8 @@ where
     for pubkey in &signing_data.public_keys {
         if !used_pubkeys.contains(pubkey) {
             match &signing_data.fee_payer {
-                either::Either::Left(fee_payer) if pubkey == fee_payer => (),
+                either::Either::Left((fee_payer, _)) if pubkey == fee_payer => {
+                }
                 _ => {
                     if let Ok(ntx) = sign(
                         tx.clone(),
@@ -310,7 +309,7 @@ where
     // provided wrapper signature, otherwise sign with the software wallet or
     // use the fallback
     match &signing_data.fee_payer {
-        either::Either::Left(fee_payer) => {
+        either::Either::Left((fee_payer, _)) => {
             let key = {
                 // Lock the wallet just long enough to extract a key from it
                 // without interfering with the sign closure
@@ -410,18 +409,18 @@ pub async fn aux_signing_data(
         ),
     };
 
-    let (fee_payer, disposable_fee_payer) = match &wrapper_signature {
-        Some(signature) => (either::Right(signature.to_owned()), false),
+    let fee_payer = match &wrapper_signature {
+        Some(signature) => either::Right(signature.to_owned()),
         None => match &args.wrapper_fee_payer {
-            Some(pubkey) => (either::Left(pubkey.clone()), false),
+            Some(pubkey) => either::Left((pubkey.clone(), false)),
             None => {
                 if let Some(pubkey) = public_keys.first() {
-                    (either::Left(pubkey.to_owned()), false)
+                    either::Left((pubkey.to_owned(), false))
                 } else if is_shielded_source {
-                    (
-                        either::Left(gen_disposable_signing_key(context).await),
+                    either::Left((
+                        gen_disposable_signing_key(context).await,
                         true,
-                    )
+                    ))
                 } else {
                     return Err(Error::Tx(TxSubmitError::InvalidFeePayer));
                 }
@@ -436,7 +435,6 @@ pub async fn aux_signing_data(
         account_public_keys_map,
         fee_payer,
         shielded_hash: None,
-        disposable_fee_payer,
         signatures,
     })
 }
@@ -2572,9 +2570,8 @@ mod test_signing {
             public_keys: [public_key.clone()].into(),
             threshold: 1,
             account_public_keys_map: Some(Default::default()),
-            fee_payer: either::Either::Left(public_key_fee.clone()),
+            fee_payer: either::Either::Left((public_key_fee.clone(), false)),
             shielded_hash: None,
-            disposable_fee_payer: false,
             signatures: vec![],
         };
 
@@ -2610,9 +2607,8 @@ mod test_signing {
             public_keys: [public_key.clone()].into(),
             threshold: 1,
             account_public_keys_map: Some(Default::default()),
-            fee_payer: either::Left(public_key.clone()),
+            fee_payer: either::Left((public_key.clone(), false)),
             shielded_hash: None,
-            disposable_fee_payer: false,
             signatures: vec![],
         };
         sign_tx(

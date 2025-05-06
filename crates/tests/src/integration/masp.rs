@@ -6599,9 +6599,8 @@ fn identical_output_descriptions() -> Result<()> {
         public_keys: [adam_key.to_public()].into(),
         threshold: 1,
         account_public_keys_map: None,
-        fee_payer: Either::Left(adam_key.to_public()),
+        fee_payer: Either::Left((adam_key.to_public(), false)),
         shielded_hash: None,
-        disposable_fee_payer: false,
         signatures: vec![],
     };
 
@@ -6905,9 +6904,8 @@ fn masp_batch() -> Result<()> {
         public_keys: [adam_key.to_public()].into(),
         threshold: 1,
         account_public_keys_map: None,
-        fee_payer: Either::Left(adam_key.to_public()),
+        fee_payer: Either::Left((adam_key.to_public(), false)),
         shielded_hash: None,
-        disposable_fee_payer: false,
         signatures: vec![],
     };
 
@@ -7162,9 +7160,8 @@ fn masp_atomic_batch() -> Result<()> {
         public_keys: [adam_key.to_public()].into(),
         threshold: 1,
         account_public_keys_map: None,
-        fee_payer: Either::Left(adam_key.to_public()),
+        fee_payer: Either::Left((adam_key.to_public(), false)),
         shielded_hash: None,
-        disposable_fee_payer: false,
         signatures: vec![],
     };
 
@@ -7507,9 +7504,8 @@ fn masp_failing_atomic_batch() -> Result<()> {
         public_keys: [adam_key.to_public()].into(),
         threshold: 1,
         account_public_keys_map: None,
-        fee_payer: Either::Left(adam_key.to_public()),
+        fee_payer: Either::Left((adam_key.to_public(), false)),
         shielded_hash: None,
-        disposable_fee_payer: false,
         signatures: vec![],
     };
 
@@ -8412,9 +8408,8 @@ fn masp_events() -> Result<()> {
         public_keys: [cooper_pk.clone()].into(),
         threshold: 1,
         account_public_keys_map: None,
-        fee_payer: Either::Left(cooper_pk.clone()),
+        fee_payer: Either::Left((cooper_pk.clone(), false)),
         shielded_hash: None,
-        disposable_fee_payer: false,
         signatures: vec![],
     };
 
