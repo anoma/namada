@@ -1280,6 +1280,7 @@ impl BenchShieldedCtx {
                      masp_tx,
                      metadata: _,
                      epoch: _,
+                     fmd_flags: _,
                  }| masp_tx,
             )
             .expect("MASP must have shielded part");

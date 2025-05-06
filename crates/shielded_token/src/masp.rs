@@ -74,6 +74,11 @@ pub struct ShieldedTransfer {
     pub metadata: SaplingMetadata,
     /// Epoch in which the transaction was created
     pub epoch: MaspEpoch,
+    /// Vector of FMD flag ciphertexts.
+    ///
+    /// There must be a flag ciphertext per shielded output
+    /// in the `builder`.
+    pub fmd_flags: Vec<FlagCiphertext>,
 }
 
 /// The data for a masp fee payment
@@ -191,6 +196,9 @@ pub enum TransferErr {
     /// Insufficient funds error
     #[error("Insufficient funds: {0}")]
     InsufficientFunds(MaspDataLog),
+    /// Invalid FMD public key
+    #[error("FMD public key included in the payment address is not valid")]
+    InvalidFmdPublicKey,
     /// Generic error
     #[error("{0}")]
     General(String),

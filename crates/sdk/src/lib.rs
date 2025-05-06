@@ -901,7 +901,7 @@ pub mod testing {
         arb_withdraw,
     };
     use crate::tx::{
-        Authorization, Code, Commitment, Header, MaspBuilder, Section,
+        Authorization, Code, Commitment, Data, Header, MaspBuilder, Section,
         TxCommitments,
     };
 
@@ -1146,6 +1146,11 @@ pub mod testing {
             if let Some((shielded_transfer, asset_types, build_params)) = aux {
                 let shielded_section_hash =
                     tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
+                tx.add_section(
+                    Section::Data(
+                        Data::from_borsh_encoded(&shielded_transfer.fmd_flags),
+                    ),
+                );
                 tx.add_masp_builder(MaspBuilder {
                     asset_types: asset_types.into_keys().collect(),
                     // Store how the Info objects map to Descriptors/Outputs
