@@ -3673,7 +3673,6 @@ pub mod args {
     pub const SENDER: Arg<String> = arg("sender");
     pub const SHIELDED: ArgFlag = flag("shielded");
     pub const SHOW_IBC_TOKENS: ArgFlag = flag("show-ibc-tokens");
-    pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
     pub const SLIPPAGE: ArgOpt<f64> = arg_opt("slippage-percentage");
     pub const SIGNING_KEYS: ArgMulti<WalletPublicKey, GlobStar> =
         arg_multi("signing-keys");
@@ -4681,6 +4680,7 @@ pub mod args {
                         .help(wrap!("The path to the transaction's WASM code."))
                         .requires(DATA_PATH_OPT.name)
                         .conflicts_with_all([
+                            SIGNATURES.name,
                             TX_PATH_OPT.name,
                             WRAPPER_SIGNATURE_OPT.name,
                         ]),
@@ -4695,6 +4695,7 @@ pub mod args {
                         ))
                         .requires(CODE_PATH_OPT.name)
                         .conflicts_with_all([
+                            SIGNATURES.name,
                             TX_PATH_OPT.name,
                             WRAPPER_SIGNATURE_OPT.name,
                         ]),
@@ -4716,11 +4717,19 @@ pub mod args {
                     "The optional address corresponding to the signatures or \
                      signing keys."
                 )))
-                .arg(SIGNATURES.def().help(wrap!(
-                    "List of file paths containing a serialized signature to \
-                     be attached to a transaction. Requires to provide a gas \
-                     payer."
-                )))
+                .arg(
+                    SIGNATURES
+                        .def()
+                        .help(wrap!(
+                            "List of file paths containing a serialized \
+                             signature to be attached to a transaction. \
+                             Requires to provide a gas payer."
+                        ))
+                        .conflicts_with_all([
+                            CODE_PATH_OPT.name,
+                            DATA_PATH_OPT.name,
+                        ]),
+                )
                 .arg(
                     WRAPPER_SIGNATURE_OPT
                         .def()
@@ -4728,6 +4737,7 @@ pub mod args {
                             "The file path containing a serialized signature \
                              of the entire transaction for gas payment."
                         ))
+                        .requires(SIGNATURES.name)
                         .conflicts_with(FEE_PAYER_OPT.name),
                 )
         }
@@ -7781,18 +7791,13 @@ pub mod args {
                 "The output folder path where the artifact will be stored."
             )))
             .arg(CHAIN_ID_OPT.def().help(wrap!("The chain ID.")))
-            .arg(
-                FEE_PAYER_OPT
-                    .def()
-                    .help(wrap!(
-                        "The implicit address of the gas payer. It defaults \
-                         to the address associated to the first key passed to \
-                         --signing-keys. Do not provide this argument if you \
-                         intend to pay fees via the MASP (recommended for \
-                         transactions where the source is a shielded address)."
-                    ))
-                    .conflicts_with(WRAPPER_SIGNATURE_OPT.name),
-            )
+            .arg(FEE_PAYER_OPT.def().help(wrap!(
+                "The implicit address of the gas payer. It defaults to the \
+                 address associated to the first key passed to \
+                 --signing-keys. Do not provide this argument if you intend \
+                 to pay fees via the MASP (recommended for transactions where \
+                 the source is a shielded address)."
+            )))
             .arg(
                 USE_DEVICE
                     .def()
