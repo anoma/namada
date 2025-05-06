@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
+use itertools::Either;
 use masp_primitives::convert::AllowedConversion;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
@@ -6598,11 +6599,10 @@ fn identical_output_descriptions() -> Result<()> {
         public_keys: [adam_key.to_public()].into(),
         threshold: 1,
         account_public_keys_map: None,
-        fee_payer: adam_key.to_public(),
+        fee_payer: Either::Left(adam_key.to_public()),
         shielded_hash: None,
         disposable_fee_payer: false,
         signatures: vec![],
-        wrapper_signature: None,
     };
 
     let (mut batched_tx, _signing_data) = namada_sdk::tx::build_batch(vec![
@@ -6905,11 +6905,10 @@ fn masp_batch() -> Result<()> {
         public_keys: [adam_key.to_public()].into(),
         threshold: 1,
         account_public_keys_map: None,
-        fee_payer: adam_key.to_public(),
+        fee_payer: Either::Left(adam_key.to_public()),
         shielded_hash: None,
         disposable_fee_payer: false,
         signatures: vec![],
-        wrapper_signature: None,
     };
 
     let mut txs = vec![];
@@ -7163,11 +7162,10 @@ fn masp_atomic_batch() -> Result<()> {
         public_keys: [adam_key.to_public()].into(),
         threshold: 1,
         account_public_keys_map: None,
-        fee_payer: adam_key.to_public(),
+        fee_payer: Either::Left(adam_key.to_public()),
         shielded_hash: None,
         disposable_fee_payer: false,
         signatures: vec![],
-        wrapper_signature: None,
     };
 
     let mut txs = vec![];
@@ -7509,11 +7507,10 @@ fn masp_failing_atomic_batch() -> Result<()> {
         public_keys: [adam_key.to_public()].into(),
         threshold: 1,
         account_public_keys_map: None,
-        fee_payer: adam_key.to_public(),
+        fee_payer: Either::Left(adam_key.to_public()),
         shielded_hash: None,
         disposable_fee_payer: false,
         signatures: vec![],
-        wrapper_signature: None,
     };
 
     let (mut batched_tx, _signing_data) = namada_sdk::tx::build_batch(vec![
@@ -8415,11 +8412,10 @@ fn masp_events() -> Result<()> {
         public_keys: [cooper_pk.clone()].into(),
         threshold: 1,
         account_public_keys_map: None,
-        fee_payer: cooper_pk.clone(),
+        fee_payer: Either::Left(cooper_pk.clone()),
         shielded_hash: None,
         disposable_fee_payer: false,
         signatures: vec![],
-        wrapper_signature: None,
     };
 
     let (batched_tx, _signing_data) = namada_sdk::tx::build_batch(vec![

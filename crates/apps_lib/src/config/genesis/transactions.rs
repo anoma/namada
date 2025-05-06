@@ -769,11 +769,10 @@ impl<T> Signed<T> {
             account_public_keys_map: Some(pks.iter().cloned().collect()),
             public_keys: pks.clone(),
             threshold,
-            fee_payer: genesis_fee_payer_pk(),
+            fee_payer: Either::Left(genesis_fee_payer_pk()),
             shielded_hash: None,
             disposable_fee_payer: false,
             signatures: vec![],
-            wrapper_signature: None,
         };
 
         let mut tx = self.data.tx_to_sign();
