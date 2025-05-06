@@ -403,6 +403,7 @@ fn payment_address_gen(
         alias_force,
         viewing_key: viewing_key_alias,
         diversifier_index,
+        v0,
     }: args::PayAddressGen,
 ) {
     let mut wallet = load_wallet(ctx);
@@ -421,8 +422,11 @@ fn payment_address_gen(
             .copied()
             .unwrap_or_default()
     });
-    let (diversifier_index, payment_addr) =
-        UnifiedPaymentAddress::v1_from_zip32(viewing_key, diversifier_index);
+    let (diversifier_index, payment_addr) = if v0 {
+        UnifiedPaymentAddress::v0_from_zip32(viewing_key, diversifier_index)
+    } else {
+        UnifiedPaymentAddress::v1_from_zip32(viewing_key, diversifier_index)
+    };
     let mut next_div_idx = diversifier_index;
     next_div_idx.increment();
     let alias = wallet

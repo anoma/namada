@@ -3631,6 +3631,7 @@ pub mod args {
     pub const PAYMENT_ADDRESS_TARGET: Arg<WalletPaymentAddr> = arg("target");
     pub const PAYMENT_ADDRESS_TARGET_OPT: ArgOpt<WalletPaymentAddr> =
         arg_opt("target-pa");
+    pub const PAYMENT_ADDRESS_V0: ArgFlag = flag("v0");
     pub const PORT_ID: ArgDefault<PortId> = arg_default(
         "port-id",
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
@@ -7980,6 +7981,7 @@ pub mod args {
             _ctx: &mut Context,
         ) -> Result<PayAddressGen, Self::Error> {
             Ok(PayAddressGen {
+                v0: self.v0,
                 alias: self.alias,
                 alias_force: self.alias_force,
                 viewing_key: self.viewing_key,
@@ -7994,11 +7996,13 @@ pub mod args {
             let alias_force = ALIAS_FORCE.parse(matches);
             let diversifier_index = DIVERSIFIER_INDEX.parse(matches);
             let viewing_key = VIEWING_KEY_ALIAS.parse(matches);
+            let v0 = PAYMENT_ADDRESS_V0.parse(matches);
             Self {
                 alias,
                 alias_force,
                 diversifier_index,
                 viewing_key,
+                v0,
             }
         }
 
@@ -8013,6 +8017,10 @@ pub mod args {
                 "Set the viewing key's current diversifier index beforehand."
             )))
             .arg(VIEWING_KEY.def().help(wrap!("The viewing key.")))
+            .arg(PAYMENT_ADDRESS_V0.def().help(wrap!(
+                "Force generating a v0 payment address. Not compatible with \
+                 FMD."
+            )))
         }
     }
 

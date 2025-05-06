@@ -3021,6 +3021,12 @@ pub struct KeyAddressRemove {
 /// Generate payment address arguments
 #[derive(Clone, Debug)]
 pub struct PayAddressGen {
+    /// Force generating a v0 payment address.
+    ///
+    /// This does not include an FMD public key, therefore
+    /// should not be shared as a payment target if you
+    /// intend to use FMD to speed up shielded sync.
+    pub v0: bool,
     /// Payment address alias
     pub alias: String,
     /// Whether to force overwrite the alias
