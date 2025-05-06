@@ -42,7 +42,8 @@ use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::primitives::{IntoTimestamp, Timestamp as IbcTimestamp};
 use namada_core::key::{self, *};
 use namada_core::masp::{
-    AssetData, MaspEpoch, MaspTxData, TransferSource, TransferTarget,
+    AssetData, FlagCiphertext, MaspEpoch, MaspTxData, TransferSource,
+    TransferTarget,
 };
 use namada_core::storage;
 use namada_core::time::DateTimeUtc;
@@ -2821,19 +2822,25 @@ pub async fn build_ibc_transfer(
         .map(|(shielded_transfer, asset_types)| {
             let masp_tx_hash =
                 tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
+
+            let (fmd_section, flag_ciphertext_sechash) =
+                create_fmd_section(shielded_transfer.fmd_flags);
+            tx.add_section(fmd_section);
+
             transfer.shielded_data = Some(MaspTxData {
                 masp_tx_id: masp_tx_hash,
-                // TODO: change this to the actual sechash
-                // of the fmd flag
-                flag_ciphertext_sechash: Hash::zero(),
+                flag_ciphertext_sechash,
             });
+
             signing_data.shielded_hash = Some(masp_tx_hash);
+
             tx.add_masp_builder(MaspBuilder {
                 asset_types,
                 metadata: shielded_transfer.metadata,
                 builder: shielded_transfer.builder,
                 target: masp_tx_hash,
             });
+
             Result::Ok(transfer)
         })
         .transpose()?;
@@ -3256,9 +3263,16 @@ pub async fn build_shielded_transfer<N: Namada>(
                 masp_tx,
                 metadata,
                 epoch: _,
+                fmd_flags,
             },
             asset_types,
         ) = shielded_parts;
+
+        // Create FMD flags section
+        let (fmd_section, flag_ciphertext_sechash) =
+            create_fmd_section(fmd_flags);
+        tx.add_section(fmd_section);
+
         // Add a MASP Transaction section to the Tx and get the tx hash
         let section_hash = tx.add_masp_tx_section(masp_tx).1;
 
@@ -3274,9 +3288,7 @@ pub async fn build_shielded_transfer<N: Namada>(
 
         data.shielded_data = Some(MaspTxData {
             masp_tx_id: section_hash,
-            // TODO: change this to the actual sechash
-            // of the fmd flag
-            flag_ciphertext_sechash: Hash::zero(),
+            flag_ciphertext_sechash,
         });
         signing_data.shielded_hash = Some(section_hash);
         tracing::debug!("Transfer data {data:?}");
@@ -3431,11 +3443,17 @@ pub async fn build_shielding_transfer<N: Namada>(
                 masp_tx,
                 metadata,
                 epoch: _,
+                fmd_flags,
             },
             asset_types,
         ) = shielded_parts;
         // Add a MASP Transaction section to the Tx and get the tx hash
         let shielded_section_hash = tx.add_masp_tx_section(masp_tx).1;
+
+        // Create FMD flags section
+        let (fmd_section, flag_ciphertext_sechash) =
+            create_fmd_section(fmd_flags);
+        tx.add_section(fmd_section);
 
         tx.add_masp_builder(MaspBuilder {
             asset_types,
@@ -3449,9 +3467,7 @@ pub async fn build_shielding_transfer<N: Namada>(
 
         data.shielded_data = Some(MaspTxData {
             masp_tx_id: shielded_section_hash,
-            // TODO: change this to the actual sechash
-            // of the fmd flag
-            flag_ciphertext_sechash: Hash::zero(),
+            flag_ciphertext_sechash,
         });
         signing_data.shielded_hash = Some(shielded_section_hash);
         tracing::debug!("Transfer data {data:?}");
@@ -3559,11 +3575,17 @@ pub async fn build_unshielding_transfer<N: Namada>(
                 masp_tx,
                 metadata,
                 epoch: _,
+                fmd_flags,
             },
             asset_types,
         ) = shielded_parts;
         // Add a MASP Transaction section to the Tx and get the tx hash
         let shielded_section_hash = tx.add_masp_tx_section(masp_tx).1;
+
+        // Create FMD flags section
+        let (fmd_section, flag_ciphertext_sechash) =
+            create_fmd_section(fmd_flags);
+        tx.add_section(fmd_section);
 
         tx.add_masp_builder(MaspBuilder {
             asset_types,
@@ -3577,9 +3599,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
 
         data.shielded_data = Some(MaspTxData {
             masp_tx_id: shielded_section_hash,
-            // TODO: change this to the actual sechash
-            // of the fmd flag
-            flag_ciphertext_sechash: Hash::zero(),
+            flag_ciphertext_sechash,
         });
         signing_data.shielded_hash = Some(shielded_section_hash);
         tracing::debug!("Transfer data {data:?}");
@@ -4328,4 +4348,11 @@ where
 fn proposal_to_vec(proposal: OnChainProposal) -> Result<Vec<u8>> {
     borsh::to_vec(&proposal.content)
         .map_err(|e| Error::from(EncodingError::Conversion(e.to_string())))
+}
+
+fn create_fmd_section(fmd_flags: Vec<FlagCiphertext>) -> (Section, Hash) {
+    let fmd_section = Section::Data(Data::from_borsh_encoded(&fmd_flags));
+    let fmd_sechash = fmd_section.get_hash();
+
+    (fmd_section, fmd_sechash)
 }

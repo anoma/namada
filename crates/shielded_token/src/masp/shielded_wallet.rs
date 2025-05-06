@@ -31,7 +31,8 @@ use namada_core::chain::BlockHeight;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::control_flow;
 use namada_core::masp::{
-    AssetData, MaspEpoch, TransferSource, TransferTarget, encode_asset_type,
+    AssetData, FlagCiphertext, FmdSecretKey, MaspEpoch, TransferSource,
+    TransferTarget, UnifiedPaymentAddress, encode_asset_type,
 };
 use namada_core::task_env::TaskEnvironment;
 use namada_core::time::{DateTimeUtc, DurationSecs};
@@ -45,7 +46,7 @@ use namada_io::{
 };
 use namada_wallet::{DatedKeypair, DatedSpendingKey};
 use rand::prelude::StdRng;
-use rand_core::{OsRng, SeedableRng};
+use rand_core::{CryptoRng, OsRng, RngCore, SeedableRng};
 
 use super::utils::MaspIndexedTx;
 use crate::masp::utils::MaspClient;
@@ -1215,9 +1216,12 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             return Ok(None);
         };
 
+        let mut fmd_flags = vec![];
+
         for (MaspSourceTransferData { source, token }, amount) in &source_data {
             self.add_inputs(
                 context,
+                &mut rng,
                 &mut builder,
                 source,
                 token,
@@ -1225,6 +1229,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 epoch,
                 &mut denoms,
                 &mut notes_tracker,
+                &mut fmd_flags,
             )
             .await?;
         }
@@ -1240,6 +1245,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         {
             self.add_outputs(
                 context,
+                &mut rng,
                 &mut builder,
                 source,
                 &target,
@@ -1247,6 +1253,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 amount,
                 epoch,
                 &mut denoms,
+                &mut fmd_flags,
             )
             .await?;
         }
@@ -1312,11 +1319,31 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             )
             .map_err(|error| TransferErr::Build { error })?;
 
+        // Add remaining flag ciphertexts
+        fmd_flags.extend({
+            let num_shielded_outputs = masp_tx
+                .sapling_bundle()
+                .map_or(0, |x| x.shielded_outputs.len());
+
+            let num_fmd_flags = fmd_flags.len();
+
+            let dummy_flag_ciphertexts =
+                checked!(num_shielded_outputs - num_fmd_flags).expect(
+                    "number of shielded outputs in the masp bundle should be \
+                     greater than or equal to the number of flag ciphertexts \
+                     generated so far",
+                );
+
+            std::iter::repeat_with(|| FlagCiphertext::random(&mut rng))
+                .take(dummy_flag_ciphertexts)
+        });
+
         Ok(Some(ShieldedTransfer {
             builder: builder_clone,
             masp_tx,
             metadata,
             epoch,
+            fmd_flags,
         }))
     }
 
@@ -1509,9 +1536,10 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     /// must be the current epoch.
     #[allow(async_fn_in_trait)]
     #[allow(clippy::too_many_arguments)]
-    async fn add_inputs(
+    async fn add_inputs<R: CryptoRng + RngCore>(
         &mut self,
         context: &impl NamadaIo,
+        rng: &mut R,
         builder: &mut Builder<Network, PseudoExtendedKey>,
         source: &TransferSource,
         token: &Address,
@@ -1519,6 +1547,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         epoch: MaspEpoch,
         denoms: &mut HashMap<Address, Denomination>,
         notes_tracker: &mut SpentNotesTracker,
+        fmd_flags: &mut Vec<FlagCiphertext>,
     ) -> Result<Option<I128Sum>, TransferErr> {
         // We want to fund our transaction solely from supplied spending key
         let spending_key = source.spending_key();
@@ -1605,6 +1634,12 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     .map_err(|e| TransferErr::Build {
                         error: builder::Error::SaplingBuild(e),
                     })?;
+
+                fmd_flags.push({
+                    let fmd_sk: FmdSecretKey =
+                        sk.to_viewing_key().fvk.vk.ivk().into();
+                    fmd_sk.default_public_key().flag(rng)
+                });
             }
 
             // Commit the notes found to our transaction
@@ -1669,9 +1704,10 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     /// Add the necessary transaction outputs to the builder
     #[allow(clippy::too_many_arguments)]
     #[allow(async_fn_in_trait)]
-    async fn add_outputs(
+    async fn add_outputs<R: CryptoRng + RngCore>(
         &mut self,
         context: &impl NamadaIo,
+        rng: &mut R,
         builder: &mut Builder<Network, PseudoExtendedKey>,
         source: Option<TransferSource>,
         target: &TransferTarget,
@@ -1679,6 +1715,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         amount: Amount,
         epoch: MaspEpoch,
         denoms: &mut HashMap<Address, Denomination>,
+        fmd_flags: &mut Vec<FlagCiphertext>,
     ) -> Result<(), TransferErr> {
         // Anotate the asset type in the value balance with its decoding in
         // order to facilitate cross-epoch computations
@@ -1737,6 +1774,18 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                         .map_err(|e| TransferErr::Build {
                             error: builder::Error::SaplingBuild(e),
                         })?;
+
+                    fmd_flags.push({
+                        match pa {
+                            UnifiedPaymentAddress::V0(_) => {
+                                FlagCiphertext::random(rng)
+                            }
+                            UnifiedPaymentAddress::V1(pa) => pa
+                                .to_fmd_public_key()
+                                .ok_or(TransferErr::InvalidFmdPublicKey)?
+                                .flag(rng),
+                        }
+                    });
                 } else if let Some(t_addr_data) = target.t_addr_data() {
                     // If there is a transparent output
                     builder
