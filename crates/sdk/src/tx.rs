@@ -4048,7 +4048,7 @@ pub async fn build_custom(
     //    2. The user also provided the offline signatures for the inner
     //       transaction(s)
     // The workflow is the following:
-    //    1. If no signatures were provide we generate a SigningTxData to sign
+    //    1. If no signatures were provided we generate a SigningTxData to sign
     //       the tx
     //    2. If only the inner sigs were provided we generate a SigningTxData
     //       that will attach them and then sign the wrapper online
@@ -4093,7 +4093,7 @@ pub async fn build_custom(
             default_signer,
             vec![],
             false,
-            vec![],
+            signatures.to_owned(),
             None,
         )
         .await?;
