@@ -1,6 +1,6 @@
 use namada_core::address::{self, Address};
 use namada_core::arith::checked;
-use namada_core::masp::TokenMap;
+use namada_core::masp::{Precision, TokenMap};
 use namada_core::token;
 use namada_core::token::Amount;
 use namada_core::uint::Uint;
@@ -25,6 +25,7 @@ where
         kd_gain_nom,
         kp_gain_nom,
         locked_amount_target,
+        precision,
     } = params;
     storage.write(
         &masp_last_inflation_key::<TransToken>(token),
@@ -37,8 +38,15 @@ where
     storage.write(&masp_max_reward_rate_key::<TransToken>(token), max_rate)?;
     storage.write(&masp_kp_gain_key::<TransToken>(token), kp_gain_nom)?;
     storage.write(&masp_kd_gain_key::<TransToken>(token), kd_gain_nom)?;
+    if let Some(precision) = precision {
+        let precision: Precision = (*precision).into();
+        storage.write(
+            &masp_reward_precision_key::<TransToken>(token),
+            precision,
+        )?;
+    }
 
-    let locked_amount_target = Uint::from(*locked_amount_target);
+    let locked_amount_target: Uint = (*locked_amount_target).into();
     let raw_target = checked!(
         locked_amount_target * (Uint::from(10) ^ Uint::from(denom.0))
     )?;
