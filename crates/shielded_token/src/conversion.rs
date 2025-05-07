@@ -993,7 +993,8 @@ mod tests {
                 max_reward_rate: Dec::from_str("0.1").unwrap(),
                 kp_gain_nom: Dec::from_str("0.1").unwrap(),
                 kd_gain_nom: Dec::from_str("0.1").unwrap(),
-                locked_amount_target: 10_000_u64,
+                locked_amount_target: crate::Poly::from(10_000_u64).switch(),
+                precision: None,
             };
 
             for (token_addr, (alias, denom)) in tokens() {
