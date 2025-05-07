@@ -2238,6 +2238,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassandra-shared"
+version = "0.0.1-alpha"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f51d8274a5c291ad7f4680ff3cae39ee420d2ddc438ad1b59eb1f8abdb83f70"
+dependencies = [
+ "borsh",
+ "chacha20poly1305",
+ "cobs 0.3.0",
+ "hex",
+ "once_cell",
+ "polyfuzzy",
+ "rand_core",
+ "serde",
+ "serde_cbor",
+ "sha2 0.10.9",
+ "tdx-quote",
+ "thiserror 2.0.12",
+ "x25519-dalek",
+]
+
+[[package]]
 name = "keccak"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2734,6 +2755,7 @@ dependencies = [
  "eyre",
  "futures",
  "itertools 0.14.0",
+ "kassandra-shared",
  "lazy_static",
  "masp_primitives",
  "masp_proofs",
@@ -2753,7 +2775,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "shared",
  "smooth-operator",
  "tempfile",
  "thiserror 2.0.12",
@@ -3867,26 +3888,6 @@ checksum = "75872d278a8f37ef87fa0ddbda7802605cb18344497949862c0d4dcb291eba60"
 dependencies = [
  "digest 0.10.7",
  "keccak",
-]
-
-[[package]]
-name = "shared"
-version = "0.0.1"
-source = "git+https://github.com/anoma/kassandra-service?rev=ee4a2f073982daaa1f05addbd6b78c773e3d7b1a#ee4a2f073982daaa1f05addbd6b78c773e3d7b1a"
-dependencies = [
- "borsh",
- "chacha20poly1305",
- "cobs 0.3.0",
- "hex",
- "once_cell",
- "polyfuzzy",
- "rand_core",
- "serde",
- "serde_cbor",
- "sha2 0.10.9",
- "tdx-quote",
- "thiserror 2.0.12",
- "x25519-dalek",
 ]
 
 [[package]]

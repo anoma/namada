@@ -3979,6 +3979,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassandra-shared"
+version = "0.0.1-alpha"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f51d8274a5c291ad7f4680ff3cae39ee420d2ddc438ad1b59eb1f8abdb83f70"
+dependencies = [
+ "borsh",
+ "chacha20poly1305",
+ "cobs 0.3.0",
+ "hex",
+ "once_cell",
+ "polyfuzzy",
+ "rand_core",
+ "serde",
+ "serde_cbor",
+ "sha2 0.10.8",
+ "tdx-quote",
+ "thiserror 2.0.12",
+ "x25519-dalek",
+]
+
+[[package]]
 name = "kdam"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4718,6 +4739,7 @@ dependencies = [
  "getrandom 0.3.1",
  "init-once",
  "itertools 0.14.0",
+ "kassandra-shared",
  "lazy_static",
  "masp_primitives",
  "masp_proofs",
@@ -4757,7 +4779,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.8",
- "shared",
  "smooth-operator",
  "tempfile",
  "tendermint-rpc",
@@ -4780,6 +4801,7 @@ dependencies = [
  "flume",
  "futures",
  "itertools 0.14.0",
+ "kassandra-shared",
  "lazy_static",
  "masp_primitives",
  "masp_proofs",
@@ -4803,7 +4825,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.8",
- "shared",
  "smooth-operator",
  "tempfile",
  "thiserror 2.0.12",
@@ -6864,26 +6885,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
-]
-
-[[package]]
-name = "shared"
-version = "0.0.1"
-source = "git+https://github.com/anoma/kassandra-service?rev=ee4a2f073982daaa1f05addbd6b78c773e3d7b1a#ee4a2f073982daaa1f05addbd6b78c773e3d7b1a"
-dependencies = [
- "borsh",
- "chacha20poly1305",
- "cobs 0.3.0",
- "hex",
- "once_cell",
- "polyfuzzy",
- "rand_core",
- "serde",
- "serde_cbor",
- "sha2 0.10.8",
- "tdx-quote",
- "thiserror 2.0.12",
- "x25519-dalek",
 ]
 
 [[package]]
