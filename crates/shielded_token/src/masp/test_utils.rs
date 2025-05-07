@@ -459,7 +459,7 @@ impl MaspClient for TestingMaspClient {
         Ok(true)
     }
 
-    fn add_fmd_indices(&mut self, fmd_indices: Option<IndexList>) {
+    fn set_fmd_indices(&mut self, fmd_indices: Option<IndexList>) {
         self.fmd_indices = fmd_indices;
     }
 }

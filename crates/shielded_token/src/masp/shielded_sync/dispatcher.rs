@@ -515,7 +515,7 @@ where
         }
 
         // Add the fmd indices to the client
-        self.client.add_fmd_indices(self.ctx.combined_fmd_indices());
+        self.client.set_fmd_indices(self.ctx.combined_fmd_indices());
 
         // the latest block height which has been added to the witness Merkle
         // tree

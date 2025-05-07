@@ -427,7 +427,7 @@ pub trait MaspClient: Clone {
 
     /// The set of MASP txs to be downloaded as determined by fuzzy
     /// message detection. If `None`, everything is fetched
-    fn add_fmd_indices(&mut self, fmd_indices: Option<IndexList>);
+    fn set_fmd_indices(&mut self, fmd_indices: Option<IndexList>);
 }
 
 /// Given a block height range we wish to request and a cache of fetched block
