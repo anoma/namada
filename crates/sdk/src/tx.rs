@@ -3981,7 +3981,7 @@ pub async fn build_custom(
 pub async fn gen_ibc_shielding_transfer<N: Namada>(
     context: &N,
     args: args::GenIbcShieldingTransfer,
-) -> Result<Option<MaspTransaction>> {
+) -> Result<Option<(MaspTransaction, Vec<FlagCiphertext>)>> {
     let source = IBC;
 
     let token = match args.asset {
@@ -4043,7 +4043,7 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
             .map_err(|err| TxSubmitError::MaspError(err.to_string()))?
     };
 
-    Ok(shielded_transfer.map(|st| st.masp_tx))
+    Ok(shielded_transfer.map(|st| (st.masp_tx, st.fmd_flags)))
 }
 
 pub(crate) async fn get_ibc_src_port_channel(

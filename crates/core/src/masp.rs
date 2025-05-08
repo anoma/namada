@@ -1017,6 +1017,22 @@ pub enum UnifiedPaymentAddress {
 }
 
 impl UnifiedPaymentAddress {
+    /// Generate a [`FlagCiphertext`] from this payment address.
+    ///
+    /// Returns [`None`] if the FMD public key in the
+    /// [`UnifiedPaymentAddress::V1`] variant is invalid, and a random flag
+    /// ciphertext for the [`UnifiedPaymentAddress::V0`] variant.
+    #[cfg(feature = "rand")]
+    pub fn flag<R>(&self, rng: &mut R) -> Option<FlagCiphertext>
+    where
+        R: rand_core::CryptoRng + rand_core::RngCore,
+    {
+        match self {
+            Self::V0(_) => Some(FlagCiphertext::random(rng)),
+            Self::V1(pa) => pa.to_fmd_public_key().map(|pk| pk.flag(rng)),
+        }
+    }
+
     /// Create a v0 payment address.
     pub fn v0_from_zip32(
         vk: ExtendedViewingKey,
