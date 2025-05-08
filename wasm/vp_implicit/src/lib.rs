@@ -113,7 +113,9 @@ fn validate_tx(
                     cmt,
                     &addr,
                 )?,
-            Action::Masp(MaspAction::MaspSectionRef(_)) => (),
+            Action::Masp(
+                MaspAction::MaspSectionRef(_) | MaspAction::FmdSectionRef(_),
+            ) => (),
             Action::IbcShielding => (),
         }
     }

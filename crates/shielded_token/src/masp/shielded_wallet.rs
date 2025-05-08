@@ -32,7 +32,7 @@ use namada_core::collections::{HashMap, HashSet};
 use namada_core::control_flow;
 use namada_core::masp::{
     AssetData, FlagCiphertext, FmdSecretKey, MaspEpoch, TransferSource,
-    TransferTarget, UnifiedPaymentAddress, encode_asset_type,
+    TransferTarget, encode_asset_type,
 };
 use namada_core::task_env::TaskEnvironment;
 use namada_core::time::{DateTimeUtc, DurationSecs};
@@ -1775,17 +1775,9 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                             error: builder::Error::SaplingBuild(e),
                         })?;
 
-                    fmd_flags.push({
-                        match pa {
-                            UnifiedPaymentAddress::V0(_) => {
-                                FlagCiphertext::random(rng)
-                            }
-                            UnifiedPaymentAddress::V1(pa) => pa
-                                .to_fmd_public_key()
-                                .ok_or(TransferErr::InvalidFmdPublicKey)?
-                                .flag(rng),
-                        }
-                    });
+                    fmd_flags.push(
+                        pa.flag(rng).ok_or(TransferErr::InvalidFmdPublicKey)?,
+                    );
                 } else if let Some(t_addr_data) = target.t_addr_data() {
                     // If there is a transparent output
                     builder

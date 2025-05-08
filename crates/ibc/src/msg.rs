@@ -242,8 +242,8 @@ impl<Transfer: BorshSchema> BorshSchema for MsgNftTransfer<Transfer> {
 pub struct IbcShieldingData {
     /// MASP transaction forwarded over IBC.
     pub masp_tx: MaspTransaction,
-    /// Flag ciphertext to signal the owner of the new note(s).
-    pub flag_ciphertext: FlagCiphertext,
+    /// Flag ciphertexts to signal the owner(s) of the new note(s).
+    pub flag_ciphertexts: Vec<FlagCiphertext>,
 }
 
 impl From<&IbcShieldingData> for String {
@@ -279,9 +279,17 @@ impl FromStr for IbcShieldingData {
 pub fn extract_masp_tx_from_envelope(
     envelope: &MsgEnvelope,
 ) -> Option<MaspTransaction> {
+    extract_shielding_data_from_envelope(envelope)
+        .map(|IbcShieldingData { masp_tx, .. }| masp_tx)
+}
+
+/// Extract IBC shielding data from IBC envelope
+pub fn extract_shielding_data_from_envelope(
+    envelope: &MsgEnvelope,
+) -> Option<IbcShieldingData> {
     match envelope {
         MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
-            extract_masp_tx_from_packet(&msg.packet)
+            extract_shielding_data_from_packet(&msg.packet)
         }
         _ => None,
     }
@@ -306,10 +314,17 @@ pub fn decode_ibc_shielding_data(
 
 /// Extract MASP transaction from IBC packet memo
 pub fn extract_masp_tx_from_packet(packet: &Packet) -> Option<MaspTransaction> {
+    extract_shielding_data_from_packet(packet)
+        .map(|IbcShieldingData { masp_tx, .. }| masp_tx)
+}
+
+/// Extract IBC shielding data from IBC packet memo
+pub fn extract_shielding_data_from_packet(
+    packet: &Packet,
+) -> Option<IbcShieldingData> {
     let memo = extract_memo_from_packet(packet, &packet.port_id_on_b)?;
 
     decode_ibc_shielding_data(memo)
-        .map(|IbcShieldingData { masp_tx, .. }| masp_tx)
 }
 
 fn extract_memo_from_packet(
@@ -376,11 +391,11 @@ pub fn extract_traces_from_recv_msg(
 /// Get IBC memo string from MASP transaction for receiving
 pub fn convert_masp_tx_to_ibc_memo(
     masp_tx: MaspTransaction,
-    flag_ciphertext: FlagCiphertext,
+    flag_ciphertexts: Vec<FlagCiphertext>,
 ) -> String {
     IbcShieldingData {
         masp_tx,
-        flag_ciphertext,
+        flag_ciphertexts,
     }
     .into()
 }

@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use namada_core::arith::CheckedSub;
 use namada_core::collections::HashSet;
+use namada_core::hash::Hash;
 use namada_core::masp::encode_asset_type;
 use namada_core::masp_primitives::transaction::Transaction;
 use namada_core::token::MaspDigitPos;
@@ -46,6 +47,7 @@ where
         apply_shielded_transfer(
             env,
             shielded_data.masp_tx_id,
+            shielded_data.flag_ciphertext_sechash,
             debited_accounts,
             tokens,
             tx_data,
@@ -157,6 +159,7 @@ where
 pub fn apply_shielded_transfer<ENV>(
     env: &mut ENV,
     masp_section_ref: MaspTxId,
+    fmd_flags_section_ref: Hash,
     debited_accounts: HashSet<Address>,
     tokens: HashSet<Address>,
     tx_data: &BatchedTx,
@@ -179,6 +182,9 @@ where
 
     env.push_action(Action::Masp(MaspAction::MaspSectionRef(
         masp_section_ref,
+    )))?;
+    env.push_action(Action::Masp(MaspAction::FmdSectionRef(
+        fmd_flags_section_ref,
     )))?;
     update_undated_balances(env, &shielded, tokens)?;
     // Extract the debited accounts for the masp part of the transfer and

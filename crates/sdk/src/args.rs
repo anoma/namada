@@ -718,7 +718,7 @@ impl TxOsmosisSwap<SdkTypes> {
                     ),
                 };
 
-                let shielding_tx = tx::gen_ibc_shielding_transfer(
+                let (shielding_tx, fmd_flags) = tx::gen_ibc_shielding_transfer(
                     ctx,
                     GenIbcShieldingTransfer {
                         query: Query {
@@ -754,8 +754,7 @@ impl TxOsmosisSwap<SdkTypes> {
                             shielding_data: StringEncoded::new(
                                 IbcShieldingData {
                                     masp_tx: shielding_tx,
-                                    // TODO: add actual flag ciphertext here
-                                    flag_ciphertext: Default::default(),
+                                    flag_ciphertexts: fmd_flags,
                                 },
                             ),
                             shielded_amount: amount_to_shield,

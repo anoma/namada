@@ -1935,7 +1935,8 @@ pub async fn gen_ibc_shielding_transfer(
 ) -> Result<(), error::Error> {
     let output_folder = args.output_folder.clone();
 
-    if let Some(masp_tx) = tx::gen_ibc_shielding_transfer(context, args).await?
+    if let Some((masp_tx, fmd_flags)) =
+        tx::gen_ibc_shielding_transfer(context, args).await?
     {
         let tx_id = masp_tx.txid().to_string();
         let filename = format!("ibc_masp_tx_{}.memo", tx_id);
@@ -1945,11 +1946,7 @@ pub async fn gen_ibc_shielding_transfer(
         };
         let mut out = File::create(&output_path)
             .expect("Creating a new file for IBC MASP transaction failed.");
-        let bytes = convert_masp_tx_to_ibc_memo(
-            masp_tx,
-            // TODO: add actual flag ciphertext
-            Default::default(),
-        );
+        let bytes = convert_masp_tx_to_ibc_memo(masp_tx, fmd_flags);
         out.write_all(bytes.as_bytes())
             .expect("Writing IBC MASP transaction file failed.");
         println!(
