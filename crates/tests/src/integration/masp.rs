@@ -7643,7 +7643,12 @@ fn tricky_masp_txs() -> Result<()> {
     let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
-    let (mut node, _services) = setup::setup()?;
+    let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
+        // Set epochs per year lower to reduce the chance of an epoch change
+        // before the transactions in this test are applied.
+        genesis.parameters.parameters.epochs_per_year = 15_768_000;
+        genesis
+    })?;
     _ = node.next_masp_epoch();
     let tempdir = tempfile::tempdir().unwrap();
 
