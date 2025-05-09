@@ -145,8 +145,6 @@ pub trait Namada: NamadaIo {
             expiration: Default::default(),
             chain_id: None,
             signing_keys: vec![],
-            signatures: vec![],
-            wrapper_signature: None,
             tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
             password: None,
             memo: None,
@@ -174,13 +172,11 @@ pub trait Namada: NamadaIo {
         &self,
         data: Vec<args::TxShieldedTransferData>,
         gas_spending_key: Option<PseudoExtendedKey>,
-        disposable_signing_key: bool,
     ) -> args::TxShieldedTransfer {
         args::TxShieldedTransfer {
             data,
             gas_spending_key,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
-            disposable_signing_key,
             tx: self.tx_builder(),
         }
     }
@@ -207,13 +203,11 @@ pub trait Namada: NamadaIo {
         source: PseudoExtendedKey,
         data: Vec<args::TxUnshieldingTransferData>,
         gas_spending_key: Option<PseudoExtendedKey>,
-        disposable_signing_key: bool,
     ) -> args::TxUnshieldingTransfer {
         args::TxUnshieldingTransfer {
             source,
             data,
             gas_spending_key,
-            disposable_signing_key,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
         }
@@ -303,7 +297,6 @@ pub trait Namada: NamadaIo {
         token: Address,
         amount: InputAmount,
         channel_id: ChannelId,
-        disposable_signing_key: bool,
     ) -> args::TxIbcTransfer {
         args::TxIbcTransfer {
             source,
@@ -311,7 +304,6 @@ pub trait Namada: NamadaIo {
             token,
             amount,
             channel_id,
-            disposable_signing_key,
             port_id: PortId::from_str("transfer").unwrap(),
             timeout_height: None,
             timeout_sec_offset: None,
@@ -599,6 +591,8 @@ pub trait Namada: NamadaIo {
             code_path: None,
             data_path: None,
             serialized_tx: None,
+            signatures: vec![],
+            wrapper_signature: None,
         }
     }
 
@@ -724,8 +718,6 @@ where
                 expiration: Default::default(),
                 chain_id: None,
                 signing_keys: vec![],
-                signatures: vec![],
-                wrapper_signature: None,
                 tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
                 password: None,
                 memo: None,
