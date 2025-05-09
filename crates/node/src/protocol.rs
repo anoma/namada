@@ -861,8 +861,8 @@ where
                         "Not a MASP transaction.".to_string()
                     } else {
                         format!(
-                            "Some VPs rejected it: {:#?}",
-                            result.vps_result.rejected_vps
+                            "Some VPs rejected it: {:?}",
+                            result.vps_result.errors
                         )
                     };
                     tracing::error!(error_msg);
