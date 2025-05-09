@@ -340,10 +340,7 @@ pub async fn build_reveal_pk(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
         validate_transparent_fee(context, args, fee_payer).await?;
 
@@ -713,10 +710,7 @@ pub async fn build_change_consensus_key(
     )
     .await?;
 
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _updated_balance) =
         validate_transparent_fee(context, tx_args, fee_payer).await?;
 
@@ -755,10 +749,7 @@ pub async fn build_validator_commission_change(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
         validate_transparent_fee(context, tx_args, fee_payer).await?;
 
@@ -903,10 +894,7 @@ pub async fn build_validator_metadata_change(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
         validate_transparent_fee(context, tx_args, fee_payer).await?;
 
@@ -1134,10 +1122,7 @@ pub async fn build_update_steward_commission(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
         validate_transparent_fee(context, tx_args, fee_payer).await?;
 
@@ -1208,10 +1193,7 @@ pub async fn build_resign_steward(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
         validate_transparent_fee(context, tx_args, fee_payer).await?;
 
@@ -1262,10 +1244,7 @@ pub async fn build_unjail_validator(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
         validate_transparent_fee(context, tx_args, fee_payer).await?;
 
@@ -1372,10 +1351,7 @@ pub async fn build_deactivate_validator(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
         validate_transparent_fee(context, tx_args, fee_payer).await?;
 
@@ -1453,10 +1429,7 @@ pub async fn build_reactivate_validator(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
         validate_transparent_fee(context, tx_args, fee_payer).await?;
 
@@ -1686,10 +1659,7 @@ pub async fn build_redelegation(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
         validate_transparent_fee(context, tx_args, fee_payer).await?;
 
@@ -1736,10 +1706,7 @@ pub async fn build_withdraw(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
         validate_transparent_fee(context, tx_args, fee_payer).await?;
 
@@ -1829,10 +1796,7 @@ pub async fn build_claim_rewards(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
         validate_transparent_fee(context, tx_args, fee_payer).await?;
 
@@ -1939,10 +1903,7 @@ pub async fn build_unbond(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
         validate_transparent_fee(context, tx_args, fee_payer).await?;
 
@@ -2180,10 +2141,7 @@ pub async fn build_bond(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, updated_balance) =
         validate_transparent_fee(context, tx_args, fee_payer).await?;
 
@@ -2251,10 +2209,7 @@ pub async fn build_default_proposal(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _updated_balance) =
         validate_transparent_fee(context, tx, fee_payer).await?;
 
@@ -2318,10 +2273,7 @@ pub async fn build_vote_proposal(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
         validate_transparent_fee(context, tx, fee_payer).await?;
 
@@ -2634,10 +2586,7 @@ pub async fn build_become_validator(
     )
     .await?;
 
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _updated_balance) =
         validate_transparent_fee(context, tx_args, fee_payer).await?;
 
@@ -2678,10 +2627,7 @@ pub async fn build_pgf_funding_proposal(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _updated_balance) =
         validate_transparent_fee(context, tx, fee_payer).await?;
 
@@ -2731,10 +2677,7 @@ pub async fn build_pgf_stewards_proposal(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _updated_balance) =
         validate_transparent_fee(context, tx, fee_payer).await?;
 
@@ -2790,10 +2733,7 @@ pub async fn build_ibc_transfer(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_per_gas_unit, updated_balance) =
         if let TransferSource::ExtendedKey(_) = args.source {
             // MASP fee payment
@@ -3030,13 +2970,7 @@ pub async fn build_ibc_transfer(
         Some(args.tx_code_path.to_string_lossy().into_owned()),
     )
     .add_serialized_data(data);
-
-    let (fee_payer, _) = signing_data
-        .fee_payer
-        .as_ref()
-        .left()
-        .ok_or_else(|| Error::Other("Missing gas payer argument".to_string()))?
-        .to_owned();
+    let fee_payer = signing_data.fee_payer_or_err()?.to_owned();
     prepare_tx(&args.tx, &mut tx, fee_per_gas_unit, fee_payer).await?;
 
     Ok((tx, signing_data, shielded_tx_epoch))
@@ -3207,10 +3141,7 @@ pub async fn build_transparent_transfer<N: Namada>(
         .await?;
 
         // Transparent fee payment
-        let (fee_payer, _) =
-            signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-                Error::Other("Missing gas payer argument".to_string())
-            })?;
+        let fee_payer = signing_data.fee_payer_or_err()?;
         let (fee_amount, updated_balance) =
             validate_transparent_fee(context, &args.tx, fee_payer)
                 .await
@@ -3270,10 +3201,7 @@ pub async fn build_transparent_transfer<N: Namada>(
             .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
     }
 
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let tx = build(
         context,
         &args.tx,
@@ -3332,10 +3260,7 @@ pub async fn build_shielded_transfer<N: Namada>(
     // Construct the tx data with a placeholder shielded section hash
     let mut data = token::Transfer::default();
 
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     // Add masp fee payment if necessary
     let masp_fee_data = get_masp_fee_payment_amount(
         context,
@@ -3369,6 +3294,7 @@ pub async fn build_shielded_transfer<N: Namada>(
     .await?
     .expect("Shielded transfer must have shielded parts");
 
+    let fee_payer = signing_data.fee_payer_or_err()?.to_owned();
     let add_shielded_parts = |tx: &mut Tx, data: &mut token::Transfer| {
         // Add the MASP Transaction and its Builder to facilitate validation
         let (
@@ -3399,10 +3325,6 @@ pub async fn build_shielded_transfer<N: Namada>(
         Ok(())
     };
 
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
     let tx = build(
         context,
         &args.tx,
@@ -3410,7 +3332,7 @@ pub async fn build_shielded_transfer<N: Namada>(
         data,
         add_shielded_parts,
         fee_per_gas_unit,
-        fee_payer,
+        &fee_payer,
     )
     .await?;
     Ok((tx, signing_data))
@@ -3480,10 +3402,7 @@ pub async fn build_shielding_transfer<N: Namada>(
     .await?;
 
     // Transparent fee payment
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, updated_balance) =
         validate_transparent_fee(context, &args.tx, fee_payer)
             .await
@@ -3553,6 +3472,7 @@ pub async fn build_shielding_transfer<N: Namada>(
     .expect("Shielding transfer must have shielded parts");
     let shielded_tx_epoch = shielded_parts.0.epoch;
 
+    let fee_payer = signing_data.fee_payer_or_err()?.to_owned();
     let add_shielded_parts = |tx: &mut Tx, data: &mut token::Transfer| {
         // Add the MASP Transaction and its Builder to facilitate validation
         let (
@@ -3583,10 +3503,6 @@ pub async fn build_shielding_transfer<N: Namada>(
         Ok(())
     };
 
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
     let tx = build(
         context,
         &args.tx,
@@ -3594,7 +3510,7 @@ pub async fn build_shielding_transfer<N: Namada>(
         data,
         add_shielded_parts,
         fee_amount,
-        fee_payer,
+        &fee_payer,
     )
     .await?;
     Ok((tx, signing_data, shielded_tx_epoch))
@@ -3652,10 +3568,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
     }
 
     // Add masp fee payment if necessary
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let masp_fee_data = get_masp_fee_payment_amount(
         context,
         &args.tx,
@@ -3687,6 +3600,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
     .await?
     .expect("Shielding transfer must have shielded parts");
 
+    let fee_payer = signing_data.fee_payer_or_err()?.to_owned();
     let add_shielded_parts = |tx: &mut Tx, data: &mut token::Transfer| {
         // Add the MASP Transaction and its Builder to facilitate validation
         let (
@@ -3717,10 +3631,6 @@ pub async fn build_unshielding_transfer<N: Namada>(
         Ok(())
     };
 
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
     let tx = build(
         context,
         &args.tx,
@@ -3728,7 +3638,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         data,
         add_shielded_parts,
         fee_per_gas_unit,
-        fee_payer,
+        &fee_payer,
     )
     .await?;
     Ok((tx, signing_data))
@@ -3800,10 +3710,7 @@ pub async fn build_init_account(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
         validate_transparent_fee(context, tx_args, fee_payer).await?;
 
@@ -3894,10 +3801,7 @@ pub async fn build_update_account(
         None,
     )
     .await?;
-    let (fee_payer, _) =
-        signing_data.fee_payer.as_ref().left().ok_or_else(|| {
-            Error::Other("Missing gas payer argument".to_string())
-        })?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
         validate_transparent_fee(context, tx_args, fee_payer).await?;
 

@@ -86,6 +86,18 @@ pub struct SigningTxData {
     pub signatures: Vec<Vec<u8>>,
 }
 
+impl SigningTxData {
+    /// Returns the fee payer's public key if provided, otherwise returns an
+    /// error.
+    pub fn fee_payer_or_err(&self) -> Result<&common::PublicKey, Error> {
+        self.fee_payer
+            .as_ref()
+            .left()
+            .map(|(fee_payer, _)| fee_payer)
+            .ok_or_else(|| Error::Other("Missing gas payer".to_string()))
+    }
+}
+
 /// Find the public key for the given address and try to load the keypair
 /// for it from the wallet.
 ///
