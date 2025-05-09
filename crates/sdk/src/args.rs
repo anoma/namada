@@ -6,6 +6,7 @@ use std::str::FromStr;
 use std::time::Duration as StdDuration;
 
 use either::Either;
+use kassandra::IndexList;
 use masp_primitives::transaction::components::sapling::builder::BuildParams;
 use masp_primitives::zip32::PseudoExtendedKey;
 use namada_core::address::{Address, MASP};
@@ -2497,9 +2498,9 @@ pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     /// Height to sync up to. Defaults to most recent
     pub last_query_height: Option<BlockHeight>,
     /// Spending keys used to determine note ownership
-    pub spending_keys: Vec<C::DatedSpendingKey>,
+    pub spending_keys: Vec<(C::DatedSpendingKey, Option<IndexList>)>,
     /// Viewing keys used to determine note ownership
-    pub viewing_keys: Vec<C::DatedViewingKey>,
+    pub viewing_keys: Vec<(C::DatedViewingKey, Option<IndexList>)>,
     /// Address of a `namada-masp-indexer` live instance
     ///
     /// If present, the shielded sync will be performed

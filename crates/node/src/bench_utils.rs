@@ -1227,7 +1227,7 @@ impl BenchShieldedCtx {
                     ledger_address: FromStr::from_str("http://127.0.0.1:1337")
                         .unwrap(),
                     last_query_height: None,
-                    spending_keys: vec![spending_key],
+                    spending_keys: vec![(spending_key, None)],
                     viewing_keys: vec![],
                     with_indexer: None,
                     wait_for_last_query_height: false,
