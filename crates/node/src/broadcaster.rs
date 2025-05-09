@@ -8,7 +8,7 @@ use tokio::sync::mpsc::UnboundedReceiver;
 use crate::tendermint_rpc::client::CompatMode;
 use crate::tendermint_rpc::{Client, HttpClient};
 
-const DEFAULT_BROADCAST_TIMEOUT: u64 = 180;
+const DEFAULT_BROADCAST_TIMEOUT: u64 = 600;
 const BROADCASTER_TIMEOUT_ENV_VAR: &str = "NAMADA_BROADCASTER_TIMEOUT_SECS";
 
 /// A service for broadcasting txs via an HTTP client.
