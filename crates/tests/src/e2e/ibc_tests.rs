@@ -2581,8 +2581,6 @@ fn transfer(
 
     if let Some(signer) = signer {
         tx_args.extend_from_slice(&["--signing-keys", signer]);
-    } else {
-        tx_args.push("--disposable-gas-payer");
     }
 
     let timeout = timeout_sec.unwrap_or_default().as_secs().to_string();

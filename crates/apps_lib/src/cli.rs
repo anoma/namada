@@ -3514,7 +3514,6 @@ pub mod args {
     );
     pub const DECRYPT: ArgFlag = flag("decrypt");
     pub const DESCRIPTION_OPT: ArgOpt<String> = arg_opt("description");
-    pub const DISPOSABLE_SIGNING_KEY: ArgFlag = flag("disposable-gas-payer");
     pub const DIVERSIFIER_INDEX: ArgOpt<DiversifierIndex> =
         arg_opt("diversifier-index");
     pub const DESTINATION_VALIDATOR: Arg<WalletAddress> =
@@ -4788,7 +4787,6 @@ pub mod args {
                 tx,
                 data,
                 gas_spending_key,
-                disposable_signing_key: self.disposable_signing_key,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4809,13 +4807,11 @@ pub mod args {
                 amount,
             }];
             let gas_spending_key = GAS_SPENDING_KEY.parse(matches);
-            let disposable_gas_payer = DISPOSABLE_SIGNING_KEY.parse(matches);
 
             Self {
                 tx,
                 data,
                 gas_spending_key,
-                disposable_signing_key: disposable_gas_payer,
                 tx_code_path,
             }
         }
@@ -4840,18 +4836,9 @@ pub mod args {
                 )
                 .arg(GAS_SPENDING_KEY.def().help(wrap!(
                     "The optional spending key that will be used for gas \
-                     payment."
+                     payment. When not provided the source spending key will \
+                     be used."
                 )))
-                .arg(
-                    DISPOSABLE_SIGNING_KEY
-                        .def()
-                        .help(wrap!(
-                            "Generates an ephemeral, disposable keypair to \
-                             sign the wrapper transaction."
-                        ))
-                        .requires(GAS_SPENDING_KEY.name)
-                        .conflicts_with(FEE_PAYER_OPT.name),
-                )
         }
     }
 
@@ -4952,7 +4939,6 @@ pub mod args {
                 tx,
                 data,
                 gas_spending_key,
-                disposable_signing_key: self.disposable_signing_key,
                 source: chain_ctx.get_cached(&self.source),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
@@ -4973,14 +4959,12 @@ pub mod args {
                 amount,
             }];
             let gas_spending_key = GAS_SPENDING_KEY.parse(matches);
-            let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
 
             Self {
                 tx,
                 source,
                 data,
                 gas_spending_key,
-                disposable_signing_key,
                 tx_code_path,
             }
         }
@@ -5005,18 +4989,9 @@ pub mod args {
                 )
                 .arg(GAS_SPENDING_KEY.def().help(wrap!(
                     "The optional spending key that will be used for gas \
-                     payment."
+                     payment. When not provided the source spending key will \
+                     be used."
                 )))
-                .arg(
-                    DISPOSABLE_SIGNING_KEY
-                        .def()
-                        .help(wrap!(
-                            "Generates an ephemeral, disposable keypair to \
-                             sign the wrapper transaction."
-                        ))
-                        .requires(GAS_SPENDING_KEY.name)
-                        .conflicts_with(FEE_PAYER_OPT.name),
-                )
         }
     }
 
@@ -5046,7 +5021,6 @@ pub mod args {
                 ibc_shielding_data: self.ibc_shielding_data,
                 ibc_memo: self.ibc_memo,
                 gas_spending_key,
-                disposable_signing_key: self.disposable_signing_key,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -5073,7 +5047,6 @@ pub mod args {
                 });
             let ibc_memo = IBC_MEMO.parse(matches);
             let gas_spending_key = GAS_SPENDING_KEY.parse(matches);
-            let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             let tx_code_path = PathBuf::from(TX_IBC_WASM);
             Self {
                 tx,
@@ -5089,7 +5062,6 @@ pub mod args {
                 ibc_shielding_data,
                 ibc_memo,
                 gas_spending_key,
-                disposable_signing_key,
                 tx_code_path,
             }
         }
@@ -5137,18 +5109,9 @@ pub mod args {
                 )
                 .arg(GAS_SPENDING_KEY.def().help(wrap!(
                     "The optional spending key that will be used for gas \
-                     payment (if this is a shielded action)."
+                     payment (if this is a shielded action).  When not \
+                     provided the source spending key will be used."
                 )))
-                .arg(
-                    DISPOSABLE_SIGNING_KEY
-                        .def()
-                        .help(wrap!(
-                            "Generates an ephemeral, disposable keypair to \
-                             sign the wrapper transaction."
-                        ))
-                        .requires(GAS_SPENDING_KEY.name)
-                        .conflicts_with(FEE_PAYER_OPT.name),
-                )
         }
     }
 
@@ -7792,7 +7755,9 @@ pub mod args {
             )
             .arg(SIGNING_KEYS.def().help(wrap!(
                 "Sign the transaction with the key for the given public key, \
-                 public key hash or alias from your wallet."
+                 public key hash or alias from your wallet. Do not provide \
+                 this argument if the source of the transaction is a shielded \
+                 address as it isn't needed and it would leak information."
             )))
             .arg(SIGNATURES.def().help(wrap!(
                 "List of file paths containing a serialized signature to be \
@@ -7817,9 +7782,9 @@ pub mod args {
                     .help(wrap!(
                         "The implicit address of the gas payer. It defaults \
                          to the address associated to the first key passed to \
-                         --signing-keys. If the specific transaction supports \
-                         --disposable-signing-key, then this one will \
-                         overwrite this argument."
+                         --signing-keys. Do not provide this argument if you \
+                         intend to pay fees via the MASP (recommended for \
+                         transactions where the source is a shielded address)."
                     ))
                     .conflicts_with(WRAPPER_SIGNATURE_OPT.name),
             )

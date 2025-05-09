@@ -773,6 +773,7 @@ impl<T> Signed<T> {
             threshold,
             fee_payer: genesis_fee_payer_pk(),
             shielded_hash: None,
+            disposable_fee_payer: false,
         };
 
         let mut tx = self.data.tx_to_sign();

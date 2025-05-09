@@ -357,9 +357,6 @@ pub struct TxShieldedTransfer<C: NamadaTypes = SdkTypes> {
     pub data: Vec<TxShieldedTransferData<C>>,
     /// Optional additional keys for gas payment
     pub gas_spending_key: Option<C::SpendingKey>,
-    /// Generate an ephemeral signing key to be used only once to sign the
-    /// wrapper tx
-    pub disposable_signing_key: bool,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -456,9 +453,7 @@ pub struct TxUnshieldingTransfer<C: NamadaTypes = SdkTypes> {
     pub data: Vec<TxUnshieldingTransferData<C>>,
     /// Optional additional keys for gas payment
     pub gas_spending_key: Option<C::SpendingKey>,
-    /// Generate an ephemeral signing key to be used only once to sign the
-    /// wrapper tx
-    pub disposable_signing_key: bool,
+
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -840,9 +835,6 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub ibc_memo: Option<String>,
     /// Optional additional keys for gas payment
     pub gas_spending_key: Option<C::SpendingKey>,
-    /// Generate an ephemeral signing key to be used only once to sign the
-    /// wrapper tx
-    pub disposable_signing_key: bool,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }

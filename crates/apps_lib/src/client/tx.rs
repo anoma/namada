@@ -81,23 +81,6 @@ pub async fn aux_signing_data(
     )
     .await?;
 
-    if disposable_signing_key {
-        if !(args.dry_run || args.dry_run_wrapper) {
-            // Store the generated signing key to wallet in case of need
-            context.wallet().await.save().map_err(|_| {
-                error::Error::Other(
-                    "Failed to save disposable address to wallet".to_string(),
-                )
-            })?;
-        } else {
-            display_line!(
-                context.io(),
-                "Transaction dry run. The disposable address will not be \
-                 saved to wallet."
-            )
-        }
-    }
-
     Ok(signing_data)
 }
 
@@ -1261,6 +1244,16 @@ pub async fn submit_shielded_transfer(
     .await?;
     let (mut tx, signing_data) =
         args.clone().build(namada, &mut bparams).await?;
+    if !signing_data.disposable_fee_payer {
+        display_line!(
+            namada.io(),
+            "{}: {}\n",
+            "WARNING".bold().underline().yellow(),
+            "Using a transparent gas payer for a shielded transaction will \
+             most likely leak information: please consider paying the gas \
+             fees via the MASP with a disposable gas payer.",
+        );
+    }
     masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
 
     let masp_section = tx
@@ -1273,10 +1266,26 @@ pub async fn submit_shielded_transfer(
             )
         })?;
     if args.tx.dump_tx || args.tx.dump_wrapper_tx {
+        if signing_data.disposable_fee_payer {
+            display_line!(
+                namada.io(),
+                "Transaction dry run. The disposable address will not be \
+                 saved to wallet."
+            )
+        }
         tx::dump_tx(namada.io(), &args.tx, tx)?;
         pre_cache_masp_data(namada, &masp_section).await;
     } else {
+        let disposable_fee_payer = signing_data.disposable_fee_payer;
         sign(namada, &mut tx, &args.tx, signing_data).await?;
+        // Store the generated disposable signing key to wallet in case of need
+        if disposable_fee_payer {
+            namada.wallet().await.save().map_err(|_| {
+                error::Error::Other(
+                    "Failed to save disposable address to wallet".to_string(),
+                )
+            })?;
+        }
         let res = namada.submit(tx, &args.tx).await?;
         pre_cache_masp_data_on_tx_result(namada, &res, &masp_section).await;
     }
@@ -1392,6 +1401,16 @@ pub async fn submit_unshielding_transfer(
     .await?;
     let (mut tx, signing_data) =
         args.clone().build(namada, &mut bparams).await?;
+    if !signing_data.disposable_fee_payer {
+        display_line!(
+            namada.io(),
+            "{}: {}\n",
+            "WARNING".bold().underline().yellow(),
+            "Using a transparent gas payer for an unshielding transaction \
+             will most likely leak information: please consider paying the \
+             gas fees via the MASP with a disposable gas payer.",
+        );
+    }
     masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
 
     let masp_section = tx
@@ -1404,10 +1423,26 @@ pub async fn submit_unshielding_transfer(
             )
         })?;
     if args.tx.dump_tx || args.tx.dump_wrapper_tx {
+        if signing_data.disposable_fee_payer {
+            display_line!(
+                namada.io(),
+                "Transaction dry run. The disposable address will not be \
+                 saved to wallet."
+            )
+        }
         tx::dump_tx(namada.io(), &args.tx, tx)?;
         pre_cache_masp_data(namada, &masp_section).await;
     } else {
+        let disposable_fee_payer = signing_data.disposable_fee_payer;
         sign(namada, &mut tx, &args.tx, signing_data).await?;
+        // Store the generated disposable signing key to wallet in case of need
+        if disposable_fee_payer {
+            namada.wallet().await.save().map_err(|_| {
+                error::Error::Other(
+                    "Failed to save disposable address to wallet".to_string(),
+                )
+            })?;
+        }
         let res = namada.submit(tx, &args.tx).await?;
         pre_cache_masp_data_on_tx_result(namada, &res, &masp_section).await;
     }
@@ -1449,6 +1484,18 @@ where
         .build(namada, &mut bparams)
         .await
         .map_err(|e| bparams_err.unwrap_or(e))?;
+    if args.source.spending_key().is_some()
+        && !signing_data.disposable_fee_payer
+    {
+        display_line!(
+            namada.io(),
+            "{}: {}\n",
+            "WARNING".bold().underline().yellow(),
+            "Using a transparent gas payer for an unshielding ibc transaction \
+             will most likely leak information: please consider paying the \
+             gas fees via the MASP with a disposable gas payer.",
+        );
+    }
     // Any effects of a MASP build parameter generation failure would have
     // manifested during transaction building. So we discount that as a root
     // cause from now on.
@@ -1458,10 +1505,25 @@ where
         tx.sections.iter().find_map(|section| section.masp_tx());
     if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx)?;
+        if signing_data.disposable_fee_payer {
+            display_line!(
+                namada.io(),
+                "Transaction dry run. The disposable address will not be \
+                 saved to wallet."
+            )
+        }
         if let Some(masp_section) = opt_masp_section {
             pre_cache_masp_data(namada, &masp_section).await;
         }
     } else {
+        // Store the generated disposable signing key to wallet in case of need
+        if signing_data.disposable_fee_payer {
+            namada.wallet().await.save().map_err(|_| {
+                error::Error::Other(
+                    "Failed to save disposable address to wallet".to_string(),
+                )
+            })?;
+        }
         let res = batch_opt_reveal_pk_and_submit(
             namada,
             &args.tx,

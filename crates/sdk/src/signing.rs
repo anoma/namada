@@ -78,6 +78,8 @@ pub struct SigningTxData {
     pub account_public_keys_map: Option<AccountPublicKeysMap>,
     /// The public key of the fee payer
     pub fee_payer: common::PublicKey,
+    /// Flag for the generation of a disposable fee payer
+    pub disposable_fee_payer: bool,
     /// ID of the Transaction needing signing
     pub shielded_hash: Option<MaspTxId>,
 }
@@ -357,7 +359,7 @@ pub async fn aux_signing_data(
     owner: Option<Address>,
     default_signer: Option<Address>,
     extra_public_keys: Vec<common::PublicKey>,
-    disposable_signing_key: bool,
+    is_shielded_source: bool,
 ) -> Result<SigningTxData, Error> {
     let mut public_keys =
         tx_signers(context, args, default_signer.clone()).await?;
@@ -393,15 +395,16 @@ pub async fn aux_signing_data(
         ),
     };
 
-    let fee_payer = if disposable_signing_key {
-        gen_disposable_signing_key(context).await
-    } else {
-        match &args.wrapper_fee_payer {
-            Some(keypair) => keypair.clone(),
-            None => public_keys
-                .first()
-                .ok_or(TxSubmitError::InvalidFeePayer)?
-                .clone(),
+    let (fee_payer, disposable_fee_payer) = match &args.wrapper_fee_payer {
+        Some(pubkey) => (pubkey.clone(), false),
+        None => {
+            if let Some(pubkey) = public_keys.first() {
+                (pubkey.to_owned(), false)
+            } else if is_shielded_source {
+                (gen_disposable_signing_key(context).await, true)
+            } else {
+                return Err(Error::Tx(TxSubmitError::InvalidFeePayer));
+            }
         }
     };
 
@@ -412,6 +415,7 @@ pub async fn aux_signing_data(
         account_public_keys_map,
         fee_payer,
         shielded_hash: None,
+        disposable_fee_payer,
     })
 }
 
@@ -2550,6 +2554,7 @@ mod test_signing {
             account_public_keys_map: Some(Default::default()),
             fee_payer: public_key_fee.clone(),
             shielded_hash: None,
+            disposable_fee_payer: false,
         };
 
         let Error::Tx(TxSubmitError::MissingSigningKeys(1, 0)) = sign_tx(
@@ -2586,6 +2591,7 @@ mod test_signing {
             account_public_keys_map: Some(Default::default()),
             fee_payer: public_key.clone(),
             shielded_hash: None,
+            disposable_fee_payer: false,
         };
         sign_tx(
             &RwLock::new(wallet),
