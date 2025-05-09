@@ -60,7 +60,8 @@ pub fn initialize_genesis(
             max_reward_rate: Dec::from_str("0.1").unwrap(),
             kp_gain_nom: Dec::from_str("0.1").unwrap(),
             kd_gain_nom: Dec::from_str("0.1").unwrap(),
-            locked_amount_target: 1_000_000u64,
+            locked_amount_target: token::Poly::from(1_000_000u64).switch(),
+            precision: None,
         });
     }
     let templates = update_genesis(templates);

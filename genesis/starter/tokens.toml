@@ -9,3 +9,4 @@ max_reward_rate = "0.01"
 kd_gain_nom = "0.25"
 kp_gain_nom = "0.25"
 locked_amount_target = 10000
+precision = 1000
