@@ -7,6 +7,7 @@ use masp_primitives::ff::PrimeField;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
 use namada_core::borsh::BorshSerializeExt;
+use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::masp::{Precision, encode_asset_type};
 use namada_core::storage::Key;
@@ -21,8 +22,9 @@ use namada_sdk::masp_primitives::sapling;
 use namada_sdk::migrations;
 use namada_sdk::storage::DbColFam;
 use namada_shielded_token::storage_key::{
-    masp_assets_hash_key, masp_conversion_key, masp_reward_precision_key,
-    masp_scheduled_base_native_precision_key,
+    masp_assets_hash_key, masp_conversion_key, masp_kd_gain_key,
+    masp_kp_gain_key, masp_locked_amount_target_key, masp_max_reward_rate_key,
+    masp_reward_precision_key, masp_scheduled_base_native_precision_key,
     masp_scheduled_reward_precision_key,
 };
 use namada_shielded_token::{ConversionLeaf, ConversionState, MaspEpoch};
@@ -34,6 +36,20 @@ use sha2::{Digest, Sha256};
 pub type ChannelId = &'static str;
 /// Represents the base token of an IBC token
 pub type BaseToken = &'static str;
+/// Represents a Namada address in Bech32m encoding
+pub type AddressBech32m = &'static str;
+/// Represents the hash of a WASM binary
+pub type WasmHash = &'static str;
+/// Represents the bytes of a WASM binary
+pub type WasmBytes = &'static [u8];
+/// Represents a maximum reward rate
+pub type MaxRewardRate = &'static str;
+/// Represents a target locked amount
+pub type TargetLockedAmount = u64;
+/// Represents a nominal proportional gain
+pub type KpGain = &'static str;
+/// Represents a nominal derivative gain
+pub type KdGain = &'static str;
 /// The type hash of the conversion state structure in v0.31.9
 pub const OLD_CONVERSION_STATE_TYPE_HASH: &str =
     "05E2FD0BEBD54A05AAE349BBDE61F90893F09A72850EFD4F69060821EC5DE65F";
@@ -93,24 +109,41 @@ pub fn minted_balance_migration(updates: &mut Vec<migrations::DbUpdateType>) {
     ));
 }
 
+/// A convenience data structure to allow token addresses to be more readably
+/// expressed as a channel ID and base token instead of a raw Namada address.
+pub enum TokenAddress {
+    // Specify an IBC address. This can also be done more directly using the
+    // Self::Address variant.
+    Ibc(ChannelId, BaseToken),
+    // Directly specify a Namada address
+    Address(AddressBech32m),
+}
+
 /// Demonstrate how to set the shielded reward precision of IBC tokens using a
 /// migration
 pub fn shielded_reward_precision_migration(
     updates: &mut Vec<migrations::DbUpdateType>,
 ) {
-    const IBC_TOKENS: [(ChannelId, BaseToken, Precision); 6] = [
-        ("channel-1", "uosmo", 1000u128),
-        ("channel-2", "uatom", 1000u128),
-        ("channel-3", "utia", 1000u128),
-        ("channel-0", "stuosmo", 1000u128),
-        ("channel-0", "stuatom", 1000u128),
-        ("channel-0", "stutia", 1000u128),
+    const TOKENS: [(TokenAddress, Precision); 6] = [
+        (TokenAddress::Ibc("channel-1", "uosmo"), 1000u128),
+        (TokenAddress::Ibc("channel-2", "uatom"), 1000u128),
+        (TokenAddress::Ibc("channel-3", "utia"), 1000u128),
+        (TokenAddress::Ibc("channel-0", "stuosmo"), 1000u128),
+        (TokenAddress::Ibc("channel-0", "stuatom"), 1000u128),
+        (TokenAddress::Ibc("channel-0", "stutia"), 1000u128),
     ];
 
     // Set IBC token shielded reward precisions
-    for (channel_id, base_token, precision) in IBC_TOKENS {
-        let ibc_denom = format!("transfer/{channel_id}/{base_token}");
-        let token_address = ibc_token(&ibc_denom).clone();
+    for (token_address, precision) in TOKENS {
+        // Compute the Namada address
+        let token_address = match token_address {
+            TokenAddress::Ibc(channel_id, base_token) => {
+                let ibc_denom = format!("transfer/{channel_id}/{base_token}");
+                ibc_token(&ibc_denom).clone()
+            }
+            TokenAddress::Address(addr) => Address::from_str(addr)
+                .expect("unable to construct token address"),
+        };
 
         // The key holding the shielded reward precision of current token
         let shielded_token_reward_precision_key =
@@ -125,51 +158,63 @@ pub fn shielded_reward_precision_migration(
     }
 }
 
-/// A convenience data structure to allow token addresses to be more readably
-/// expressed as a channel ID and base token instead of a raw Namada address.
-pub enum TokenAddress {
-    // Specify an IBC address. This can also be done more directly using the
-    // Self::Address variant.
-    Ibc(ChannelId, BaseToken),
-    // Directly specify a Namada address
-    Address(Address),
-}
-
 /// Demonstrate clearing MASP rewards for the given IBC tokens by overwriting
 /// their allowed conversions with conversions that do not contain rewards.
 pub fn shielded_reward_reset_migration(
     updates: &mut Vec<migrations::DbUpdateType>,
 ) {
     // The address of the native token. This is what rewards are denominated in.
-    const NATIVE_TOKEN_BECH32M: &str =
+    const NATIVE_TOKEN_BECH32M: AddressBech32m =
         "tnam1qxgfw7myv4dh0qna4hq0xdg6lx77fzl7dcem8h7e";
     let native_token = Address::from_str(NATIVE_TOKEN_BECH32M)
         .expect("unable to construct native token address");
     // The MASP epoch in which this migration will be applied. This number
     // controls the number of epochs of conversions created.
     const TARGET_MASP_EPOCH: MaspEpoch = MaspEpoch::new(2000);
-    // The denomination of the targetted token. Since all tokens here are IBC
-    // tokens, this is 0.
-    const DENOMINATION: Denomination = Denomination(0u8);
     // The tokens whose rewarrds will be reset.
-    const TOKENS: [(TokenAddress, Precision); 6] = [
-        (TokenAddress::Ibc("channel-1", "uosmo"), 1000u128),
-        (TokenAddress::Ibc("channel-2", "uatom"), 1000u128),
-        (TokenAddress::Ibc("channel-3", "utia"), 1000u128),
-        (TokenAddress::Ibc("channel-0", "stuosmo"), 1000u128),
-        (TokenAddress::Ibc("channel-0", "stuatom"), 1000u128),
-        (TokenAddress::Ibc("channel-0", "stutia"), 1000u128),
+    const TOKENS: [(TokenAddress, Denomination, Precision); 6] = [
+        (
+            TokenAddress::Ibc("channel-1", "uosmo"),
+            Denomination(0u8),
+            1000u128,
+        ),
+        (
+            TokenAddress::Ibc("channel-2", "uatom"),
+            Denomination(0u8),
+            1000u128,
+        ),
+        (
+            TokenAddress::Ibc("channel-3", "utia"),
+            Denomination(0u8),
+            1000u128,
+        ),
+        (
+            TokenAddress::Ibc("channel-0", "stuosmo"),
+            Denomination(0u8),
+            1000u128,
+        ),
+        (
+            TokenAddress::Ibc("channel-0", "stuatom"),
+            Denomination(0u8),
+            1000u128,
+        ),
+        (
+            TokenAddress::Ibc("channel-0", "stutia"),
+            Denomination(0u8),
+            1000u128,
+        ),
     ];
 
     // Reset the allowed conversions for the above tokens
-    for (token_address, precision) in TOKENS {
+    for (token_address, denomination, precision) in TOKENS {
         // Compute the Namada address
         let token_address = match token_address {
             TokenAddress::Ibc(channel_id, base_token) => {
                 let ibc_denom = format!("transfer/{channel_id}/{base_token}");
                 ibc_token(&ibc_denom).clone()
             }
-            TokenAddress::Address(addr) => addr,
+            TokenAddress::Address(addr) => Address::from_str(addr)
+                .expect("unable to construct token address"),
         };
         // Erase the TOK rewards that have been distributed so far
         let mut asset_types = BTreeMap::new();
@@ -180,7 +225,7 @@ pub fn shielded_reward_reset_migration(
             *asset_types.entry((epoch, digit)).or_insert_with(|| {
                 encode_asset_type(
                     token_address.clone(),
-                    DENOMINATION,
+                    denomination,
                     digit,
                     Some(epoch),
                 )
@@ -248,7 +293,7 @@ pub fn shielded_reward_reset_migration(
                 // TOK[ep, digit]
                 let asset_type = encode_asset_type(
                     token_address.clone(),
-                    DENOMINATION,
+                    denomination,
                     digit,
                     Some(epoch),
                 )
@@ -269,56 +314,60 @@ pub fn shielded_reward_reset_migration(
 /// Demonstrate replacing the entire conversion state with a new state that does
 /// not contain rewards.
 pub fn conversion_state_migration(updates: &mut Vec<migrations::DbUpdateType>) {
-    // Valid precisions must be in the intersection of i128 and u128
-    pub type Precision = u128;
-
     // The MASP epoch in which this migration will be applied. This number
     // controls the number of epochs of conversions created.
     const TARGET_MASP_EPOCH: MaspEpoch = MaspEpoch::new(4);
     // Precision to use for the native token
     const NATIVE_PRECISION: Precision = 1000;
     // The tokens whose rewarrds will be reset.
-    let tokens: [(Address, Denomination, Precision); 7] = [
+    const TOKENS: [(TokenAddress, Denomination, Precision); 7] = [
         (
-            Address::from_str("tnam1qyvfwdkz8zgs9n3qn9xhp8scyf8crrxwuq26r6gy")
-                .unwrap(),
-            6.into(),
+            TokenAddress::Address(
+                "tnam1qyvfwdkz8zgs9n3qn9xhp8scyf8crrxwuq26r6gy",
+            ),
+            Denomination(6),
             1000u128,
         ),
         (
-            Address::from_str("tnam1qy8qgxlcteehlk70sn8wx2pdlavtayp38vvrnkhq")
-                .unwrap(),
-            8.into(),
+            TokenAddress::Address(
+                "tnam1qy8qgxlcteehlk70sn8wx2pdlavtayp38vvrnkhq",
+            ),
+            Denomination(8),
             10000u128,
         ),
         (
-            Address::from_str("tnam1qyfl072lhaazfj05m7ydz8cr57zdygk375jxjfwx")
-                .unwrap(),
-            10.into(),
+            TokenAddress::Address(
+                "tnam1qyfl072lhaazfj05m7ydz8cr57zdygk375jxjfwx",
+            ),
+            Denomination(10),
             10000000u128,
         ),
         (
-            Address::from_str("tnam1qxvnvm2t9xpceu8rup0n6espxyj2ke36yv4dw6q5")
-                .unwrap(),
-            18.into(),
+            TokenAddress::Address(
+                "tnam1qxvnvm2t9xpceu8rup0n6espxyj2ke36yv4dw6q5",
+            ),
+            Denomination(18),
             10000u128,
         ),
         (
-            Address::from_str("tnam1qyx93z5ma43jjmvl0xhwz4rzn05t697f3vfv8yuj")
-                .unwrap(),
-            6.into(),
+            TokenAddress::Address(
+                "tnam1qyx93z5ma43jjmvl0xhwz4rzn05t697f3vfv8yuj",
+            ),
+            Denomination(6),
             1000u128,
         ),
         (
-            Address::from_str("tnam1qxgfw7myv4dh0qna4hq0xdg6lx77fzl7dcem8h7e")
-                .unwrap(),
-            6.into(),
+            TokenAddress::Address(
+                "tnam1qxgfw7myv4dh0qna4hq0xdg6lx77fzl7dcem8h7e",
+            ),
+            Denomination(6),
             NATIVE_PRECISION,
         ),
         (
-            Address::from_str("tnam1q9f5yynt5qfxe28ae78xxp7wcgj50fn4syetyrj6")
-                .unwrap(),
-            6.into(),
+            TokenAddress::Address(
+                "tnam1q9f5yynt5qfxe28ae78xxp7wcgj50fn4syetyrj6",
+            ),
+            Denomination(6),
             1000u128,
         ),
     ];
@@ -326,7 +375,16 @@ pub fn conversion_state_migration(updates: &mut Vec<migrations::DbUpdateType>) {
     let mut assets = BTreeMap::new();
     let mut conv_notes = Vec::new();
     // Reset the allowed conversions for the above tokens
-    for (token_address, denomination, precision) in tokens {
+    for (token_address, denomination, precision) in TOKENS {
+        // Compute the Namada address
+        let token_address = match token_address {
+            TokenAddress::Ibc(channel_id, base_token) => {
+                let ibc_denom = format!("transfer/{channel_id}/{base_token}");
+                ibc_token(&ibc_denom).clone()
+            }
+            TokenAddress::Address(addr) => Address::from_str(addr)
+                .expect("unable to construct token address"),
+        };
         // Erase the TOK rewards that have been distributed so far
         let mut asset_types = BTreeMap::new();
         let mut precision_toks = BTreeMap::new();
@@ -450,25 +508,26 @@ pub fn wasm_migration(updates: &mut Vec<migrations::DbUpdateType>) {
     // wasm_updates[x].0) The WASM hash that is being replaced
     // wasm_updates[x].1) The name of WASM being updated
     // wasm_updates[x].2) The bytes of the new WASM code
-    let wasm_updates: Vec<(&str, &str, &[u8])> =
-        vec![
+    const WASM_UPDATES: [(WasmHash, &str, WasmBytes); 2] = [
         (
             "83afcbf97c35188991ae2e73db2f48cb8d019c4295fe5323d9c3dfebcd5dbec0",
             "tx_transfer.wasm",
-            //include_bytes!("tx_transfer.5c7e44e61c00df351fa7c497cd2e186d71909f1a18db0c8d362dff36057e0fbf.wasm"),
+            // The following bytes are just an example. Usually the following
+            // line will be: include_bytes!("<path to Wasm binary>"),
             &[0xDE, 0xAD, 0xBE, 0xEF],
         ),
         (
             "6ff3c2a2ebc65061a9b89abd15fb37851ca77e162b42b7989889bd537e802b09",
             "tx_ibc.wasm",
-            //include_bytes!("tx_ibc.ae9b900edd6437461addd1fe1c723c4b1a8ac8d2fce30e1e4c417ef34f299f73.wasm"),
+            // The following bytes are just an example. Usually the following
+            // line will be: include_bytes!("<path to Wasm binary>"),
             &[0xDE, 0xAD, 0xBE, 0xEF],
         ),
     ];
 
     // Update the tx allowlist parameter
     let tx_allowlist_key = get_tx_allowlist_storage_key();
-    let tx_allowlist: Vec<&str> = vec![
+    const TX_ALLOWLIST: [WasmHash; 24] = [
         "ec357c39e05677da3d8da359fee6e3a8b9012dd1a7e7def51f4e484132f68c77",
         "a324288bdc7a7d3cb15ca5ef3ebb04b9121b1d5804478dabd1ef4533459d7069",
         "6012fff1d191a545d6f7960f1dd9b2df5fcdfc9dbb8dfd22bb1458f3983144b9",
@@ -494,14 +553,14 @@ pub fn wasm_migration(updates: &mut Vec<migrations::DbUpdateType>) {
         "c4357f5548c43086e56f22ac2e951ee2500368d8ed2479c0d0046b6e59f8a8e5",
         "b4261ecafcfb0254efb39165311268d99bb5aa85ac47514913317d20f1791790",
     ];
-    let mut tx_allowlist: Vec<String> = tx_allowlist
+    let mut tx_allowlist: Vec<String> = TX_ALLOWLIST
         .into_iter()
         .map(|hash_str| {
             Hash::from_str(hash_str).unwrap().to_string().to_lowercase()
         })
         .collect();
     // Replace the targetted old hashes
-    for (old_code_hash, name, code) in wasm_updates {
+    for (old_code_hash, name, code) in WASM_UPDATES {
         let old_code_hash = Hash::from_str(old_code_hash).unwrap();
         let new_code_hash = Hash(*Sha256::digest(code).as_ref());
         let new_code_len = u64::try_from(code.len()).unwrap();
@@ -563,6 +622,118 @@ pub fn wasm_migration(updates: &mut Vec<migrations::DbUpdateType>) {
     });
 }
 
+/// Demonstrate how to set the shielded reward parameters of IBC tokens using a
+/// migration
+pub fn shielded_reward_parameters_migration(
+    updates: &mut Vec<migrations::DbUpdateType>,
+) {
+    const TOKENS: [(
+        Denomination,
+        TokenAddress,
+        MaxRewardRate,
+        TargetLockedAmount,
+        KpGain,
+        KdGain,
+    ); 6] = [
+        (
+            Denomination(0),
+            TokenAddress::Ibc("channel-1", "uosmo"),
+            "0.01",
+            1_000_000,
+            "120000",
+            "120000",
+        ),
+        (
+            Denomination(0),
+            TokenAddress::Ibc("channel-2", "uatom"),
+            "0.01",
+            1_000_000,
+            "120000",
+            "120000",
+        ),
+        (
+            Denomination(0),
+            TokenAddress::Ibc("channel-3", "utia"),
+            "0.01",
+            1_000_000,
+            "120000",
+            "120000",
+        ),
+        (
+            Denomination(0),
+            TokenAddress::Ibc("channel-0", "stuosmo"),
+            "0.01",
+            1_000_000,
+            "120000",
+            "120000",
+        ),
+        (
+            Denomination(0),
+            TokenAddress::Ibc("channel-0", "stuatom"),
+            "0.01",
+            1_000_000,
+            "120000",
+            "120000",
+        ),
+        (
+            Denomination(0),
+            TokenAddress::Ibc("channel-0", "stutia"),
+            "0.01",
+            1_000_000,
+            "120000",
+            "120000",
+        ),
+    ];
+
+    // Set IBC token shielded reward parameters
+    for (denomination, token_addr, max_reward, lock_target, kp, kd) in TOKENS {
+        // Compute the Namada address
+        let token_address = match token_addr {
+            TokenAddress::Ibc(channel_id, base_token) => {
+                let ibc_denom = format!("transfer/{channel_id}/{base_token}");
+                ibc_token(&ibc_denom).clone()
+            }
+            TokenAddress::Address(addr) => Address::from_str(addr)
+                .expect("unable to construct token address"),
+        };
+
+        // The keys holding the shielded reward parameters of current token
+        let shielded_token_max_rewards_key =
+            masp_max_reward_rate_key::<Store<()>>(&token_address);
+        let shielded_token_target_locked_amount_key =
+            masp_locked_amount_target_key::<Store<()>>(&token_address);
+        let shielded_token_kp_gain_key =
+            masp_kp_gain_key::<Store<()>>(&token_address);
+        let shielded_token_kd_gain_key =
+            masp_kd_gain_key::<Store<()>>(&token_address);
+
+        updates.push(migrations::DbUpdateType::Add {
+            key: shielded_token_max_rewards_key,
+            cf: DbColFam::SUBSPACE,
+            value: Dec::from_str(max_reward).unwrap().into(),
+            force: false,
+        });
+        updates.push(migrations::DbUpdateType::Add {
+            key: shielded_token_target_locked_amount_key,
+            cf: DbColFam::SUBSPACE,
+            value: Amount::from_uint(lock_target, denomination).unwrap().into(),
+            force: false,
+        });
+        updates.push(migrations::DbUpdateType::Add {
+            key: shielded_token_kp_gain_key,
+            cf: DbColFam::SUBSPACE,
+            value: Dec::from_str(kp).unwrap().into(),
+            force: false,
+        });
+        updates.push(migrations::DbUpdateType::Add {
+            key: shielded_token_kd_gain_key,
+            cf: DbColFam::SUBSPACE,
+            value: Dec::from_str(kd).unwrap().into(),
+            force: false,
+        });
+    }
+}
+
 /// Generate various migrations
 pub fn main() {
     // Write an example migration that updates minted balances
@@ -614,6 +785,15 @@ pub fn main() {
     std::fs::write(
         "pre_phase4_migration.json",
         serde_json::to_string(&pre_phase4_changes).unwrap(),
+    )
+    .unwrap();
+    // Write an example migration that sets shielded reward parameters
+    let mut reward_parameter_changes =
+        migrations::DbChanges { changes: vec![] };
+    shielded_reward_parameters_migration(&mut reward_parameter_changes.changes);
+    std::fs::write(
+        "reward_parameters_migration.json",
+        serde_json::to_string(&reward_parameter_changes).unwrap(),
     )
     .unwrap();
 }
