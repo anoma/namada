@@ -751,7 +751,7 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
                 "--node",
                 RPC,
                 "--gas-limit",
-                "65000",
+                "66000",
             ]),
         )
     });
@@ -6886,7 +6886,7 @@ fn masp_batch() -> Result<()> {
                     "--amount",
                     "1000",
                     "--gas-limit",
-                    "60000",
+                    "62000",
                     "--gas-payer",
                     cooper_alias.as_ref(),
                     "--output-folder-path",
@@ -7142,7 +7142,7 @@ fn masp_atomic_batch() -> Result<()> {
                     "--amount",
                     "1000",
                     "--gas-limit",
-                    "60000",
+                    "61000",
                     "--gas-payer",
                     cooper_alias.as_ref(),
                     "--output-folder-path",

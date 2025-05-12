@@ -1018,7 +1018,7 @@ fn inflation() -> Result<()> {
         });
         assert_matches!(captured.result, Ok(_));
         assert!(captured.contains(&format!(
-            "token tnam1q9kn74xfzytqkqyycfrhycr8ajam8ny935cge0z5: {}",
+            "token tnam1qy867hsh3l6qgt6dxfmvgh24talyp4slygpuu4hm: {}",
             pos_inflation[epoch]
         )));
 
@@ -1299,7 +1299,7 @@ fn pgf_governance_proposal() -> Result<()> {
         CapturedOutput::of(|| run(&node, Bin::Client, query_total_supply_args));
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(
-        "token tnam1q9kn74xfzytqkqyycfrhycr8ajam8ny935cge0z5: 118400024.740301"
+        "token tnam1qy867hsh3l6qgt6dxfmvgh24talyp4slygpuu4hm: 118400024.740301"
     ));
 
     let query_native_supply_args =
