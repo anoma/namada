@@ -88,6 +88,7 @@ use namada_sdk::queries::{
 use namada_sdk::state::StorageRead;
 use namada_sdk::state::write_log::StorageModification;
 use namada_sdk::storage::{Key, KeySeg, TxIndex};
+use namada_sdk::tendermint::abci::Event as AbciEvent;
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::{
     self, Amount, DenominatedAmount, MaspTxData, Transfer,
@@ -96,7 +97,9 @@ use namada_sdk::tx::data::pos::Bond;
 use namada_sdk::tx::data::{
     BatchedTxResult, Fee, TxResult, VpsResult, compute_inner_tx_hash,
 };
-use namada_sdk::tx::event::{Batch, MaspEvent, MaspTxRef, new_tx_event};
+use namada_sdk::tx::event::{
+    Batch, FmdSectionRef, MaspEvent, MaspTxKind, MaspTxRef, new_tx_event,
+};
 use namada_sdk::tx::{
     Authorization, BatchedTx, BatchedTxRef, Code, Data, IndexedTx, Section, Tx,
 };
@@ -1062,43 +1065,67 @@ impl Client for BenchShell {
                 let tx_event: Event = new_tx_event(tx, height.value())
                     .with(Batch(&tx_result))
                     .into();
-                // Expect a single masp tx in the batch
-                let masp_ref = tx.sections.iter().find_map(|section| {
-                    if let Section::MaspTx(transaction) = section {
-                        Some(MaspTxRef::MaspSection(transaction.txid().into()))
-                    } else {
-                        None
-                    }
-                });
 
                 let first_inner_tx_hash = compute_inner_tx_hash(
                     tx.wrapper_hash().as_ref(),
                     Either::Right(tx.first_commitments().unwrap()),
                 );
-                let masp_event = masp_ref.map(|data| {
-                    let masp_event: Event = MaspEvent {
-                        tx_index: IndexedTx {
-                            block_height: namada_sdk::chain::BlockHeight(
-                                u64::from(height),
-                            ),
-                            block_index: TxIndex::must_from_usize(idx),
-                            batch_index: Some(0),
-                        },
-                        kind: namada_sdk::tx::event::MaspEventKind::Transfer,
-                        data,
-                    }
-                    .with(TxHash(tx.header_hash()))
-                    .with(InnerTxHash(first_inner_tx_hash))
-                    .into();
-                    masp_event
-                });
+                let wrapper_hash = tx.wrapper_hash().unwrap_or_default();
+                let indexed_tx = IndexedTx {
+                    block_height: namada_sdk::chain::BlockHeight(u64::from(
+                        height,
+                    )),
+                    block_index: TxIndex::must_from_usize(idx),
+                    batch_index: Some(0),
+                };
 
-                res.push(namada_sdk::tendermint::abci::Event::from(tx_event));
+                let masp_tx_event =
+                    tx.sections.iter().find_map(|section| match section {
+                        Section::MaspTx(transaction) => {
+                            Some(AbciEvent::from(Event::from(
+                                MaspEvent::ShieldedOutput {
+                                    tx_index: indexed_tx,
+                                    kind: MaspTxKind::Transfer,
+                                    data: MaspTxRef::MaspSection(
+                                        transaction.txid().into(),
+                                    ),
+                                }
+                                .with(TxHash(wrapper_hash))
+                                .with(InnerTxHash(first_inner_tx_hash)),
+                            )))
+                        }
+                        _ => None,
+                    });
+                let masp_fmd_event =
+                    tx.sections.iter().find_map(|section| match section {
+                        sec @ Section::Data(Data { data, .. })
+                            if <Vec<FlagCiphertext>>::try_from_slice(data)
+                                .is_ok() =>
+                        {
+                            Some(AbciEvent::from(Event::from(
+                                MaspEvent::FlagCiphertexts {
+                                    tx_index: indexed_tx,
+                                    section: FmdSectionRef::FmdSection(
+                                        sec.get_hash(),
+                                    ),
+                                }
+                                .with(TxHash(wrapper_hash))
+                                .with(InnerTxHash(first_inner_tx_hash)),
+                            )))
+                        }
+                        _ => None,
+                    });
 
-                if let Some(event) = masp_event {
-                    res.push(namada_sdk::tendermint::abci::Event::from(event));
+                res.push(AbciEvent::from(tx_event));
+
+                if let Some((masp_tx_event, masp_fmd_event)) =
+                    masp_tx_event.zip(masp_fmd_event)
+                {
+                    res.push(masp_tx_event);
+                    res.push(masp_fmd_event);
                 }
             }
+
             Some(res)
         } else {
             None
