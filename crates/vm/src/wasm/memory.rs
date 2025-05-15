@@ -551,7 +551,7 @@ impl<T: Tunables> Tunables for Limit<T> {
 mod tests {
     use wasmer::sys::Features;
     use wasmer::{
-        Cranelift, Engine, Instance, Module, NativeEngineExt, Store, Target,
+        Singlepass, Engine, Instance, Module, NativeEngineExt, Store, Target,
         wat2wasm,
     };
 
@@ -568,8 +568,7 @@ mod tests {
 
         let wasm_bytes = wat2wasm(wat).unwrap();
 
-        // Any compiler and any engine do the job here
-        let compiler = Cranelift::default();
+        let compiler = Singlepass::default();
         let mut engine = <Engine as NativeEngineExt>::new(
             Box::new(compiler),
             Target::default(),
