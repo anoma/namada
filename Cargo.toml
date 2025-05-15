@@ -264,7 +264,7 @@ uint = "0.10"
 warp = "0.3"
 wasmparser = "0.121"
 wasm-instrument = {version = "0.4.0", features = ["sign_ext"]}
-wasmer = "=4.4.0"
+wasmer = {version = "=4.4.0", default-features = false, features = ["singlepass"]}
 wasmer-cache = "=4.4.0"
 wasmer-compiler = "=4.4.0"
 wasmer-compiler-singlepass = "=4.4.0"
