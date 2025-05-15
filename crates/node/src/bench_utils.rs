@@ -1285,7 +1285,7 @@ impl BenchShieldedCtx {
             token: address::testing::nam(),
             amount: denominated_amount,
         };
-        let shielded = async_runtime
+        let (shielded, fmd_flags) = async_runtime
             .block_on(async {
                 let expiration =
                     Namada::tx_builder(&namada).expiration.to_datetime();
@@ -1307,14 +1307,12 @@ impl BenchShieldedCtx {
                      masp_tx,
                      metadata: _,
                      epoch: _,
-                     fmd_flags: _,
-                 }| masp_tx,
+                     fmd_flags,
+                 }| (masp_tx, fmd_flags),
             )
             .expect("MASP must have shielded part");
 
-        let fmd_section = Section::Data(Data::from_borsh_encoded(&vec![
-            FlagCiphertext::default(),
-        ]));
+        let fmd_section = Section::Data(Data::from_borsh_encoded(&fmd_flags));
         let shielded_data = MaspTxData {
             masp_tx_id: shielded.txid().into(),
             flag_ciphertext_sechash: fmd_section.get_hash(),
@@ -1431,9 +1429,16 @@ impl BenchShieldedCtx {
             vec![vectorized_transfer.targets.into_iter().next().unwrap()]
                 .into_iter()
                 .collect();
-        let fmd_section = Section::Data(Data::from_borsh_encoded(&vec![
-            FlagCiphertext::default(),
-        ]));
+        let masp_tx = tx.tx.get_masp_section(&masp_tx_id).unwrap().clone();
+        let fmd_section = Section::Data(Data::from_borsh_encoded(
+            &std::iter::repeat_with(FlagCiphertext::default)
+                .take(
+                    masp_tx
+                        .sapling_bundle()
+                        .map_or(0, |x| x.shielded_outputs.len()),
+                )
+                .collect::<Vec<_>>(),
+        ));
         let transfer = Transfer {
             sources,
             targets,
@@ -1442,7 +1447,6 @@ impl BenchShieldedCtx {
                 flag_ciphertext_sechash: fmd_section.get_hash(),
             }),
         };
-        let masp_tx = tx.tx.get_masp_section(&masp_tx_id).unwrap().clone();
         let msg = MsgTransfer::<token::Transfer> {
             message: msg,
             transfer: Some(transfer),
