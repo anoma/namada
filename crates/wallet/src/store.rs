@@ -15,6 +15,7 @@ use namada_core::collections::HashSet;
 use namada_core::key::*;
 use namada_core::masp::{
     DiversifierIndex, ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
+    UnifiedPaymentAddress,
 };
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
@@ -69,7 +70,7 @@ pub struct Store {
     /// Known spending keys
     spend_keys: BTreeMap<Alias, StoredKeypair<StoreSpendingKey>>,
     /// Payment address book
-    payment_addrs: BiBTreeMap<Alias, PaymentAddress>,
+    payment_addrs: BiBTreeMap<Alias, UnifiedPaymentAddress>,
     /// Diverisifier index of the next payment address to be generated for a
     /// given key.
     diversifier_indices: BTreeMap<Alias, DiversifierIndex>,
@@ -171,14 +172,14 @@ impl Store {
     pub fn find_payment_addr(
         &self,
         alias: impl AsRef<str>,
-    ) -> Option<&PaymentAddress> {
+    ) -> Option<&UnifiedPaymentAddress> {
         self.payment_addrs.get_by_left(&alias.into())
     }
 
     /// Find an alias by the address if it's in the wallet.
     pub fn find_alias_by_payment_addr(
         &self,
-        payment_address: &PaymentAddress,
+        payment_address: &UnifiedPaymentAddress,
     ) -> Option<&Alias> {
         self.payment_addrs.get_by_right(payment_address)
     }
@@ -282,7 +283,9 @@ impl Store {
     }
 
     /// Get all known payment addresses by their alias.
-    pub fn get_payment_addrs(&self) -> &BiBTreeMap<Alias, PaymentAddress> {
+    pub fn get_payment_addrs(
+        &self,
+    ) -> &BiBTreeMap<Alias, UnifiedPaymentAddress> {
         &self.payment_addrs
     }
 
@@ -537,7 +540,7 @@ impl Store {
     pub fn insert_payment_addr<U: WalletIo>(
         &mut self,
         alias: Alias,
-        payment_addr: PaymentAddress,
+        payment_addr: UnifiedPaymentAddress,
         force: bool,
     ) -> Option<Alias> {
         // abort if the alias is reserved
@@ -910,7 +913,11 @@ pub struct StoreV0 {
 impl From<StoreV0> for Store {
     fn from(store: StoreV0) -> Self {
         let mut to = Store {
-            payment_addrs: store.payment_addrs,
+            payment_addrs: store
+                .payment_addrs
+                .into_iter()
+                .map(|(alias, pa)| (alias, UnifiedPaymentAddress::V0(pa)))
+                .collect(),
             secret_keys: store.secret_keys,
             public_keys: store.public_keys,
             derivation_paths: store.derivation_paths,
@@ -962,7 +969,7 @@ pub struct StoreV1 {
     /// Known spending keys
     spend_keys: BTreeMap<Alias, StoredKeypair<StoreSpendingKey>>,
     /// Payment address book
-    payment_addrs: BiBTreeMap<Alias, PaymentAddress>,
+    payment_addrs: BiBTreeMap<Alias, UnifiedPaymentAddress>,
     /// Cryptographic keypairs
     secret_keys: BTreeMap<Alias, StoredKeypair<common::SecretKey>>,
     /// Known public keys

@@ -12,41 +12,8 @@ use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
 use namada_state::TxIndex;
 use namada_tx::IndexedTx;
-use namada_tx::event::MaspEventKind;
+pub use namada_tx::event::MaspTxKind;
 use serde::{Deserialize, Serialize};
-
-/// The type of a MASP transaction
-#[derive(
-    Debug,
-    Default,
-    Clone,
-    Copy,
-    BorshSerialize,
-    BorshDeserialize,
-    PartialOrd,
-    PartialEq,
-    Eq,
-    Ord,
-    Serialize,
-    Deserialize,
-    Hash,
-)]
-pub enum MaspTxKind {
-    /// A MASP transaction used for fee payment
-    FeePayment,
-    /// A general MASP transfer
-    #[default]
-    Transfer,
-}
-
-impl From<MaspEventKind> for MaspTxKind {
-    fn from(value: MaspEventKind) -> Self {
-        match value {
-            MaspEventKind::FeePayment => Self::FeePayment,
-            MaspEventKind::Transfer => Self::Transfer,
-        }
-    }
-}
 
 /// An indexed masp tx carrying information on whether it was a fee paying tx or
 /// a normal transfer
