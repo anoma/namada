@@ -168,9 +168,11 @@ pub fn shielded_reward_reset_migration(
         "tnam1q9gr66cvu4hrzm0sd5kmlnjje82gs3xlfg3v6nu7";
     let native_token = Address::from_str(NATIVE_TOKEN_BECH32M)
         .expect("unable to construct native token address");
+    
     // The MASP epoch in which this migration will be applied. This number
     // controls the number of epochs of conversions created.
-    const TARGET_MASP_EPOCH: MaspEpoch = MaspEpoch::new(2000);
+    const TARGET_MASP_EPOCH: MaspEpoch = MaspEpoch::new(175); // est. 20:00 CEST May 27
+
     // The tokens whose rewards will be reset.
     const TOKENS: [(TokenAddress, Denomination, Precision); 6] = [
         (
