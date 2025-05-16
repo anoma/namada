@@ -165,7 +165,7 @@ pub fn shielded_reward_reset_migration(
 ) {
     // The address of the native token. This is what rewards are denominated in.
     const NATIVE_TOKEN_BECH32M: AddressBech32m =
-        "tnam1qxgfw7myv4dh0qna4hq0xdg6lx77fzl7dcem8h7e";
+        "tnam1q9gr66cvu4hrzm0sd5kmlnjje82gs3xlfg3v6nu7";
     let native_token = Address::from_str(NATIVE_TOKEN_BECH32M)
         .expect("unable to construct native token address");
     // The MASP epoch in which this migration will be applied. This number
