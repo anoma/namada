@@ -171,37 +171,57 @@ pub fn shielded_reward_reset_migration(
     // The MASP epoch in which this migration will be applied. This number
     // controls the number of epochs of conversions created.
     const TARGET_MASP_EPOCH: MaspEpoch = MaspEpoch::new(2000);
-    // The tokens whose rewarrds will be reset.
+    // The tokens whose rewards will be reset.
     const TOKENS: [(TokenAddress, Denomination, Precision); 6] = [
         (
-            TokenAddress::Ibc("channel-1", "uosmo"),
+            TokenAddress::Ibc("channel-1", "uosmo"), // OSMO
             Denomination(0u8),
-            1000u128,
+            10_000,
         ),
         (
-            TokenAddress::Ibc("channel-2", "uatom"),
+            TokenAddress::Ibc("channel-2", "uatom"), // ATOM
             Denomination(0u8),
-            1000u128,
+            5_000,
         ),
         (
-            TokenAddress::Ibc("channel-3", "utia"),
+            TokenAddress::Ibc("channel-3", "utia"), // TIA
             Denomination(0u8),
-            1000u128,
+            5_000,
         ),
         (
-            TokenAddress::Ibc("channel-0", "stuosmo"),
+            TokenAddress::Ibc("channel-0", "stuosmo"), // stOSMO
             Denomination(0u8),
-            1000u128,
+            5_000,
         ),
         (
-            TokenAddress::Ibc("channel-0", "stuatom"),
+            TokenAddress::Ibc("channel-0", "stuatom"), // stATOM
             Denomination(0u8),
-            1000u128,
+            5_000,
         ),
         (
-            TokenAddress::Ibc("channel-0", "stutia"),
+            TokenAddress::Ibc("channel-0", "stutia"), // stTIA
             Denomination(0u8),
-            1000u128,
+            5_000,
+        ),
+        (
+            TokenAddress::Ibc("channel-4", "upenumbra"), // UM
+            Denomination(0u8),
+            1_000,
+        ),
+        (
+            TokenAddress::Ibc("channel-5", "uusdc"), // USDC
+            Denomination(0u8),
+            1_000,
+        ),
+        (
+            TokenAddress::Ibc("channel-6", "unym"), // NYM
+            Denomination(0u8),
+            1_000,
+        ),
+        (
+            TokenAddress::Ibc("channel-7", "untrn"), // NTRN
+            Denomination(0u8),
+            1_000,
         ),
     ];
 
