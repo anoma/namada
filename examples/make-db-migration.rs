@@ -174,7 +174,7 @@ pub fn shielded_reward_reset_migration(
     const TARGET_MASP_EPOCH: MaspEpoch = MaspEpoch::new(175); // est. 20:00 CEST May 27
 
     // The tokens whose rewards will be reset.
-    const TOKENS: [(TokenAddress, Denomination, Precision); 6] = [
+    const TOKENS: [(TokenAddress, Denomination, Precision); 10] = [
         (
             TokenAddress::Ibc("channel-1", "uosmo"), // OSMO
             Denomination(0u8),
