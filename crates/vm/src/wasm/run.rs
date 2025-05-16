@@ -133,8 +133,7 @@ where
     Ok(())
 }
 
-/// Execute a transaction code. Returns the set verifiers addresses requested by
-/// the transaction.
+/// Execute a transaction code (Namada tx or CosmWasm). Returns the set verifiers addresses requested by the transaction.
 #[allow(clippy::too_many_arguments)]
 pub fn tx<S, CA>(
     state: &mut S,
@@ -191,6 +190,51 @@ where
         }
     }
 
+    if is_cosmwasm(&tx_code.code.hash(), state)? {
+        cosmwasm_tx(
+            state,
+            gas_meter,
+            wrapper_hash,
+            tx_index,
+            tx,
+            cmt,
+            tx_wasm_cache,
+            tx_code,
+        )?;
+        // There are no VPs involved in CosmWasm txs
+        Ok(BTreeSet::default())
+    } else {
+        namada_tx(
+            state,
+            gas_meter,
+            wrapper_hash,
+            tx_index,
+            tx,
+            cmt,
+            vp_wasm_cache,
+            tx_wasm_cache,
+            tx_code,
+        )
+    }
+}
+
+/// Execute a Namada transaction code. Returns the set verifiers addresses requested by
+/// the transaction.
+fn namada_tx<S, CA>(
+    state: &mut S,
+    gas_meter: &RefCell<TxGasMeter>,
+    wrapper_hash: Option<&Hash>,
+    tx_index: &TxIndex,
+    tx: &Tx,
+    cmt: &TxCommitments,
+    vp_wasm_cache: &mut VpCache<CA>,
+    tx_wasm_cache: &mut TxCache<CA>,
+    tx_code: namada_tx::Code,
+) -> Result<BTreeSet<Address>>
+where
+    S: StateRead + State + StorageRead,
+    CA: 'static + WasmCacheAccess,
+{
     let (module, store) =
         fetch_or_compile(tx_wasm_cache, &tx_code.code, state, gas_meter)?;
     let store = Rc::new(RefCell::new(store));
@@ -247,6 +291,7 @@ where
         tx_data_len,
     } = {
         let mut store = store.borrow_mut();
+        let batched_tx = tx.batch_ref_tx(cmt);
         memory::write_tx_inputs(&mut *store, guest_memory, &batched_tx)
             .map_err(Error::MemoryError)?
     };
@@ -305,6 +350,24 @@ where
             TxSentinel::InvalidCommitment => Error::MissingSection(err),
         })
     }
+}
+
+/// Execute a CosmWasm transaction call.
+fn cosmwasm_tx<S, CA>(
+    state: &mut S,
+    gas_meter: &RefCell<TxGasMeter>,
+    wrapper_hash: Option<&Hash>,
+    tx_index: &TxIndex,
+    tx: &Tx,
+    cmt: &TxCommitments,
+    tx_wasm_cache: &mut TxCache<CA>,
+    tx_code: namada_tx::Code,
+) -> Result<()>
+where
+    S: StateRead + State + StorageRead,
+    CA: 'static + WasmCacheAccess,
+{
+    todo!()
 }
 
 /// Execute a validity predicate code. Returns whether the validity
@@ -695,6 +758,18 @@ pub fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {
         wasm_instrument::inject_stack_limiter(module, WASM_STACK_LIMIT)
             .map_err(|_original_module| Error::StackLimiterInjection)?;
     elements::serialize(module).map_err(Error::SerializationError)
+}
+
+fn is_cosmwasm<S>(code_hash: &Hash, state: &S) -> Result<bool>
+where
+    S: StateRead,
+{
+    let key = Key::cosmwasm(code_hash);
+    state.has_key(&key).map_err(|e| {
+        Error::LoadWasmCode(format!(
+            "Failed to check existence of storage key {key}, error {e}"
+        ))
+    })
 }
 
 // Fetch or compile a WASM code from the cache or storage. Account for the

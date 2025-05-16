@@ -77,6 +77,8 @@ pub const WASM_CODE_NAME_PREFIX: &str = "name";
 pub const WASM_CODE_LEN_PREFIX: &str = "len";
 /// The reserved storage key prefix for wasm code hashes
 pub const WASM_HASH_PREFIX: &str = "hash";
+/// The reserved storage key prefix to indicate that wasm is a cosmwasm smart-contract
+pub const WASM_COSMWASM_PREFIX: &str = "cosmwasm";
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 /// Storage column families
@@ -577,6 +579,16 @@ impl Key {
         segments.push(DbKeySeg::StringSeg(WASM_KEY_PREFIX.to_owned()));
         segments.push(DbKeySeg::StringSeg(WASM_HASH_PREFIX.to_owned()));
         segments.push(DbKeySeg::StringSeg(code_path.as_ref().to_string()));
+        Key { segments }
+    }
+
+    /// Returns a key that when set indicates that wasm is a cosmwasm smart-contract
+    pub fn cosmwasm(code_hash: &Hash) -> Self {
+        let mut segments =
+            Self::from(PARAMETERS.to_owned().to_db_key()).segments;
+        segments.push(DbKeySeg::StringSeg(WASM_KEY_PREFIX.to_owned()));
+        segments.push(DbKeySeg::StringSeg(WASM_COSMWASM_PREFIX.to_owned()));
+        segments.push(DbKeySeg::StringSeg(code_hash.to_string()));
         Key { segments }
     }
 
