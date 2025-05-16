@@ -134,6 +134,7 @@ clru = "0.6"
 color-eyre = "0.6"
 concat-idents = "1.1"
 config = "0.15"
+cosmwasm-vm = { path = "../cosmwasm/packages/vm" }
 criterion = { version = "0.5", features = ["html_reports"] }
 data-encoding = "2.3"
 derivation-path = "0.2"
