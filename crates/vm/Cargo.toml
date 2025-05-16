@@ -39,6 +39,7 @@ namada_vp.workspace = true
 
 borsh.workspace = true
 clru.workspace = true
+cosmwasm-std.workspace = true
 cosmwasm-vm.workspace = true
 parity-wasm = { workspace = true, optional = true }
 rayon = { workspace = true, optional = true }

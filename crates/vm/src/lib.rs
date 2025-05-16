@@ -22,6 +22,7 @@ use std::ptr::NonNull;
 
 use wasmparser::{Validator, WasmFeatures};
 
+pub mod cosmwasm;
 pub mod host_env;
 pub mod memory;
 pub mod types;
