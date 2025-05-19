@@ -1,5 +1,6 @@
 //! The shielded wallet implementation
 use std::collections::{BTreeMap, BTreeSet, btree_map};
+use std::io::{Read, Write};
 
 use eyre::{Context, eyre};
 use kassandra::{Index, IndexList};
@@ -60,6 +61,89 @@ use crate::masp::{
 #[cfg(any(test, feature = "testing"))]
 use crate::masp::{ENV_VAR_MASP_TEST_SEED, testing};
 
+/// A list of index sets provided by different
+/// FMD detection servers for a given key.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct FmdIndices {
+    /// Each individual set is a list of MASP txs that a
+    /// particular server flagged as relevant for the
+    /// key.
+    list: Vec<IndexList>,
+    /// The union of all elements in `list`
+    union: HashSet<Index>,
+    /// The intersection of all elements in `list`
+    intersection: HashSet<Index>,
+}
+
+impl From<Vec<IndexList>> for FmdIndices {
+    fn from(list: Vec<IndexList>) -> Self {
+        let acc = if list.is_empty() {
+            HashSet::new()
+        } else {
+            list.last().unwrap().iter().copied().collect()
+        };
+        Self {
+            union: list.iter().fold(HashSet::new(), |mut acc, ix_list| {
+                let mut set = ix_list.iter().copied().collect::<HashSet<_>>();
+                acc.append(&mut set);
+                acc
+            }),
+            intersection: list.iter().fold(acc, |mut acc, ix_list| {
+                let set = ix_list.iter().copied().collect::<HashSet<_>>();
+                acc = acc.intersection(&set).copied().collect();
+                acc
+            }),
+            list,
+        }
+    }
+}
+
+impl FromIterator<Index> for FmdIndices {
+    fn from_iter<T: IntoIterator<Item = Index>>(iter: T) -> Self {
+        let list = iter.into_iter().collect::<IndexList>();
+        Self::from(vec![list])
+    }
+}
+
+impl BorshSerialize for FmdIndices {
+    fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        BorshSerialize::serialize(&self.list, writer)
+    }
+}
+
+impl BorshDeserialize for FmdIndices {
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
+        <Vec<IndexList> as BorshDeserialize>::deserialize_reader(reader)
+            .map(Self::from)
+    }
+}
+
+impl FmdIndices {
+    /// Check if an index has been flagged for this key
+    pub fn flagged(&self, ix: &Index) -> bool {
+        self.intersection.contains(ix)
+    }
+
+    /// Get an iterator over the union of the indices from
+    /// each index set
+    pub fn union(&self) -> impl Iterator<Item = Index> + use<'_> {
+        self.union.iter().copied()
+    }
+
+    /// Use a predicate to determine which indices to keep
+    /// in the list.
+    pub fn retain<P>(&mut self, pred: P)
+    where
+        P: FnMut(&Index) -> bool + Clone,
+    {
+        let mut list = std::mem::take(&mut self.list);
+        for ix_list in list.iter_mut() {
+            ix_list.retain(pred.clone());
+        }
+        *self = Self::from(list);
+    }
+}
+
 /// Struct to hold data necessary to sync viewing keys.
 #[derive(
     BorshSerialize, BorshDeserialize, Debug, Default, Clone, PartialEq, Eq,
@@ -70,7 +154,7 @@ pub struct KeySyncData {
     /// An index representing a subset of all MASP txs
     /// relevant to this key. Found via fuzzy message
     /// detection.
-    pub fmd_indices: Option<IndexList>,
+    pub fmd_indices: Option<FmdIndices>,
 }
 
 impl KeySyncData {
@@ -84,7 +168,7 @@ impl KeySyncData {
     ) -> bool {
         match self.fmd_indices.as_ref() {
             None => true,
-            Some(indices) => indices.contains(&Index {
+            Some(indices) => indices.flagged(&Index {
                 height: itx.block_height.0,
                 tx: itx.block_index.0,
             }),
@@ -219,7 +303,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
             .values()
             .try_fold(IndexList::default(), |mut acc, ix| {
                 let next = ix.fmd_indices.as_ref()?;
-                acc.union(next);
+                acc.union(&next.union().collect());
                 Some(acc)
             })
     }
@@ -231,8 +315,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
         env: impl TaskEnvironment,
         config: ShieldedSyncConfig<M, T, I>,
         last_query_height: Option<BlockHeight>,
-        sks: &[(DatedSpendingKey, Option<IndexList>)],
-        fvks: &[(DatedKeypair<ViewingKey>, Option<IndexList>)],
+        sks: &[(DatedSpendingKey, Option<FmdIndices>)],
+        fvks: &[(DatedKeypair<ViewingKey>, Option<FmdIndices>)],
     ) -> Result<(), eyre::Error>
     where
         M: MaspClient + Send + Sync + Unpin + 'static,
@@ -1909,7 +1993,8 @@ mod test_shielded_wallet {
     use super::*;
     use crate::masp::fs::FsShieldedUtils;
     use crate::masp::test_utils::{
-        MockNamadaIo, TestingContext, arbitrary_pa, arbitrary_vk, create_note,
+        MockNamadaIo, TestingContext, arbitrary_pa, arbitrary_vk,
+        arbitrary_vk2, create_note,
     };
 
     #[tokio::test]
@@ -2251,6 +2336,83 @@ mod test_shielded_wallet {
             .await
             .expect("Test failed");
         assert_eq!(rewards_est, DenominatedAmount::native(0.into()));
+    }
+
+    #[test]
+    fn test_vk_sync() {
+        let temp_dir = tempdir().unwrap();
+        let mut wallet = FsShieldedUtils::new(temp_dir.path().to_path_buf());
+
+        wallet.vk_sync.insert(
+            arbitrary_vk(),
+            KeySyncData {
+                height: Default::default(),
+                fmd_indices: Some(FmdIndices::from(vec![
+                    [
+                        Index { height: 3, tx: 0 },
+                        Index { height: 3, tx: 1 },
+                        Index { height: 5, tx: 0 },
+                    ]
+                    .into_iter()
+                    .collect(),
+                    [
+                        Index { height: 3, tx: 1 },
+                        Index { height: 3, tx: 2 },
+                        Index { height: 5, tx: 1 },
+                    ]
+                    .into_iter()
+                    .collect(),
+                ])),
+            },
+        );
+        wallet.vk_sync.insert(
+            arbitrary_vk2(),
+            KeySyncData {
+                height: Default::default(),
+                fmd_indices: Some(FmdIndices::from(vec![
+                    [Index { height: 1, tx: 0 }, Index { height: 1, tx: 1 }]
+                        .into_iter()
+                        .collect(),
+                ])),
+            },
+        );
+        let expected = [
+            Index { height: 1, tx: 0 },
+            Index { height: 1, tx: 1 },
+            Index { height: 3, tx: 0 },
+            Index { height: 3, tx: 1 },
+            Index { height: 3, tx: 2 },
+            Index { height: 5, tx: 0 },
+            Index { height: 5, tx: 1 },
+        ]
+        .into_iter()
+        .collect::<IndexList>();
+        assert_eq!(
+            expected,
+            wallet.combined_fmd_indices().expect("Test failed")
+        );
+        let indices = wallet.vk_sync.get(&arbitrary_vk()).expect("Test failed");
+        for ix in [
+            Index { height: 3, tx: 0 },
+            Index { height: 3, tx: 2 },
+            Index { height: 5, tx: 0 },
+            Index { height: 5, tx: 1 },
+        ] {
+            assert!(
+                !indices
+                    .fmd_indices
+                    .as_ref()
+                    .expect("Test failed")
+                    .flagged(&ix)
+            )
+        }
+        assert!(
+            indices
+                .fmd_indices
+                .as_ref()
+                .expect("Test failed")
+                .flagged(&Index { height: 3, tx: 1 })
+        )
     }
 
     proptest! {

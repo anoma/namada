@@ -11,7 +11,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use eyre::{WrapErr, eyre};
 use futures::future::{Either, select};
 use futures::task::AtomicWaker;
-use kassandra::IndexList;
 use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
 use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::transaction::Transaction;
@@ -27,7 +26,7 @@ use namada_wallet::{DatedKeypair, DatedSpendingKey};
 
 use super::utils::{IndexedNoteEntry, MaspClient, MaspIndexedTx, MaspTxKind};
 use crate::masp::shielded_sync::trial_decrypt;
-use crate::masp::shielded_wallet::KeySyncData;
+use crate::masp::shielded_wallet::{FmdIndices, KeySyncData};
 use crate::masp::utils::{
     DecryptedData, Fetched, RetryStrategy, TrialDecrypted, blocks_left_to_fetch,
 };
@@ -323,8 +322,8 @@ where
         mut self,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
-        sks: &[(DatedSpendingKey, Option<IndexList>)],
-        fvks: &[(DatedKeypair<ViewingKey>, Option<IndexList>)],
+        sks: &[(DatedSpendingKey, Option<FmdIndices>)],
+        fvks: &[(DatedKeypair<ViewingKey>, Option<FmdIndices>)],
     ) -> Result<Option<ShieldedWallet<U>>, eyre::Error> {
         let initial_state = self
             .perform_initial_setup(
@@ -466,8 +465,8 @@ where
         &mut self,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
-        sks: &[(DatedSpendingKey, Option<IndexList>)],
-        fvks: &[(DatedKeypair<ViewingKey>, Option<IndexList>)],
+        sks: &[(DatedSpendingKey, Option<FmdIndices>)],
+        fvks: &[(DatedKeypair<ViewingKey>, Option<FmdIndices>)],
     ) -> Result<InitialState, eyre::Error> {
         if start_query_height > last_query_height {
             return Err(eyre!(

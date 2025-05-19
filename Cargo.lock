@@ -4791,9 +4791,9 @@ dependencies = [
 
 [[package]]
 name = "kassandra-shared"
-version = "0.0.1-alpha"
+version = "0.0.2-alpha"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f51d8274a5c291ad7f4680ff3cae39ee420d2ddc438ad1b59eb1f8abdb83f70"
+checksum = "248852e4390561ee568ec214be663837e2d254576ec6b210f5799c24450203b1"
 dependencies = [
  "borsh",
  "chacha20poly1305",
