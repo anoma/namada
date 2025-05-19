@@ -192,7 +192,7 @@ impl BenchShellInner {
 
         if let Some(sections) = extra_sections {
             for section in sections {
-                if let Section::ExtraData(_) | Section::Data(_) = section {
+                if let Section::ExtraData(_) = section {
                     tx.add_section(section);
                 }
             }
@@ -1098,9 +1098,13 @@ impl Client for BenchShell {
                     });
                 let masp_fmd_event =
                     tx.sections.iter().find_map(|section| match section {
-                        sec @ Section::Data(Data { data, .. })
-                            if <Vec<FlagCiphertext>>::try_from_slice(data)
-                                .is_ok() =>
+                        sec @ Section::ExtraData(extra_data)
+                            if extra_data.id().is_some_and(|extra_data| {
+                                <Vec<FlagCiphertext>>::try_from_slice(
+                                    extra_data,
+                                )
+                                .is_ok()
+                            }) =>
                         {
                             Some(AbciEvent::from(Event::from(
                                 MaspEvent::FlagCiphertexts {
@@ -1312,7 +1316,8 @@ impl BenchShieldedCtx {
             )
             .expect("MASP must have shielded part");
 
-        let fmd_section = Section::Data(Data::from_borsh_encoded(&fmd_flags));
+        let fmd_section =
+            Section::ExtraData(Code::from_borsh_encoded(&fmd_flags));
         let shielded_data = MaspTxData {
             masp_tx_id: shielded.txid().into(),
             flag_ciphertext_sechash: fmd_section.get_hash(),
@@ -1430,7 +1435,7 @@ impl BenchShieldedCtx {
                 .into_iter()
                 .collect();
         let masp_tx = tx.tx.get_masp_section(&masp_tx_id).unwrap().clone();
-        let fmd_section = Section::Data(Data::from_borsh_encoded(
+        let fmd_section = Section::ExtraData(Code::from_borsh_encoded(
             &std::iter::repeat_with(FlagCiphertext::default)
                 .take(
                     masp_tx

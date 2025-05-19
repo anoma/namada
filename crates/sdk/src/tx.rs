@@ -4351,7 +4351,7 @@ fn proposal_to_vec(proposal: OnChainProposal) -> Result<Vec<u8>> {
 }
 
 fn create_fmd_section(fmd_flags: Vec<FlagCiphertext>) -> (Section, Hash) {
-    let fmd_section = Section::Data(Data::from_borsh_encoded(&fmd_flags));
+    let fmd_section = Section::ExtraData(Code::from_borsh_encoded(&fmd_flags));
     let fmd_sechash = fmd_section.get_hash();
 
     (fmd_section, fmd_sechash)

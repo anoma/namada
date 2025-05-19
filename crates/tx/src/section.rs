@@ -277,7 +277,7 @@ impl Data {
 
     /// Make a new data section with the given borsh encodable data
     #[inline]
-    pub fn from_borsh_encoded<T: BorshSerialize>(data: &T) -> Self {
+    pub fn from_borsh_encoded<T: BorshSerialize + ?Sized>(data: &T) -> Self {
         Self::new(data.serialize_to_vec())
     }
 
@@ -374,6 +374,21 @@ impl Code {
             code: Commitment::Id(code),
             tag,
         }
+    }
+
+    /// Return the code data, if it is present verbatim.
+    pub fn id(&self) -> Option<&[u8]> {
+        if let Commitment::Id(code) = &self.code {
+            Some(&code[..])
+        } else {
+            None
+        }
+    }
+
+    /// Make a new code section with the given borsh encodable data
+    #[inline]
+    pub fn from_borsh_encoded<T: BorshSerialize + ?Sized>(data: &T) -> Self {
+        Self::new(data.serialize_to_vec(), None)
     }
 
     /// Make a new code section with the given hash

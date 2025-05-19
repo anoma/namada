@@ -290,6 +290,17 @@ impl Tx {
         None
     }
 
+    /// Add an FMD flag ciphertext section to the transaction
+    pub fn add_fmd_flag_ciphertexts(
+        &mut self,
+        flag_ciphertexts: &[FlagCiphertext],
+    ) -> &mut Self {
+        self.add_section(Section::ExtraData(Code::from_borsh_encoded(
+            flag_ciphertexts,
+        )));
+        self
+    }
+
     /// Get the FMD flag ciphertext with the given hash
     pub fn get_fmd_flag_ciphertexts(
         &self,
@@ -297,14 +308,20 @@ impl Tx {
     ) -> Result<Option<Vec<FlagCiphertext>>, DecodeError> {
         let maybe_section = self.get_section(hash);
 
-        let data = match maybe_section.as_ref().map(Cow::as_ref) {
-            Some(Section::Data(Data { data, .. })) => data,
+        let code = match maybe_section.as_ref().map(Cow::as_ref) {
+            Some(Section::ExtraData(code)) => code,
             Some(_) => {
                 return Err(DecodeError::InvalidFlagCiphertexts(
                     HEXUPPER.encode(&hash.0),
                 ));
             }
             None => return Ok(None),
+        };
+
+        let Some(data) = code.id() else {
+            return Err(DecodeError::InvalidFlagCiphertexts(
+                HEXUPPER.encode(&hash.0),
+            ));
         };
 
         let decoded =

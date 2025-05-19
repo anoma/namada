@@ -536,8 +536,8 @@ pub mod testing {
             .take(builder.sapling_outputs().len())
             .collect();
             let fmd_sechash = {
-                let sec = namada_tx::Section::Data(
-                    namada_tx::Data::from_borsh_encoded(&fmd_flags),
+                let sec = namada_tx::Section::ExtraData(
+                    namada_tx::Code::from_borsh_encoded(&fmd_flags),
                 );
                 sec.get_hash()
             };
