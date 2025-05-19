@@ -35,7 +35,7 @@ env:
   AWS_REGION: us-west-2
   NIGHTLY: nightly-2025-03-27
   NAMADA_MASP_PARAMS_DIR: /masp/.masp-params
-  LEDGER_APP_VERSION: "3.0.4"
+  LEDGER_APP_VERSION: "3.1.3.heliax"
   ROLE: arn:aws:iam::375643557360:role/github-runners-ci-shared
   SCCACHE_ERROR_LOG: /tmp/sccache_log.txt
 
@@ -601,7 +601,7 @@ jobs:
       - name: Checkout ledger-namada
         run: |
           echo "Using Namada Ledger App version: v${LEDGER_APP_VERSION}"
-          git clone 'https://github.com/Zondax/ledger-namada' ../ledger-namada
+          git clone 'https://github.com/anoma/ledger-namada' ../ledger-namada
           cd ../ledger-namada
           git checkout "v$LEDGER_APP_VERSION"
           git submodule update --init --recursive
