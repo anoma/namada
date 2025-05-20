@@ -583,11 +583,18 @@ where
                 "The provided {} token is not allowed for fee payment",
                 wrapper.fee.token
             ))))?;
+    let fee_components =
+        fee_data_check(wrapper, minimum_gas_price, shell_params.state)?;
 
-    fee_data_check(wrapper, minimum_gas_price, shell_params)?;
-
-    protocol::transfer_fee(shell_params, proposer, tx, wrapper, tx_index)
-        .map_or_else(|e| Err(Error::TxApply(e)), |_| Ok(()))
+    protocol::transfer_fee(
+        shell_params,
+        proposer,
+        tx,
+        wrapper,
+        tx_index,
+        &fee_components,
+    )
+    .map_or_else(|e| Err(Error::TxApply(e)), |_| Ok(()))
 }
 
 /// We test the failure cases of [`process_proposal`]. The happy flows

@@ -74,7 +74,7 @@ use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
 use super::ethereum_oracle::{self as oracle, last_processed_block};
 use crate::config::{self, TendermintMode, ValidatorLocalConfig, genesis};
-use crate::protocol::ShellParams;
+use crate::protocol::{FeeComponents, ShellParams};
 use crate::shims::abcipp_shim_types::shim;
 use crate::shims::abcipp_shim_types::shim::TakeSnapshot;
 use crate::shims::abcipp_shim_types::shim::response::TxResult;
@@ -1518,49 +1518,72 @@ where
                 wrapper.fee.token
             ))))?;
 
-    fee_data_check(wrapper, minimum_gas_price, shell_params)?;
+    fee_data_check(wrapper, minimum_gas_price, shell_params.state)?;
     protocol::check_fees(shell_params, tx, wrapper)
         .map_err(Error::TxApply)
         .map(|_| ())
 }
 
-/// Check the validity of the fee data
-pub fn fee_data_check<D, H, CA>(
+/// Check the validity of the fee data and return the fee information split
+/// between base and tip
+pub fn fee_data_check(
     wrapper: &WrapperTx,
     minimum_gas_price: token::Amount,
-    shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
-) -> ShellResult<()>
-where
-    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
-    H: StorageHasher + Sync + 'static,
-    CA: 'static + WasmCacheAccess + Sync,
-{
+    storage: &impl StorageRead,
+) -> ShellResult<FeeComponents> {
     match token::denom_to_amount(
         wrapper.fee.amount_per_gas_unit,
         &wrapper.fee.token,
-        shell_params.state,
+        storage,
     ) {
-        Ok(amount_per_gas_unit) if amount_per_gas_unit < minimum_gas_price => {
-            // The fees do not match the minimum required
-            return Err(Error::TxApply(protocol::Error::FeeError(format!(
-                "Fee amount {:?} does not match the minimum required amount \
-                 {:?} for token {}",
-                wrapper.fee.amount_per_gas_unit,
-                minimum_gas_price,
-                wrapper.fee.token
-            ))));
+        Ok(amount_per_gas_unit) => {
+            if amount_per_gas_unit < minimum_gas_price {
+                // The fees do not match the minimum required
+                Err(Error::TxApply(protocol::Error::FeeError(format!(
+                    "Fee amount {:?} does not match the minimum required \
+                     amount {:?} for token {}",
+                    wrapper.fee.amount_per_gas_unit,
+                    minimum_gas_price,
+                    wrapper.fee.token
+                ))))
+            } else {
+                get_fee_components(wrapper, minimum_gas_price, storage)
+            }
         }
-        Ok(_) => {}
-        Err(err) => {
-            return Err(Error::TxApply(protocol::Error::FeeError(format!(
-                "The precision of the fee amount {:?} is higher than the \
-                 denomination for token {}: {}",
-                wrapper.fee.amount_per_gas_unit, wrapper.fee.token, err,
-            ))));
-        }
+        Err(err) => Err(Error::TxApply(protocol::Error::FeeError(format!(
+            "The precision of the fee amount {:?} is higher than the \
+             denomination for token {}: {}",
+            wrapper.fee.amount_per_gas_unit, wrapper.fee.token, err,
+        )))),
     }
+}
 
-    Ok(())
+pub fn get_fee_components(
+    wrapper: &WrapperTx,
+    minimum_gas_price: token::Amount,
+    storage: &impl StorageRead,
+) -> ShellResult<FeeComponents> {
+    let denom_amt = wrapper.get_tx_fee().map_err(|e| {
+        Error::TxApply(protocol::Error::FeeError(e.to_string()))
+    })?;
+    let fees = token::denom_to_amount(denom_amt, &wrapper.fee.token, storage)?;
+    let base_fee = minimum_gas_price
+        .checked_mul(token::Amount::from(wrapper.gas_limit))
+        .ok_or_else(|| {
+            Error::TxApply(protocol::Error::FeeError(
+                "Overflow in base fee computation".to_string(),
+            ))
+        })?;
+    let tip = fees.checked_sub(base_fee).ok_or_else(|| {
+        Error::TxApply(protocol::Error::FeeError(
+            "Underflow in tip computation".to_string(),
+        ))
+    })?;
+
+    Ok(FeeComponents {
+        base: base_fee,
+        tip,
+    })
 }
 
 /// for the shell
