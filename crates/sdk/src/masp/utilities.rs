@@ -492,12 +492,12 @@ impl MaspClient for IndexerMaspClient {
 
         let mut fetches = vec![];
         while from <= to {
-            const MAX_RANGE_THRES: u64 = 30;
+            const MAX_RANGE_THRES: u64 = 29;
 
             let from_height = from;
             let offset = (to - from).min(MAX_RANGE_THRES);
             let to_height = from + offset;
-            from += offset;
+            from += offset + 1;
 
             let ControlFlow::Break(request) =
                 self.fetch_request(from_height, offset, maybe_block_index)
@@ -533,10 +533,6 @@ impl MaspClient for IndexerMaspClient {
 
                 Ok(payload.txs)
             });
-
-            if from == to {
-                break;
-            }
         }
 
         let mut stream_of_fetches = stream::iter(fetches)
