@@ -4035,15 +4035,8 @@ mod test_finalize_block {
             .add_code(TestWasms::TxNoOp.read_bytes(), None)
             .add_data("Transaction data");
         wrapper.sign_wrapper(albert_keypair());
-        let minimum_gas_price = parameters::read_gas_cost(
-            &shell.state,
-            &wrapper.header().wrapper().unwrap().fee.token,
-        )
-        .unwrap()
-        .unwrap();
         let fee_components = get_fee_components(
             &wrapper.header().wrapper().unwrap(),
-            minimum_gas_price,
             &shell.state,
         )
         .unwrap();

@@ -1547,7 +1547,7 @@ pub fn fee_data_check(
                     wrapper.fee.token
                 ))))
             } else {
-                get_fee_components(wrapper, minimum_gas_price, storage)
+                get_fee_components(wrapper, storage)
             }
         }
         Err(err) => Err(Error::TxApply(protocol::Error::FeeError(format!(
@@ -1558,15 +1558,22 @@ pub fn fee_data_check(
     }
 }
 
+/// Extract the components of the fee for the provided wrapper transaction
 pub fn get_fee_components(
     wrapper: &WrapperTx,
-    minimum_gas_price: token::Amount,
     storage: &impl StorageRead,
 ) -> ShellResult<FeeComponents> {
     let denom_amt = wrapper.get_tx_fee().map_err(|e| {
         Error::TxApply(protocol::Error::FeeError(e.to_string()))
     })?;
     let fees = token::denom_to_amount(denom_amt, &wrapper.fee.token, storage)?;
+    let minimum_gas_price =
+        parameters::read_gas_cost(storage, &wrapper.fee.token)
+            .expect("Must be able to read gas cost parameter")
+            .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
+                "The provided {} token is not allowed for fee payment",
+                wrapper.fee.token
+            ))))?;
     let base_fee = minimum_gas_price
         .checked_mul(token::Amount::from(wrapper.gas_limit))
         .ok_or_else(|| {

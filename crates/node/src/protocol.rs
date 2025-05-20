@@ -501,31 +501,23 @@ where
         .write_log_mut()
         .write_tx_hash(tx.header_hash())
         .expect("Error while writing tx hash to storage");
-    let minimum_gas_price =
-        parameters::read_gas_cost(shell_params.state, &wrapper.fee.token)
-            .expect("Must be able to read gas cost parameter")
-            .ok_or(Error::FeeError(format!(
-                "The provided {} token is not allowed for fee payment",
-                wrapper.fee.token
-            )))?;
-    let fee_components = crate::shell::get_fee_components(
-        wrapper,
-        minimum_gas_price,
-        shell_params.state,
-    )
-    .map_err(|e| Error::FeeError(e.to_string()))?;
 
     // Charge or check fees, propagate any errors to prevent committing invalid
     // data
     let payment_result = match block_proposer {
-        Some(block_proposer) => transfer_fee(
-            shell_params,
-            block_proposer,
-            tx,
-            wrapper,
-            tx_index,
-            &fee_components,
-        )?,
+        Some(block_proposer) => {
+            let fee_components =
+                crate::shell::get_fee_components(wrapper, shell_params.state)
+                    .map_err(|e| Error::FeeError(e.to_string()))?;
+            transfer_fee(
+                shell_params,
+                block_proposer,
+                tx,
+                wrapper,
+                tx_index,
+                &fee_components,
+            )?
+        }
         None => check_fees(shell_params, tx, wrapper)?,
     };
 
@@ -992,7 +984,7 @@ fn fee_token_transfer<WLS>(
     token: &Address,
     src: &Address,
     dest: &Address,
-    fee: &FeeComponents,
+    fee_components: &FeeComponents,
 ) -> Result<()>
 where
     WLS: State + StorageRead + TxWrites,
@@ -1002,7 +994,7 @@ where
         token: &Address,
         src: &Address,
         dest: &Address,
-        fee: &FeeComponents,
+        fee_components: &FeeComponents,
     ) -> std::result::Result<(), state::Error>
     where
         WLS: State + StorageRead + TxWrites,
@@ -1013,7 +1005,7 @@ where
                 &mut state.with_tx_writes(),
                 token,
                 src,
-                fee.base,
+                fee_components.base,
             )?;
         } else {
             // Transfer base fee to the PGF account
@@ -1022,16 +1014,22 @@ where
                 token,
                 src,
                 &namada_sdk::address::PGF,
-                fee.base,
+                fee_components.base,
             )?;
         }
 
         // Transfer tip to the block proposer
-        token::transfer(&mut state.with_tx_writes(), token, src, dest, fee.tip)
+        token::transfer(
+            &mut state.with_tx_writes(),
+            token,
+            src,
+            dest,
+            fee_components.tip,
+        )
     }
 
     // Make sure to drop the content of the write log in case of any error
-    fee_transfer_inner(state, token, src, dest, fee).map_err(|err| {
+    fee_transfer_inner(state, token, src, dest, fee_components).map_err(|err| {
         state.write_log_mut().drop_tx();
 
         Error::Error(err)
