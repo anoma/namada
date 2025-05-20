@@ -522,7 +522,13 @@ pub mod testing {
             prover_rng in arb_rng().prop_map(TestCsprng),
             mut rng in arb_rng().prop_map(TestCsprng),
             bparams_rng in arb_rng().prop_map(TestCsprng),
-        ) -> (Transfer, ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams) {
+        ) -> (
+            Transfer,
+            ShieldedTransfer,
+            HashMap<AssetData, u64>,
+            StoredBuildParams,
+            namada_tx::Section,
+        ) {
             let mut rng_build_params = RngBuildParams::new(bparams_rng);
             let (masp_tx, metadata) = builder.clone().build(
                 &MockTxProver(Mutex::new(prover_rng)),
@@ -535,23 +541,26 @@ pub mod testing {
             )
             .take(builder.sapling_outputs().len())
             .collect();
-            let fmd_sechash = {
-                let sec = namada_tx::Section::ExtraData(
-                    namada_tx::Code::from_borsh_encoded(&fmd_flags),
-                );
-                sec.get_hash()
-            };
+            let fmd_sec = namada_tx::Section::ExtraData(
+                namada_tx::Code::from_borsh_encoded(&fmd_flags),
+            );
             transfer.shielded_data = Some(MaspTxData {
                 masp_tx_id: masp_tx.txid().into(),
-                flag_ciphertext_sechash: fmd_sechash,
+                flag_ciphertext_sechash: fmd_sec.get_hash(),
             });
-            (transfer, ShieldedTransfer {
-                builder: builder.map_builder(WalletMap),
-                metadata,
-                masp_tx,
-                epoch,
-                fmd_flags,
-            }, asset_types, rng_build_params.to_stored().unwrap())
+            (
+                transfer,
+                ShieldedTransfer {
+                    builder: builder.map_builder(WalletMap),
+                    metadata,
+                    masp_tx,
+                    epoch,
+                    fmd_flags,
+                },
+                asset_types,
+                rng_build_params.to_stored().unwrap(),
+                fmd_sec,
+            )
         }
     }
 }

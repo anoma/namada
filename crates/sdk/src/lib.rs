@@ -1124,9 +1124,11 @@ pub mod testing {
             arb in prop_oneof![
                 arb_transparent_transfer(..5).prop_map(|xfer| (xfer, None)),
                 arb_shielded_transfer(0..MAX_ASSETS)
-                    .prop_map(|(w, x, y, z)| (w, Some((x, y, z))))
+                    .prop_map(|(xfer, masp_tx, asset_types, params, fmd_sec)| {
+                        (xfer, Some((masp_tx, asset_types, params, fmd_sec)))
+                    })
             ],
-        ) -> (Transfer, Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams)>) {
+        ) -> (Transfer, Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams, Section)>) {
             arb
         }
     }
@@ -1143,12 +1145,10 @@ pub mod testing {
             let mut tx = Tx { header, sections: vec![] };
             tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
             tx.add_data(transfer.clone());
-            if let Some((shielded_transfer, asset_types, build_params)) = aux {
+            if let Some((shielded_transfer, asset_types, build_params, fmd_sec)) = aux {
                 let shielded_section_hash =
                     tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
-                tx.add_fmd_flag_ciphertexts(
-                    &shielded_transfer.fmd_flags,
-                );
+                tx.add_section(fmd_sec);
                 tx.add_masp_builder(MaspBuilder {
                     asset_types: asset_types.into_keys().collect(),
                     // Store how the Info objects map to Descriptors/Outputs
@@ -1535,7 +1535,7 @@ pub mod testing {
             transfer_aux in option::of(arb_transfer()),
         ) -> (
             MsgTransfer<token::Transfer>,
-            Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams)>,
+            Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams, Section)>,
         ) {
             if let Some((transfer, aux)) = transfer_aux {
                 (MsgTransfer { message, transfer: Some(transfer) }, aux)
@@ -1557,9 +1557,10 @@ pub mod testing {
             let mut tx = Tx { header, sections: vec![] };
             tx.add_serialized_data(msg_transfer.serialize_to_vec());
             tx.add_code_from_hash(code_hash, Some(TX_IBC_WASM.to_owned()));
-            if let Some((shielded_transfer, asset_types, build_params)) = aux {
+            if let Some((shielded_transfer, asset_types, build_params, fmd_sec)) = aux {
                 let shielded_section_hash =
                     tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
+                tx.add_section(fmd_sec);
                 tx.add_masp_builder(MaspBuilder {
                     asset_types: asset_types.into_keys().collect(),
                     // Store how the Info objects map to Descriptors/Outputs
@@ -1585,7 +1586,7 @@ pub mod testing {
             transfer_aux in option::of(arb_transfer()),
         ) -> (
             MsgNftTransfer<token::Transfer>,
-            Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams)>,
+            Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams, Section)>,
         ) {
             if let Some((transfer, aux)) = transfer_aux {
                 (MsgNftTransfer { message, transfer: Some(transfer) }, aux)
@@ -1607,9 +1608,10 @@ pub mod testing {
             let mut tx = Tx { header, sections: vec![] };
             tx.add_serialized_data(msg_transfer.serialize_to_vec());
             tx.add_code_from_hash(code_hash, Some(TX_IBC_WASM.to_owned()));
-            if let Some((shielded_transfer, asset_types, build_params)) = aux {
+            if let Some((shielded_transfer, asset_types, build_params, fmd_sec)) = aux {
                 let shielded_section_hash =
                     tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
+                tx.add_section(fmd_sec);
                 tx.add_masp_builder(MaspBuilder {
                     asset_types: asset_types.into_keys().collect(),
                     // Store how the Info objects map to Descriptors/Outputs
