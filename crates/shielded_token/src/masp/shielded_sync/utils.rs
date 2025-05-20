@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::ops::{Bound, RangeBounds};
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use kassandra::IndexList;
 use masp_primitives::memo::MemoBytes;
 use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
 use masp_primitives::sapling::{Node, Note, PaymentAddress, ViewingKey};
@@ -423,6 +424,10 @@ pub trait MaspClient: Clone {
         &self,
         root: &Node,
     ) -> Result<bool, Self::Error>;
+
+    /// The set of MASP txs to be downloaded as determined by fuzzy
+    /// message detection. If `None`, everything is fetched
+    fn set_fmd_indices(&mut self, fmd_indices: Option<IndexList>);
 }
 
 /// Given a block height range we wish to request and a cache of fetched block
