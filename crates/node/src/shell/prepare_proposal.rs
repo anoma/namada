@@ -349,11 +349,18 @@ where
         proposer_local_config,
         shell_params.state,
     )?;
+    let fee_components =
+        super::fee_data_check(wrapper, minimum_gas_price, shell_params.state)?;
 
-    super::fee_data_check(wrapper, minimum_gas_price, shell_params)?;
-
-    protocol::transfer_fee(shell_params, proposer, tx, wrapper, tx_index)
-        .map_or_else(|e| Err(Error::TxApply(e)), |_| Ok(()))
+    protocol::transfer_fee(
+        shell_params,
+        proposer,
+        tx,
+        wrapper,
+        tx_index,
+        &fee_components,
+    )
+    .map_or_else(|e| Err(Error::TxApply(e)), |_| Ok(()))
 }
 
 fn compute_min_gas_price<D, H>(
