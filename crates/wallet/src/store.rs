@@ -85,6 +85,9 @@ pub struct Store {
     /// Known mappings of public key hashes to their aliases in the `keys`
     /// field. Used for look-up by a public key.
     pkhs: BTreeMap<PublicKeyHash, Alias>,
+    /// Known mappings of FMD secret key hashes to their aliases in the
+    /// `viewing_keys` field.
+    fmdhs: BTreeMap<Alias, FmdKeyHash>,
     /// Special keys if the wallet belongs to a validator
     pub(crate) validator_data: Option<ValidatorData>,
     /// Namada address vp type
@@ -150,6 +153,15 @@ impl Store {
         alias: impl AsRef<str>,
     ) -> Option<&ExtendedViewingKey> {
         self.view_keys.get(&alias.into())
+    }
+
+    /// Find the hash of an FMD secret key from the alias of the viewing
+    /// key it was derived from.
+    pub fn find_fmd_key_hash(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Option<&FmdKeyHash> {
+        self.fmdhs.get(&alias.into())
     }
 
     /// Find the birthday of the given alias
@@ -448,6 +460,9 @@ impl Store {
     }
 
     /// Insert viewing keys similarly to how it's done for keypairs
+    ///
+    /// Hashes of the FMD secret keys associated with a viewing key will
+    /// also be added to a map associating it with the alias provided.
     pub fn insert_viewing_key<U: WalletIo>(
         &mut self,
         alias: Alias,
@@ -479,6 +494,9 @@ impl Store {
         }
         self.remove_alias(&alias);
         birthday.map(|x| self.birthdays.insert(alias.clone(), x));
+        let fmd_key =
+            namada_core::masp::FmdSecretKey::from(&viewkey).fmd_secret_key();
+        self.fmdhs.insert(alias.clone(), fmd_key.into());
         self.view_keys.insert(alias.clone(), viewkey);
         path.map(|p| self.derivation_paths.insert(alias.clone(), p));
         Some(alias)
@@ -673,6 +691,7 @@ impl Store {
             derivation_paths,
             addresses,
             pkhs,
+            fmdhs,
             validator_data: _,
             address_vp_types,
         } = self;
@@ -686,6 +705,7 @@ impl Store {
         derivation_paths.extend(store.derivation_paths);
         addresses.extend(store.addresses);
         pkhs.extend(store.pkhs);
+        fmdhs.extend(store.fmdhs);
         address_vp_types.extend(store.address_vp_types);
     }
 
@@ -923,6 +943,16 @@ impl From<StoreV0> for Store {
             derivation_paths: store.derivation_paths,
             addresses: store.addresses,
             pkhs: store.pkhs,
+            fmdhs: store
+                .view_keys
+                .iter()
+                .map(|(alias, vk)| {
+                    let fmd_key =
+                        namada_core::masp::FmdSecretKey::from(&vk.key)
+                            .fmd_secret_key();
+                    (alias.clone(), fmd_key.into())
+                })
+                .collect(),
             validator_data: store.validator_data,
             address_vp_types: store.address_vp_types,
             ..Store::default()

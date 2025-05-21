@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::io;
 use std::ops::Deref;
 
+use ::polyfuzzy::KeyExpansion;
 use borsh::schema::Definition;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use masp_primitives::sapling::SaplingIvk;
@@ -13,7 +14,10 @@ use rand_core::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use tiny_keccak::{Hasher, IntoXof, KangarooTwelve, Xof};
 
+use crate::masp::ExtendedViewingKey;
+
 mod polyfuzzy {
+    pub(super) use ::polyfuzzy::FmdSecretKey;
     #[cfg(feature = "rand")]
     pub(super) use ::polyfuzzy::MultiFmdScheme;
     pub(super) use ::polyfuzzy::fmd2_compact::*;
@@ -209,6 +213,14 @@ impl SecretKey {
             inner: self.inner.var_randomized_public_key(diversifier),
         }
     }
+
+    /// Expand this compact key to a full FMD secret key.
+    pub fn fmd_secret_key(&self) -> polyfuzzy::FmdSecretKey {
+        let cpk_key = self.inner.master_public_key();
+        let mut scheme =
+            polyfuzzy::MultiFmd2CompactScheme::new(parameters::GAMMA, 1);
+        scheme.expand_keypair(&self.inner, &cpk_key).0
+    }
 }
 
 impl AsRef<polyfuzzy::CompactSecretKey> for SecretKey {
@@ -255,6 +267,12 @@ impl From<&PseudoExtendedKey> for SecretKey {
 impl From<PseudoExtendedKey> for SecretKey {
     fn from(psk: PseudoExtendedKey) -> Self {
         (&psk).into()
+    }
+}
+
+impl From<&ExtendedViewingKey> for SecretKey {
+    fn from(evk: &ExtendedViewingKey) -> Self {
+        Self::from(evk.as_viewing_key().ivk())
     }
 }
 

@@ -443,6 +443,17 @@ impl<U> Wallet<U> {
         })
     }
 
+    /// Find the hash of an FMD secret key from the alias of the viewing
+    /// key it was derived from.
+    pub fn find_fmd_key_hash(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Result<&FmdKeyHash, FindKeyError> {
+        self.store.find_fmd_key_hash(alias.as_ref()).ok_or_else(|| {
+            FindKeyError::KeyNotFound(alias.as_ref().to_string())
+        })
+    }
+
     /// Find the birthday of the given alias
     pub fn find_birthday(
         &self,
