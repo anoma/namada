@@ -235,6 +235,7 @@ impl TestTxEnv {
             &self.batched_tx.cmt,
             &mut self.vp_wasm_cache,
             &mut self.tx_wasm_cache,
+            wasm::run::GasMeterKind::MutGlobal,
         )
         .and(Ok(()))
     }
