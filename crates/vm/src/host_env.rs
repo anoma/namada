@@ -19,8 +19,8 @@ use namada_core::internal::{HostEnvResult, KeyVal};
 use namada_core::storage::{Key, TX_INDEX_LENGTH, TxIndex};
 use namada_events::{Event, EventTypeBuilder};
 use namada_gas::{
-    self as gas, Gas, GasMetering, MEMORY_ACCESS_GAS_PER_BYTE, TxGasMeter,
-    VpGasMeter,
+    self as gas, Gas, GasMeterKind, GasMetering, MEMORY_ACCESS_GAS_PER_BYTE,
+    TxGasMeter, VpGasMeter,
 };
 use namada_state::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use namada_state::write_log::{self, WriteLog};
@@ -143,6 +143,8 @@ where
     /// To avoid unused parameter without "wasm-runtime" feature
     #[cfg(not(feature = "wasm-runtime"))]
     pub cache_access: std::marker::PhantomData<CA>,
+    /// WASM intructions gas meter kind
+    pub gas_meter_kind: GasMeterKind,
 }
 
 impl<MEM, D, H, CA> TxVmEnv<MEM, D, H, CA>
@@ -176,6 +178,7 @@ where
         yielded_value: &mut Option<Vec<u8>>,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
         #[cfg(feature = "wasm-runtime")] tx_wasm_cache: &mut TxCache<CA>,
+        gas_meter_kind: GasMeterKind,
     ) -> Self {
         let write_log = unsafe { RwHostRef::new(write_log) };
         let in_mem = unsafe { RoHostRef::new(in_mem) };
@@ -214,6 +217,7 @@ where
             tx_wasm_cache,
             #[cfg(not(feature = "wasm-runtime"))]
             cache_access: std::marker::PhantomData,
+            gas_meter_kind,
         };
 
         Self { memory, ctx }
@@ -299,6 +303,7 @@ where
             tx_wasm_cache: self.tx_wasm_cache,
             #[cfg(not(feature = "wasm-runtime"))]
             cache_access: std::marker::PhantomData,
+            gas_meter_kind: self.gas_meter_kind,
         }
     }
 }
@@ -357,6 +362,8 @@ where
     /// To avoid unused parameter without "wasm-runtime" feature
     #[cfg(not(feature = "wasm-runtime"))]
     pub cache_access: std::marker::PhantomData<CA>,
+    /// WASM intructions gas meter kind
+    pub gas_meter_kind: GasMeterKind,
 }
 
 /// A Validity predicate runner for calls from the [`vp_eval`] function.
@@ -415,6 +422,7 @@ where
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
+        gas_meter_kind: GasMeterKind,
     ) -> Self {
         let ctx = VpCtx::new(
             address,
@@ -433,6 +441,7 @@ where
             eval_runner,
             #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
+            gas_meter_kind,
         );
 
         Self { memory, ctx }
@@ -491,6 +500,7 @@ where
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
+        gas_meter_kind: GasMeterKind,
     ) -> Self {
         let address = unsafe { RoHostRef::new(address) };
         let write_log = unsafe { RoHostRef::new(write_log) };
@@ -527,6 +537,7 @@ where
             vp_wasm_cache,
             #[cfg(not(feature = "wasm-runtime"))]
             cache_access: std::marker::PhantomData,
+            gas_meter_kind,
         }
     }
 
@@ -578,6 +589,7 @@ where
             vp_wasm_cache: self.vp_wasm_cache,
             #[cfg(not(feature = "wasm-runtime"))]
             cache_access: std::marker::PhantomData,
+            gas_meter_kind: self.gas_meter_kind,
         }
     }
 }
@@ -2392,6 +2404,7 @@ pub mod testing {
             vp_wasm_cache,
             #[cfg(feature = "wasm-runtime")]
             tx_wasm_cache,
+            GasMeterKind::MutGlobal,
         )
     }
 
@@ -2442,6 +2455,7 @@ pub mod testing {
             vp_wasm_cache,
             #[cfg(feature = "wasm-runtime")]
             tx_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
 
         env.memory.init_from(&wasm_memory);
@@ -2488,6 +2502,7 @@ pub mod testing {
             eval_runner,
             #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         )
     }
 }

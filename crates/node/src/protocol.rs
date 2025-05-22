@@ -1320,6 +1320,7 @@ where
                             &keys_changed,
                             &verifiers,
                             vp_wasm_cache.clone(),
+                            GasMeterKind::MutGlobal,
                         );
 
                         match internal_addr {
