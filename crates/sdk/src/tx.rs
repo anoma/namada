@@ -41,7 +41,10 @@ use namada_core::ibc::core::client::types::Height as IbcHeight;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::primitives::{IntoTimestamp, Timestamp as IbcTimestamp};
 use namada_core::key::{self, *};
-use namada_core::masp::{AssetData, MaspEpoch, TransferSource, TransferTarget};
+use namada_core::masp::{
+    AssetData, FlagCiphertext, MaspEpoch, MaspTxData, TransferSource,
+    TransferTarget,
+};
 use namada_core::storage;
 use namada_core::time::DateTimeUtc;
 use namada_events::extend::EventAttributeEntry;
@@ -2819,14 +2822,25 @@ pub async fn build_ibc_transfer(
         .map(|(shielded_transfer, asset_types)| {
             let masp_tx_hash =
                 tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
-            transfer.shielded_section_hash = Some(masp_tx_hash);
+
+            let (fmd_section, flag_ciphertext_sechash) =
+                create_fmd_section(shielded_transfer.fmd_flags);
+            tx.add_section(fmd_section);
+
+            transfer.shielded_data = Some(MaspTxData {
+                masp_tx_id: masp_tx_hash,
+                flag_ciphertext_sechash,
+            });
+
             signing_data.shielded_hash = Some(masp_tx_hash);
+
             tx.add_masp_builder(MaspBuilder {
                 asset_types,
                 metadata: shielded_transfer.metadata,
                 builder: shielded_transfer.builder,
                 target: masp_tx_hash,
             });
+
             Result::Ok(transfer)
         })
         .transpose()?;
@@ -3249,9 +3263,16 @@ pub async fn build_shielded_transfer<N: Namada>(
                 masp_tx,
                 metadata,
                 epoch: _,
+                fmd_flags,
             },
             asset_types,
         ) = shielded_parts;
+
+        // Create FMD flags section
+        let (fmd_section, flag_ciphertext_sechash) =
+            create_fmd_section(fmd_flags);
+        tx.add_section(fmd_section);
+
         // Add a MASP Transaction section to the Tx and get the tx hash
         let section_hash = tx.add_masp_tx_section(masp_tx).1;
 
@@ -3265,7 +3286,10 @@ pub async fn build_shielded_transfer<N: Namada>(
             target: section_hash,
         });
 
-        data.shielded_section_hash = Some(section_hash);
+        data.shielded_data = Some(MaspTxData {
+            masp_tx_id: section_hash,
+            flag_ciphertext_sechash,
+        });
         signing_data.shielded_hash = Some(section_hash);
         tracing::debug!("Transfer data {data:?}");
         Ok(())
@@ -3385,7 +3409,7 @@ pub async fn build_shielding_transfer<N: Namada>(
 
         transfer_data.push(MaspTransferData {
             source: TransferSource::Address(source.to_owned()),
-            target: TransferTarget::PaymentAddress(args.target),
+            target: TransferTarget::PaymentAddress(args.target.clone()),
             token: token.to_owned(),
             amount: validated_amount,
         });
@@ -3419,11 +3443,17 @@ pub async fn build_shielding_transfer<N: Namada>(
                 masp_tx,
                 metadata,
                 epoch: _,
+                fmd_flags,
             },
             asset_types,
         ) = shielded_parts;
         // Add a MASP Transaction section to the Tx and get the tx hash
         let shielded_section_hash = tx.add_masp_tx_section(masp_tx).1;
+
+        // Create FMD flags section
+        let (fmd_section, flag_ciphertext_sechash) =
+            create_fmd_section(fmd_flags);
+        tx.add_section(fmd_section);
 
         tx.add_masp_builder(MaspBuilder {
             asset_types,
@@ -3435,7 +3465,10 @@ pub async fn build_shielding_transfer<N: Namada>(
             target: shielded_section_hash,
         });
 
-        data.shielded_section_hash = Some(shielded_section_hash);
+        data.shielded_data = Some(MaspTxData {
+            masp_tx_id: shielded_section_hash,
+            flag_ciphertext_sechash,
+        });
         signing_data.shielded_hash = Some(shielded_section_hash);
         tracing::debug!("Transfer data {data:?}");
         Ok(())
@@ -3542,11 +3575,17 @@ pub async fn build_unshielding_transfer<N: Namada>(
                 masp_tx,
                 metadata,
                 epoch: _,
+                fmd_flags,
             },
             asset_types,
         ) = shielded_parts;
         // Add a MASP Transaction section to the Tx and get the tx hash
         let shielded_section_hash = tx.add_masp_tx_section(masp_tx).1;
+
+        // Create FMD flags section
+        let (fmd_section, flag_ciphertext_sechash) =
+            create_fmd_section(fmd_flags);
+        tx.add_section(fmd_section);
 
         tx.add_masp_builder(MaspBuilder {
             asset_types,
@@ -3558,7 +3597,10 @@ pub async fn build_unshielding_transfer<N: Namada>(
             target: shielded_section_hash,
         });
 
-        data.shielded_section_hash = Some(shielded_section_hash);
+        data.shielded_data = Some(MaspTxData {
+            masp_tx_id: shielded_section_hash,
+            flag_ciphertext_sechash,
+        });
         signing_data.shielded_hash = Some(shielded_section_hash);
         tracing::debug!("Transfer data {data:?}");
         Ok(())
@@ -3939,7 +3981,7 @@ pub async fn build_custom(
 pub async fn gen_ibc_shielding_transfer<N: Namada>(
     context: &N,
     args: args::GenIbcShieldingTransfer,
-) -> Result<Option<MaspTransaction>> {
+) -> Result<Option<(MaspTransaction, Vec<FlagCiphertext>)>> {
     let source = IBC;
 
     let token = match args.asset {
@@ -4001,7 +4043,7 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
             .map_err(|err| TxSubmitError::MaspError(err.to_string()))?
     };
 
-    Ok(shielded_transfer.map(|st| st.masp_tx))
+    Ok(shielded_transfer.map(|st| (st.masp_tx, st.fmd_flags)))
 }
 
 pub(crate) async fn get_ibc_src_port_channel(
@@ -4162,8 +4204,8 @@ async fn get_refund_target(
     match (source, refund_target) {
         (_, Some(TransferTarget::PaymentAddress(pa))) => {
             Err(Error::Other(format!(
-                "Supporting only a transparent address as a refund target: {}",
-                pa,
+                "Supporting only a transparent address as a refund target: \
+                 {pa}"
             )))
         }
         (
@@ -4306,4 +4348,11 @@ where
 fn proposal_to_vec(proposal: OnChainProposal) -> Result<Vec<u8>> {
     borsh::to_vec(&proposal.content)
         .map_err(|e| Error::from(EncodingError::Conversion(e.to_string())))
+}
+
+fn create_fmd_section(fmd_flags: Vec<FlagCiphertext>) -> (Section, Hash) {
+    let fmd_section = Section::ExtraData(Code::from_borsh_encoded(&fmd_flags));
+    let fmd_sechash = fmd_section.get_hash();
+
+    (fmd_section, fmd_sechash)
 }

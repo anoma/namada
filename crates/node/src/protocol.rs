@@ -30,7 +30,7 @@ use namada_sdk::tx::data::{
     BatchedTxResult, TxResult, VpStatusFlags, VpsResult, WrapperTx,
     compute_inner_tx_hash,
 };
-use namada_sdk::tx::event::{MaspEvent, MaspEventKind, MaspTxRef};
+use namada_sdk::tx::event::{FmdSectionRef, MaspEvent, MaspTxKind, MaspTxRef};
 use namada_sdk::tx::{BatchedTxRef, IndexedTx, Tx, TxCommitments};
 use namada_sdk::validation::{
     EthBridgeNutVp, EthBridgePoolVp, EthBridgeVp, GovernanceVp, IbcVp, MaspVp,
@@ -395,38 +395,32 @@ where
             Ok(mut batched_tx_result) if batched_tx_result.is_accepted() => {
                 // If the transaction was a masp one generate the
                 // appropriate event
-                if let Some(masp_ref) = get_optional_masp_ref(
+                if let Some((masp_ref, fmd_ref)) = get_optional_masp_refs(
                     state,
                     cmt,
                     Either::Right(&batched_tx_result),
                 )
                 .map_err(|e| Box::new(DispatchError::from(e)))?
                 {
-                    let inner_tx_hash =
-                        compute_inner_tx_hash(wrapper_hash, Either::Right(cmt));
-                    batched_tx_result.events.insert(
-                        MaspEvent {
-                            tx_index: IndexedTx {
-                                block_height: height,
-                                block_index: tx_index,
-                                batch_index: tx
-                                    .header
-                                    .batch
-                                    .get_index_of(cmt)
-                                    .map(|idx| {
-                                        TxIndex::must_from_usize(idx).into()
-                                    }),
-                            },
-                            kind: MaspEventKind::Transfer,
-                            data: masp_ref,
-                        }
-                        .with(TxHashAttr(
-                            // Zero hash if the wrapper is not provided
-                            // (governance proposal)
-                            wrapper_hash.cloned().unwrap_or_default(),
-                        ))
-                        .with(InnerTxHashAttr(inner_tx_hash))
-                        .into(),
+                    insert_masp_events(
+                        &mut batched_tx_result,
+                        // Zero hash if the wrapper is not provided
+                        // (governance proposal)
+                        TxHashAttr(wrapper_hash.cloned().unwrap_or_default()),
+                        InnerTxHashAttr(compute_inner_tx_hash(
+                            wrapper_hash,
+                            Either::Right(cmt),
+                        )),
+                        IndexedTx {
+                            block_height: height,
+                            block_index: tx_index,
+                            batch_index: tx.header.batch.get_index_of(cmt).map(
+                                |idx| TxIndex::must_from_usize(idx).into(),
+                            ),
+                        },
+                        MaspTxKind::Transfer,
+                        masp_ref,
+                        fmd_ref,
                     );
                 }
 
@@ -467,6 +461,7 @@ where
 pub struct MaspTxResult {
     tx_result: BatchedTxResult,
     masp_section_ref: MaspTxRef,
+    fmd_section_ref: FmdSectionRef,
 }
 
 /// Performs the required operation on a wrapper transaction:
@@ -526,22 +521,21 @@ where
             let first_commitments = tx.first_commitments().unwrap();
             let mut batch = TxResult::default();
             // Generate Masp event if needed
-            masp_tx_result.tx_result.events.insert(
-                MaspEvent {
-                    tx_index: IndexedTx {
-                        block_height: height,
-                        block_index: tx_index.to_owned(),
-                        batch_index: Some(0),
-                    },
-                    kind: MaspEventKind::FeePayment,
-                    data: masp_tx_result.masp_section_ref,
-                }
-                .with(TxHashAttr(tx.header_hash()))
-                .with(InnerTxHashAttr(compute_inner_tx_hash(
+            insert_masp_events(
+                &mut masp_tx_result.tx_result,
+                TxHashAttr(tx.header_hash()),
+                InnerTxHashAttr(compute_inner_tx_hash(
                     tx.wrapper_hash().as_ref(),
                     Either::Right(first_commitments),
-                )))
-                .into(),
+                )),
+                IndexedTx {
+                    block_height: height,
+                    block_index: tx_index.to_owned(),
+                    batch_index: Some(0),
+                },
+                MaspTxKind::FeePayment,
+                masp_tx_result.masp_section_ref,
+                masp_tx_result.fmd_section_ref,
             );
 
             batch.insert_inner_tx_result(
@@ -839,20 +833,22 @@ where
                 // Ensure that the transaction is actually a masp one, otherwise
                 // reject
                 if is_masp_transfer && result.is_accepted() {
-                    let masp_section_ref = get_optional_masp_ref(
-                        *state,
-                        first_tx.cmt,
-                        Either::Left(true),
-                    )?
-                    .ok_or_else(|| {
-                        Error::FeeError(
-                            "Missing expected masp section reference"
-                                .to_string(),
-                        )
-                    })?;
+                    let (masp_section_ref, fmd_section_ref) =
+                        get_optional_masp_refs(
+                            *state,
+                            first_tx.cmt,
+                            Either::Left(true),
+                        )?
+                        .ok_or_else(|| {
+                            Error::FeeError(
+                                "Missing expected masp section reference"
+                                    .to_string(),
+                            )
+                        })?;
                     MaspTxResult {
                         tx_result: result,
                         masp_section_ref,
+                        fmd_section_ref,
                     }
                 } else {
                     state.write_log_mut().drop_tx();
@@ -893,11 +889,11 @@ where
 // messing up with indexers/clients. Also a transaction can only be of one of
 // the two types, not both at the same time (the MASP VP accepts a single
 // Transaction)
-fn get_optional_masp_ref<S: Read<Err = state::Error>>(
+fn get_optional_masp_refs<S: Read<Err = state::Error>>(
     state: &S,
     cmt: &TxCommitments,
     is_masp_tx: Either<bool, &BatchedTxResult>,
-) -> Result<Option<MaspTxRef>> {
+) -> Result<Option<(MaspTxRef, FmdSectionRef)>> {
     // Always check that the transaction was indeed a MASP one by looking at the
     // changed keys. A malicious tx could push a MASP Action without touching
     // any storage keys associated with the shielded pool
@@ -912,14 +908,27 @@ fn get_optional_masp_ref<S: Read<Err = state::Error>>(
     let masp_ref = if action::is_ibc_shielding_transfer(state)
         .map_err(Error::StateError)?
     {
-        Some(MaspTxRef::IbcData(cmt.data_sechash().to_owned()))
+        let ibc_data = cmt.data_sechash().to_owned();
+
+        Some((
+            MaspTxRef::IbcData(ibc_data),
+            FmdSectionRef::IbcData(ibc_data),
+        ))
     } else {
         let actions = state.read_actions().map_err(Error::StateError)?;
-        action::get_masp_section_ref(&actions)
+
+        let masp_tx = action::get_masp_section_ref(&actions)
             .map_err(|msg| {
                 Error::StateError(state::Error::new_alloc(msg.to_string()))
             })?
-            .map(MaspTxRef::MaspSection)
+            .map(MaspTxRef::MaspSection);
+        let fmd_sechash = action::get_fmd_flag_ciphertexts_ref(&actions)
+            .map_err(|msg| {
+                Error::StateError(state::Error::new_alloc(msg.to_string()))
+            })?
+            .map(FmdSectionRef::FmdSection);
+
+        masp_tx.zip(fmd_sechash)
     };
 
     Ok(masp_ref)
@@ -1497,6 +1506,35 @@ fn merge_vp_results(
         },
         vps_gas,
     ))
+}
+
+/// Insert MASP event data into the provided [`BatchedTxResult`].
+fn insert_masp_events(
+    batched_tx_result: &mut BatchedTxResult,
+    wrapper_tx_hash: TxHashAttr,
+    inner_tx_hash: InnerTxHashAttr,
+    tx_index: IndexedTx,
+    masp_tx_kind: MaspTxKind,
+    masp_tx_ref: MaspTxRef,
+    fmd_ref: FmdSectionRef,
+) {
+    batched_tx_result.events.extend([
+        MaspEvent::ShieldedOutput {
+            tx_index,
+            kind: masp_tx_kind,
+            data: masp_tx_ref,
+        }
+        .with(TxHashAttr(wrapper_tx_hash.0))
+        .with(InnerTxHashAttr(inner_tx_hash.0))
+        .into(),
+        MaspEvent::FlagCiphertexts {
+            tx_index,
+            section: fmd_ref,
+        }
+        .with(TxHashAttr(wrapper_tx_hash.0))
+        .with(InnerTxHashAttr(inner_tx_hash.0))
+        .into(),
+    ]);
 }
 
 #[cfg(test)]

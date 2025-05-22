@@ -1,5 +1,7 @@
 //! MASP types
 
+mod fmd;
+
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::num::ParseIntError;
@@ -20,13 +22,18 @@ use ripemd::Digest as RipemdDigest;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::Sha256;
 
+pub use self::fmd::{
+    FlagCiphertext, PublicKey as FmdPublicKey,
+    PublicKeyBytes as FmdPublicKeyBytes, SecretKey as FmdSecretKey,
+};
 use crate::address::{Address, DecodeError, HASH_HEX_LEN, IBC, MASP};
 use crate::borsh::BorshSerializeExt;
 use crate::chain::Epoch;
+use crate::hash::Hash;
 use crate::impl_display_and_from_str_via_format;
 use crate::string_encoding::{
     self, MASP_EXT_FULL_VIEWING_KEY_HRP, MASP_EXT_SPENDING_KEY_HRP,
-    MASP_PAYMENT_ADDRESS_HRP,
+    MASP_FMD_PAYMENT_ADDRESS_HRP, MASP_PAYMENT_ADDRESS_HRP,
 };
 use crate::token::{Denomination, MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
 
@@ -82,6 +89,44 @@ impl From<TxIdInner> for MaspTxId {
 impl Display for MaspTxId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+/// Pointers to MASP data included in Namada transactions.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+#[derive(
+    Serialize,
+    Deserialize,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Debug,
+    Eq,
+    PartialEq,
+    Copy,
+    Ord,
+    PartialOrd,
+    Hash,
+)]
+pub struct MaspTxData {
+    /// Id of the MASP transaction.
+    ///
+    /// This is used to look-up a MASP transaction section.
+    pub masp_tx_id: MaspTxId,
+    /// Section hash of the FMD flag ciphertext.
+    ///
+    /// This is used to look-up a transaction data section
+    /// containing an FMD flag ciphertext.
+    pub flag_ciphertext_sechash: Hash,
+}
+
+impl Display for MaspTxData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("")
+            .field("masp_tx_id", &self.masp_tx_id)
+            .field("flag_ciphertext_sechash", &self.flag_ciphertext_sechash)
+            .finish()
     }
 }
 
@@ -300,9 +345,20 @@ pub type Precision = u128;
 // enough capacity to store the payment address
 const PAYMENT_ADDRESS_SIZE: usize = 43;
 
+// enough capacity to store the payment address
+const FMD_PAYMENT_ADDRESS_SIZE: usize =
+    PAYMENT_ADDRESS_SIZE + FmdPublicKeyBytes::LENGTH;
+
 /// Wrapper for masp_primitive's DiversifierIndex
 #[derive(Clone, Debug, Copy, Eq, PartialEq, Default)]
 pub struct DiversifierIndex(masp_primitives::zip32::DiversifierIndex);
+
+impl DiversifierIndex {
+    /// Return the next payment address index.
+    pub fn increment(&mut self) {
+        self.0.increment().expect("exhausted payment addresses");
+    }
+}
 
 impl From<masp_primitives::zip32::DiversifierIndex> for DiversifierIndex {
     fn from(idx: masp_primitives::zip32::DiversifierIndex) -> Self {
@@ -481,6 +537,54 @@ impl string_encoding::Format for PaymentAddress {
 
 impl_display_and_from_str_via_format!(PaymentAddress);
 
+impl string_encoding::Format for FmdPaymentAddress {
+    type EncodedBytes<'a> = Vec<u8>;
+
+    const HRP: string_encoding::Hrp =
+        string_encoding::Hrp::parse_unchecked(MASP_FMD_PAYMENT_ADDRESS_HRP);
+
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(FMD_PAYMENT_ADDRESS_SIZE);
+        bytes.extend_from_slice(&self.payment_address.to_bytes()[..]);
+        bytes.extend_from_slice(&self.fmd_public_key[..]);
+        bytes
+    }
+
+    fn decode_bytes(
+        bytes: &[u8],
+    ) -> Result<Self, string_encoding::DecodeError> {
+        if bytes.len() != FMD_PAYMENT_ADDRESS_SIZE {
+            return Err(DecodeError::InvalidInnerEncoding(format!(
+                "expected {FMD_PAYMENT_ADDRESS_SIZE} bytes for the fmd \
+                 payment address"
+            )));
+        }
+
+        let payment_address =
+            masp_primitives::sapling::PaymentAddress::from_bytes(&{
+                let mut payment_addr = [0u8; PAYMENT_ADDRESS_SIZE];
+                payment_addr.copy_from_slice(&bytes[0..PAYMENT_ADDRESS_SIZE]);
+                payment_addr
+            })
+            .ok_or_else(|| {
+                DecodeError::InvalidInnerEncoding(
+                    "invalid fmd payment address provided".to_string(),
+                )
+            })?;
+
+        let fmd_public_key = bytes[PAYMENT_ADDRESS_SIZE..]
+            .try_into()
+            .map_err(DecodeError::InvalidInnerEncoding)?;
+
+        Ok(Self {
+            payment_address,
+            fmd_public_key,
+        })
+    }
+}
+
+impl_display_and_from_str_via_format!(FmdPaymentAddress);
+
 impl From<ExtendedViewingKey>
     for masp_primitives::zip32::ExtendedFullViewingKey
 {
@@ -553,6 +657,20 @@ impl PaymentAddress {
         // hex of the first 40 chars of the hash
         format!("{:.width$X}", hasher.finalize(), width = HASH_HEX_LEN)
     }
+
+    /// Create a new [`FmdPaymentAddress`].
+    pub fn with_fmd_key(self, sk: &FmdSecretKey) -> FmdPaymentAddress {
+        let Self(payment_address) = self;
+
+        let fmd_public_key = sk
+            .randomized_public_key(&payment_address.diversifier().0)
+            .into_compressed_bytes();
+
+        FmdPaymentAddress {
+            payment_address,
+            fmd_public_key,
+        }
+    }
 }
 
 impl From<PaymentAddress> for masp_primitives::sapling::PaymentAddress {
@@ -581,6 +699,76 @@ impl serde::Serialize for PaymentAddress {
 }
 
 impl<'de> serde::Deserialize<'de> for PaymentAddress {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+        let encoded: String = serde::Deserialize::deserialize(deserializer)?;
+        Self::from_str(&encoded).map_err(D::Error::custom)
+    }
+}
+
+/// [`PaymentAddress`] with FMD public key attached.
+#[derive(
+    Clone,
+    Debug,
+    PartialOrd,
+    Ord,
+    Eq,
+    PartialEq,
+    Hash,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+)]
+pub struct FmdPaymentAddress {
+    /// Wrapped MASP payment address.
+    payment_address: masp_primitives::sapling::PaymentAddress,
+    /// FMD public key.
+    fmd_public_key: FmdPublicKeyBytes,
+}
+
+impl FmdPaymentAddress {
+    /// Recover the [`PaymentAddress`] embedded within.
+    pub fn as_payment_address(
+        &self,
+    ) -> &masp_primitives::sapling::PaymentAddress {
+        &self.payment_address
+    }
+
+    /// Recover the [`FmdPublicKey`] embedded within.
+    pub fn to_fmd_public_key(&self) -> Option<FmdPublicKey> {
+        FmdPublicKey::from_parts(
+            &self.payment_address.diversifier().0,
+            &self.fmd_public_key,
+        )
+    }
+
+    /// Hash this payment address
+    pub fn hash(&self) -> String {
+        let bytes = self.serialize_to_vec();
+        let mut hasher = Sha256::new();
+        hasher.update(bytes);
+        // hex of the first 40 chars of the hash
+        format!("{:.width$X}", hasher.finalize(), width = HASH_HEX_LEN)
+    }
+}
+
+impl serde::Serialize for FmdPaymentAddress {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let encoded = self.to_string();
+        serde::Serialize::serialize(&encoded, serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for FmdPaymentAddress {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -805,6 +993,147 @@ pub fn addr_taddr(addr: Address) -> TransparentAddress {
     TAddrData::Addr(addr).taddress()
 }
 
+/// Unifies FMD and non-FMD payment address types.
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshDeserializer,
+    Hash,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+)]
+pub enum UnifiedPaymentAddress {
+    /// First payment address format introduced by Namada.
+    ///
+    /// Identical to a Zcash sapling payment address.
+    V0(PaymentAddress),
+    /// Payment address similar to [`Self::V0`], augmented with
+    /// [`FmdPublicKeyBytes`].
+    V1(FmdPaymentAddress),
+}
+
+impl UnifiedPaymentAddress {
+    /// Generate a [`FlagCiphertext`] from this payment address.
+    ///
+    /// Returns [`None`] if the FMD public key in the
+    /// [`UnifiedPaymentAddress::V1`] variant is invalid, and a random flag
+    /// ciphertext for the [`UnifiedPaymentAddress::V0`] variant.
+    #[cfg(feature = "rand")]
+    pub fn flag<R>(&self, rng: &mut R) -> Option<FlagCiphertext>
+    where
+        R: rand_core::CryptoRng + rand_core::RngCore,
+    {
+        match self {
+            Self::V0(_) => Some(FlagCiphertext::random(rng)),
+            Self::V1(pa) => pa.to_fmd_public_key().map(|pk| pk.flag(rng)),
+        }
+    }
+
+    /// Create a v0 payment address.
+    pub fn v0_from_zip32(
+        vk: ExtendedViewingKey,
+        div_index: DiversifierIndex,
+    ) -> (DiversifierIndex, Self) {
+        let (div_index, pa) =
+            masp_primitives::zip32::ExtendedFullViewingKey::from(vk)
+                .find_address(div_index.into())
+                .expect("exhausted payment address diversifier indices");
+
+        (DiversifierIndex(div_index), Self::V0(PaymentAddress(pa)))
+    }
+
+    /// Create a v1 payment address.
+    pub fn v1_from_zip32(
+        vk: ExtendedViewingKey,
+        div_index: DiversifierIndex,
+    ) -> (DiversifierIndex, Self) {
+        let fmd_sk: FmdSecretKey = vk.0.fvk.vk.ivk().into();
+
+        let (div_index, pa) =
+            masp_primitives::zip32::ExtendedFullViewingKey::from(vk)
+                .find_address(div_index.into())
+                .expect("exhausted payment address diversifier indices");
+
+        (
+            DiversifierIndex(div_index),
+            Self::V1(PaymentAddress(pa).with_fmd_key(&fmd_sk)),
+        )
+    }
+}
+
+impl serde::Serialize for UnifiedPaymentAddress {
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serde::Serialize::serialize(&self.to_string(), serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for UnifiedPaymentAddress {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+        let encoded: String = serde::Deserialize::deserialize(deserializer)?;
+        Self::from_str(&encoded).map_err(D::Error::custom)
+    }
+}
+
+impl From<&UnifiedPaymentAddress> for masp_primitives::sapling::PaymentAddress {
+    fn from(pa: &UnifiedPaymentAddress) -> Self {
+        match pa {
+            UnifiedPaymentAddress::V0(pa) => pa.0,
+            UnifiedPaymentAddress::V1(pa) => *pa.as_payment_address(),
+        }
+    }
+}
+
+impl From<UnifiedPaymentAddress> for masp_primitives::sapling::PaymentAddress {
+    fn from(pa: UnifiedPaymentAddress) -> Self {
+        (&pa).into()
+    }
+}
+
+impl From<PaymentAddress> for UnifiedPaymentAddress {
+    fn from(pa: PaymentAddress) -> Self {
+        Self::V0(pa)
+    }
+}
+
+impl From<FmdPaymentAddress> for UnifiedPaymentAddress {
+    fn from(pa: FmdPaymentAddress) -> Self {
+        Self::V1(pa)
+    }
+}
+
+impl Display for UnifiedPaymentAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::V0(pa) => pa.fmt(f),
+            Self::V1(pa) => pa.fmt(f),
+        }
+    }
+}
+
+impl FromStr for UnifiedPaymentAddress {
+    type Err = DecodeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        PaymentAddress::from_str(s)
+            .map(Self::V0)
+            .or_else(|_err| FmdPaymentAddress::from_str(s).map(Self::V1))
+    }
+}
+
 /// Represents a target for the funds of a transfer
 #[derive(
     Debug,
@@ -820,7 +1149,7 @@ pub enum TransferTarget {
     /// A transfer going to a transparent address
     Address(Address),
     /// A transfer going to a shielded address
-    PaymentAddress(PaymentAddress),
+    PaymentAddress(UnifiedPaymentAddress),
     /// A transfer going to an IBC address
     Ibc(String),
 }
@@ -840,9 +1169,9 @@ impl TransferTarget {
     }
 
     /// Get the contained PaymentAddress, if any
-    pub fn payment_address(&self) -> Option<PaymentAddress> {
+    pub fn payment_address(&self) -> Option<UnifiedPaymentAddress> {
         match self {
-            Self::PaymentAddress(address) => Some(*address),
+            Self::PaymentAddress(address) => Some(address.clone()),
             _ => None,
         }
     }
@@ -869,7 +1198,12 @@ impl Display for TransferTarget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Address(x) => x.fmt(f),
-            Self::PaymentAddress(address) => address.fmt(f),
+            Self::PaymentAddress(UnifiedPaymentAddress::V0(address)) => {
+                address.fmt(f)
+            }
+            Self::PaymentAddress(UnifiedPaymentAddress::V1(address)) => {
+                address.fmt(f)
+            }
             Self::Ibc(x) => x.fmt(f),
         }
     }
@@ -928,7 +1262,7 @@ impl Display for BalanceOwner {
 #[derive(Debug, Clone)]
 pub enum MaspValue {
     /// A MASP PaymentAddress
-    PaymentAddress(PaymentAddress),
+    PaymentAddress(UnifiedPaymentAddress),
     /// A MASP ExtendedSpendingKey
     ExtendedSpendingKey(ExtendedSpendingKey),
     /// A MASP FullViewingKey
@@ -939,9 +1273,10 @@ impl FromStr for MaspValue {
     type Err = DecodeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Try to decode this value first as a PaymentAddress, then as an
-        // ExtendedSpendingKey, then as FullViewingKey
-        PaymentAddress::from_str(s)
+        // Try to decode this value first as a UnifiedPaymentAddress,
+        // then as an ExtendedSpendingKey, then as a
+        // FullViewingKey
+        UnifiedPaymentAddress::from_str(s)
             .map(Self::PaymentAddress)
             .or_else(|_err| {
                 ExtendedSpendingKey::from_str(s).map(Self::ExtendedSpendingKey)
@@ -1081,7 +1416,7 @@ mod test {
             masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
         );
         let (_diversifier, pa) = sk.0.default_address();
-        let pa = PaymentAddress::from(pa);
+        let pa = PaymentAddress::from(pa).into();
         let target = TransferTarget::PaymentAddress(pa);
         assert_eq!(target.effective_address(), MASP);
 
@@ -1100,7 +1435,7 @@ mod test {
             masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
         );
         let (_diversifier, pa) = sk.0.default_address();
-        let pa = PaymentAddress::from(pa);
+        let pa = PaymentAddress::from(pa).into();
         let target = TransferTarget::PaymentAddress(pa).address();
         assert!(target.is_none());
 
@@ -1122,7 +1457,7 @@ mod test {
             masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
         );
         let (_diversifier, pa) = sk.0.default_address();
-        let pa = PaymentAddress::from(pa);
+        let pa = PaymentAddress::from(pa).into();
         let target = TransferTarget::PaymentAddress(pa).t_addr_data();
         assert!(target.is_none());
 
@@ -1138,7 +1473,7 @@ mod test {
             masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
         );
         let (_diversifier, pa) = sk.0.default_address();
-        let pa = PaymentAddress::from(pa);
+        let pa: UnifiedPaymentAddress = PaymentAddress::from(pa).into();
 
         const IBC_ADDR: &str = "noble18st0wqx84av8y6xdlss9d6m2nepyqwj6nfxxuv";
 
@@ -1223,7 +1558,7 @@ mod test {
             masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
         );
         let (_diversifier, pa) = sk.0.default_address();
-        let pa = PaymentAddress::from(pa);
+        let pa = PaymentAddress::from(pa).into();
 
         let target = TransferTarget::PaymentAddress(pa);
         let serialized = target.serialize_to_vec();

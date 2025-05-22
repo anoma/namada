@@ -12,7 +12,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         .execute::<token::Transfer>(&data)
         .into_storage_result()?;
 
-    let (masp_section_ref, mut token_addrs) =
+    let (maybe_masp_refs, mut token_addrs) =
         if let Some(transfers) = data.transparent {
             let (_debited_accounts, tokens) =
                 if let Some(transparent) = transfers.transparent_part() {
@@ -22,18 +22,18 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
                     Default::default()
                 };
 
-            (transfers.shielded_section_hash, tokens)
+            (transfers.shielded_data, tokens)
         } else {
             (None, Default::default())
         };
 
     token_addrs.extend(data.ibc_tokens);
 
-    let shielded = if let Some(masp_section_ref) = masp_section_ref {
+    let maybe_masp_tx = if let Some(shielded) = maybe_masp_refs {
         Some(
             tx_data
                 .tx
-                .get_masp_section(&masp_section_ref)
+                .get_masp_section(&shielded.masp_tx_id)
                 .cloned()
                 .ok_or_err_msg(
                     "Unable to find required shielded section in tx data",
@@ -44,20 +44,25 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         )
     } else {
         data.shielded
+            .map(|ibc_shielding_data| ibc_shielding_data.masp_tx)
     };
-    if let Some(shielded) = shielded {
-        token::utils::handle_masp_tx(ctx, &shielded)
+
+    if let Some(masp_tx) = maybe_masp_tx {
+        token::utils::handle_masp_tx(ctx, &masp_tx)
             .wrap_err("Encountered error while handling MASP transaction")?;
-        update_masp_note_commitment_tree(&shielded)
+        update_masp_note_commitment_tree(&masp_tx)
             .wrap_err("Failed to update the MASP commitment tree")?;
-        if let Some(masp_section_ref) = masp_section_ref {
+        if let Some(masp_refs) = maybe_masp_refs {
             ctx.push_action(Action::Masp(MaspAction::MaspSectionRef(
-                masp_section_ref,
+                masp_refs.masp_tx_id,
+            )))?;
+            ctx.push_action(Action::Masp(MaspAction::FmdSectionRef(
+                masp_refs.flag_ciphertext_sechash,
             )))?;
         } else {
             ctx.push_action(Action::IbcShielding)?;
         }
-        token::update_undated_balances(ctx, &shielded, token_addrs)?;
+        token::update_undated_balances(ctx, &masp_tx, token_addrs)?;
     }
 
     Ok(())

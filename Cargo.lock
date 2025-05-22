@@ -1740,7 +1740,9 @@ dependencies = [
  "curve25519-dalek-derive",
  "digest 0.10.7",
  "fiat-crypto",
+ "rand_core",
  "rustc_version",
+ "serde",
  "subtle",
  "zeroize",
 ]
@@ -5624,6 +5626,7 @@ dependencies = [
  "arbitrary",
  "assert_matches",
  "bech32 0.11.0",
+ "bincode",
  "borsh",
  "chrono",
  "data-encoding",
@@ -5647,6 +5650,7 @@ dependencies = [
  "num-traits",
  "num256",
  "num_enum",
+ "polyfuzzy",
  "primitive-types 0.13.1",
  "proptest",
  "prost-types 0.13.5",
@@ -7300,6 +7304,19 @@ dependencies = [
  "cpufeatures",
  "opaque-debug",
  "universal-hash",
+]
+
+[[package]]
+name = "polyfuzzy"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7ad377e0383a3332e1deb427b97c8670a954efa00add87d2071daab421dae24"
+dependencies = [
+ "curve25519-dalek",
+ "rand_core",
+ "serde",
+ "sha2 0.10.8",
+ "subtle",
 ]
 
 [[package]]

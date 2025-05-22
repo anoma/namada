@@ -20,7 +20,8 @@ use namada_core::chain::BlockHeight;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
 use namada_core::masp::{
-    DiversifierIndex, ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
+    DiversifierIndex, ExtendedSpendingKey, ExtendedViewingKey,
+    UnifiedPaymentAddress,
 };
 use namada_core::time::DateTimeUtc;
 use namada_ibc::trace::is_ibc_denom;
@@ -463,14 +464,14 @@ impl<U> Wallet<U> {
     pub fn find_payment_addr(
         &self,
         alias: impl AsRef<str>,
-    ) -> Option<&PaymentAddress> {
+    ) -> Option<&UnifiedPaymentAddress> {
         self.store.find_payment_addr(alias.as_ref())
     }
 
     /// Find an alias by the payment address if it's in the wallet.
     pub fn find_alias_by_payment_addr(
         &self,
-        payment_address: &PaymentAddress,
+        payment_address: &UnifiedPaymentAddress,
     ) -> Option<&Alias> {
         self.store.find_alias_by_payment_addr(payment_address)
     }
@@ -508,11 +509,11 @@ impl<U> Wallet<U> {
     }
 
     /// Get all known payment addresses by their alias
-    pub fn get_payment_addrs(&self) -> HashMap<String, PaymentAddress> {
+    pub fn get_payment_addrs(&self) -> HashMap<String, UnifiedPaymentAddress> {
         self.store
             .get_payment_addrs()
             .iter()
-            .map(|(alias, value)| (alias.into(), *value))
+            .map(|(alias, value)| (alias.into(), value.clone()))
             .collect()
     }
 
@@ -1231,7 +1232,7 @@ impl<U: WalletIo> Wallet<U> {
     pub fn insert_payment_addr(
         &mut self,
         alias: String,
-        payment_addr: PaymentAddress,
+        payment_addr: UnifiedPaymentAddress,
         force_alias: bool,
     ) -> Option<String> {
         self.store
