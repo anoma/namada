@@ -30,6 +30,16 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// Choose the gas mmeter used for WASM instructions
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum GasMeterKind {
+    /// Gas accounting using a host env function. Suitable for unstructed code.
+    HostFn,
+    /// Global mutable variable accounted inside WASM. This should only be used
+    /// for trusted WASM code as a malicious code might modify the gas meter
+    MutGlobal,
+}
+
 #[allow(missing_docs)]
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum Error {

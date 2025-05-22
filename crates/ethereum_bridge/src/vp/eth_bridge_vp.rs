@@ -156,7 +156,7 @@ mod tests {
     use namada_core::borsh::BorshSerializeExt;
     use namada_core::ethereum_events;
     use namada_core::ethereum_events::EthAddress;
-    use namada_gas::{TxGasMeter, VpGasMeter};
+    use namada_gas::{GasMeterKind, TxGasMeter, VpGasMeter};
     use namada_state::testing::TestState;
     use namada_state::{StateRead, StorageWrite, TxIndex};
     use namada_trans_token::storage_key::{balance_key, minted_balance_key};
@@ -249,6 +249,7 @@ mod tests {
             keys_changed,
             verifiers,
             VpCache::new(temp_dir(), 100usize),
+            GasMeterKind::MutGlobal,
         )
     }
 
