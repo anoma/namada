@@ -4851,6 +4851,7 @@ dependencies = [
  "getrandom 0.3.1",
  "init-once",
  "itertools 0.14.0",
+ "kassandra-client",
  "lazy_static",
  "masp_primitives",
  "masp_proofs",

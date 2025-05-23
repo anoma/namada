@@ -1,5 +1,6 @@
 //! MASP verification wrappers.
 
+pub mod fmd;
 mod utilities;
 
 use std::str::FromStr;

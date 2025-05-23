@@ -389,7 +389,7 @@ impl CliApi {
                         .await?;
                     }
                     Sub::Fmd(FmdCommand(args)) => {
-                        use crate::client::masp::fmd;
+                        use namada_sdk::masp::fmd;
                         let args = args.to_sdk(&mut ctx)?;
                         let chain_ctx = ctx.take_chain_or_exit();
                         match args.command {
