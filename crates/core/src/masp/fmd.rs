@@ -63,6 +63,8 @@ mod parameters {
     }
 }
 
+pub use parameters::GAMMA;
+
 /// FMD public key bytes.
 #[derive(
     Clone,

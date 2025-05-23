@@ -561,6 +561,7 @@ pub mod cmds {
         QueryRewards(QueryRewards),
         QueryIbcRateLimit(QueryIbcRateLimit),
         ShieldedSync(ShieldedSync),
+        Fmd(FmdCommand),
         GenIbcShieldingTransfer(GenIbcShieldingTransfer),
     }
 
@@ -1627,6 +1628,28 @@ pub mod cmds {
                      specified block height."
                 ))
                 .add_args::<args::ShieldedSync<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct FmdCommand(pub args::FmdCommand<args::CliTypes>);
+
+    impl SubCmd for FmdCommand {
+        const CMD: &'static str = "fmd";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| FmdCommand(args::FmdCommand::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!(
+                    "Key management commands for fuzzy message detection and \
+                     interacting with Kassandra services."
+                ))
+                .add_args::<args::FmdCommand<args::CliTypes>>()
         }
     }
 
@@ -3445,6 +3468,7 @@ pub mod args {
     pub const ADDRESS: Arg<WalletAddress> = arg("address");
     pub const ADDRESS_OPT: ArgOpt<WalletAddress> = arg_opt("address");
     pub const ADD_PERSISTENT_PEERS: ArgFlag = flag("add-persistent-peers");
+    pub const ADD_SERVICE: ArgOpt<String> = arg_opt("add-service");
     pub const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
     pub const ALIAS: Arg<String> = arg("alias");
     pub const ALIAS_FORCE: ArgFlag = flag("alias-force");
@@ -3508,6 +3532,8 @@ pub mod args {
     pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
     pub const DATED_SPENDING_KEYS: ArgMulti<WalletDatedSpendingKey, GlobStar> =
         arg_multi("spending-keys");
+    pub const DATED_VIEWING_KEY: Arg<WalletDatedViewingKey> =
+        arg("viewing-key");
     pub const DATED_VIEWING_KEYS: ArgMulti<WalletDatedViewingKey, GlobStar> =
         arg_multi("viewing-keys");
     pub const DB_KEY: Arg<String> = arg("db-key");
@@ -3669,6 +3695,7 @@ pub mod args {
     pub const RECEIVER: Arg<String> = arg("receiver");
     pub const REFUND_TARGET: ArgOpt<WalletTransferTarget> =
         arg_opt("refund-target");
+    pub const REGISTER_KEY: ArgFlag = flag("register");
     pub const RELAYER: Arg<Address> = arg("relayer");
     pub const RETRIES: ArgOpt<u64> = arg_opt("retries");
     pub const SCHEME: ArgDefault<SchemeType> =
@@ -7144,6 +7171,66 @@ pub mod args {
                     .collect(),
                 with_indexer: self.with_indexer,
                 retry_strategy: self.retry_strategy,
+            })
+        }
+    }
+
+    impl Args for FmdCommand<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let viewing_key = DATED_VIEWING_KEY.parse(matches);
+            if REGISTER_KEY.parse(matches) {
+                Self {
+                    command: FmdCommandType::RegisterKey,
+                    viewing_key,
+                    service: None,
+                }
+            } else {
+                Self {
+                    command: FmdCommandType::AddService,
+                    viewing_key,
+                    service: Some(
+                        ADD_SERVICE.parse(matches).expect(
+                            "Adding a Kassandra service requires a url",
+                        ),
+                    ),
+                }
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                DATED_VIEWING_KEY
+                    .def()
+                    .help(wrap!("The MASP viewing key being managed.")),
+            )
+            .arg(REGISTER_KEY.def().help(wrap!(
+                "Register the viewing keys with Kassandra services using the \
+                 configuration file."
+            )))
+            .arg(ADD_SERVICE.def().help(wrap!(
+                "Add a the url of a Kassandra service to the configuration \
+                 file."
+            )))
+            .group(
+                ArgGroup::new("fmd_command_type")
+                    .args([REGISTER_KEY.name, ADD_SERVICE.name])
+                    .required(true),
+            )
+        }
+    }
+
+    impl CliToSdk<FmdCommand<SdkTypes>> for FmdCommand<CliTypes> {
+        type Error = std::convert::Infallible;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<FmdCommand<SdkTypes>, Self::Error> {
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            Ok(FmdCommand {
+                command: self.command,
+                viewing_key: chain_ctx.get_cached(&self.viewing_key),
+                service: self.service,
             })
         }
     }

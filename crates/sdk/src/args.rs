@@ -2520,6 +2520,39 @@ pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     pub retry_strategy: RetryStrategy,
 }
 
+/// The type of FMD key management command
+#[derive(Copy, Clone, Debug)]
+pub enum FmdCommandType {
+    /// Register a key with a Kassandra services configured
+    RegisterKey,
+    /// Add a Kassandra service to the configuration file
+    AddService,
+}
+
+impl FromStr for FmdCommandType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_lowercase().as_str() {
+            "register" => Ok(Self::RegisterKey),
+            "add" => Ok(Self::AddService),
+            _ => Err("Could not parse {s} as a valid FMD command".to_string()),
+        }
+    }
+}
+
+/// An FMD key management command for interacting with
+/// Kassandra services
+#[derive(Clone, Debug)]
+pub struct FmdCommand<C: NamadaTypes = SdkTypes> {
+    /// The type of command
+    pub command: FmdCommandType,
+    /// The key that is being managed
+    pub viewing_key: C::DatedViewingKey,
+    /// A url for a Kassandra service
+    pub service: Option<String>,
+}
+
 /// Query PoS commission rate
 #[derive(Clone, Debug)]
 pub struct QueryCommissionRate<C: NamadaTypes = SdkTypes> {

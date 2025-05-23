@@ -147,6 +147,8 @@ const SPECULATIVE_FILE_NAME: &str = "speculative_shielded.dat";
 const SPECULATIVE_TMP_FILE_NAME: &str = "speculative_shielded.tmp";
 const CACHE_FILE_NAME: &str = "shielded_sync.cache";
 const CACHE_FILE_TMP_PREFIX: &str = "shielded_sync.cache.tmp";
+const FMD_CONF_FILE_NAME: &str = "fmd_config.toml";
+const FMD_CONF_FILE_TMP_PREFIX: &str = "fmd_config.toml.tmp";
 
 /// For `tracing_subscriber`, which fails if called more than once in the same
 /// process
@@ -887,6 +889,22 @@ impl ShieldedUtils for BenchShieldedUtils {
         let file_name = self.context_dir.0.path().join(CACHE_FILE_NAME);
         let mut file = File::open(file_name)?;
         DispatcherCache::try_from_reader(&mut file)
+    }
+
+    async fn fmd_config_save(
+        &self,
+        config: &mut kassandra_client::config::Config,
+    ) -> std::io::Result<()> {
+        config.save(FMD_CONF_FILE_TMP_PREFIX)?;
+        std::fs::rename(
+            FMD_CONF_FILE_TMP_PREFIX,
+            self.context_dir.0.path().join(FMD_CONF_FILE_NAME),
+        )
+    }
+
+    async fn fmd_config_load()
+    -> std::io::Result<kassandra_client::config::Config> {
+        kassandra_client::config::Config::load_or_new(FMD_CONF_FILE_NAME)
     }
 }
 

@@ -23,7 +23,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::Sha256;
 
 pub use self::fmd::{
-    FlagCiphertext, PublicKey as FmdPublicKey,
+    FlagCiphertext, GAMMA, PublicKey as FmdPublicKey,
     PublicKeyBytes as FmdPublicKeyBytes, SecretKey as FmdSecretKey,
 };
 use crate::address::{Address, DecodeError, HASH_HEX_LEN, IBC, MASP};

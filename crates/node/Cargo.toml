@@ -64,6 +64,7 @@ ethbridge-events.workspace = true
 eyre.workspace = true
 futures.workspace = true
 itertools.workspace = true
+kassandra-client.workspace = true
 lazy_static = { workspace = true, optional = true }
 linkme = { workspace = true, optional = true }
 masp_primitives = { workspace = true, features = ["transparent-inputs"] }

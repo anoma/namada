@@ -49,6 +49,7 @@ flate2.workspace = true
 futures.workspace = true
 itertools.workspace = true
 jubjub.workspace = true
+kassandra-client.workspace = true
 kdam.workspace = true
 lazy_static = { workspace = true, optional = true }
 linkme = { workspace = true, optional = true }
