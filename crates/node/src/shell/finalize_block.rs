@@ -1303,7 +1303,7 @@ mod test_finalize_block {
     use namada_sdk::ethereum_events::{EthAddress, Uint as ethUint};
     use namada_sdk::events::Event;
     use namada_sdk::events::extend::Log;
-    use namada_sdk::gas::VpGasMeter;
+    use namada_sdk::gas::{GasMeterKind, VpGasMeter};
     use namada_sdk::governance::storage::keys::get_proposal_execution_key;
     use namada_sdk::governance::storage::proposal::ProposalType;
     use namada_sdk::governance::{
@@ -5717,6 +5717,7 @@ mod test_finalize_block {
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
+            GasMeterKind::MutGlobal,
         );
         assert!(
             ParametersVp::validate_tx(
