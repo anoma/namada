@@ -582,6 +582,15 @@ impl VpGasMeter {
     pub fn get_vp_consumed_gas(&self) -> Gas {
         self.current_gas.clone()
     }
+
+    /// Get the amount of gas still available to the VP
+    pub fn get_available_gas(&self) -> Gas {
+        self.tx_gas_limit
+            .checked_sub(self.initial_gas.clone())
+            .unwrap_or_default()
+            .checked_sub(self.current_gas.clone())
+            .unwrap_or_default()
+    }
 }
 
 #[cfg(test)]

@@ -243,12 +243,16 @@ where
     };
 
     if let GasMeterKind::MutGlobal = gas_meter_kind {
+        #[allow(clippy::cast_possible_wrap)]
+        // intentional wrap around the value
+        let available_gas =
+            u64::from(gas_meter.borrow().get_available_gas()) as i64;
         let mut store = store.borrow_mut();
         instance
             .exports
             .get_global(MUT_GLOBAL_GAS_NAME)
             .unwrap()
-            .set(&mut *store, wasmer::Value::I64(-1i64))
+            .set(&mut *store, wasmer::Value::I64(available_gas))
             .unwrap();
     }
 
@@ -395,6 +399,9 @@ where
         vp_imports(&mut *store, env.clone())
     };
 
+    #[allow(clippy::cast_possible_wrap)] // intentional wrap around the value
+    let available_gas =
+        u64::from(gas_meter.borrow().get_available_gas()) as i64;
     run_vp(
         store,
         module,
@@ -406,6 +413,7 @@ where
         verifiers,
         yielded_value_borrow,
         |guest_memory| env.memory.init_from(guest_memory),
+        available_gas,
         gas_meter_kind,
     )
 }
@@ -422,6 +430,7 @@ fn run_vp<F>(
     verifiers: &BTreeSet<Address>,
     yielded_value: HostRef<RwAccess, Option<Vec<u8>>>,
     mut init_memory_callback: F,
+    available_gas: i64,
     gas_meter_kind: GasMeterKind,
 ) -> Result<()>
 where
@@ -447,7 +456,7 @@ where
             .exports
             .get_global(MUT_GLOBAL_GAS_NAME)
             .unwrap()
-            .set(&mut *store, wasmer::Value::I64(-1i64))
+            .set(&mut *store, wasmer::Value::I64(available_gas))
             .unwrap();
     }
 
@@ -685,6 +694,10 @@ where
             vp_imports(&mut *store, env.clone())
         };
 
+        #[allow(clippy::cast_possible_wrap)]
+        // intentional wrap around the value
+        let available_gas =
+            u64::from(gas_meter.borrow().get_available_gas()) as i64;
         run_vp(
             store,
             module,
@@ -696,6 +709,7 @@ where
             verifiers,
             yielded_value_borrow,
             |guest_memory| env.memory.init_from(guest_memory),
+            available_gas,
             gas_meter_kind,
         )
     }
