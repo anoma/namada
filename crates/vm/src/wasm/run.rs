@@ -243,17 +243,19 @@ where
     };
 
     if let GasMeterKind::MutGlobal = gas_meter_kind {
-        #[allow(clippy::cast_possible_wrap)]
+        let mut store = store.borrow_mut();
+        let gas_global =
+            instance.exports.get_global(MUT_GLOBAL_GAS_NAME).unwrap();
+
+        #[allow(clippy::cast_poss_globalble_wrap)]
         // intentional wrap around the value
         let available_gas =
             u64::from(gas_meter.borrow().get_available_gas()) as i64;
-        let mut store = store.borrow_mut();
-        instance
-            .exports
-            .get_global(MUT_GLOBAL_GAS_NAME)
-            .unwrap()
+        gas_global
             .set(&mut *store, wasmer::Value::I64(available_gas))
             .unwrap();
+
+        *env.ctx.gas_global.borrow_mut() = Some(gas_global.clone());
     }
 
     // Fetch guest's main memory

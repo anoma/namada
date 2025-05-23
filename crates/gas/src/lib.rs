@@ -517,6 +517,16 @@ impl TxGasMeter {
             .checked_sub(self.transaction_gas.clone())
             .unwrap_or_default()
     }
+
+    /// Set the amount of gas still available to the transaction.
+    ///
+    /// WARNING: Utmost care must be taken when using this function! This must
+    /// never increase the amount available.
+    pub fn set_available_gas(&mut self, gas: impl Into<Gas>) {
+        let gas: Gas = gas.into();
+        debug_assert!(gas <= self.transaction_gas);
+        self.transaction_gas = gas;
+    }
 }
 
 impl GasMetering for VpGasMeter {

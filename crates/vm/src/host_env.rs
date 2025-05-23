@@ -145,6 +145,8 @@ where
     pub cache_access: std::marker::PhantomData<CA>,
     /// WASM intructions gas meter kind
     pub gas_meter_kind: GasMeterKind,
+    /// Global mutable gas variable, only set when gas meter kind is `MutGlobal`
+    pub gas_global: RefCell<Option<wasmer::Global>>,
 }
 
 impl<MEM, D, H, CA> TxVmEnv<MEM, D, H, CA>
@@ -218,6 +220,7 @@ where
             #[cfg(not(feature = "wasm-runtime"))]
             cache_access: std::marker::PhantomData,
             gas_meter_kind,
+            gas_global: RefCell::new(None),
         };
 
         Self { memory, ctx }
@@ -304,6 +307,7 @@ where
             #[cfg(not(feature = "wasm-runtime"))]
             cache_access: std::marker::PhantomData,
             gas_meter_kind: self.gas_meter_kind,
+            gas_global: self.gas_global.clone(),
         }
     }
 }
@@ -608,37 +612,6 @@ where
     consume_tx_gas(env, used_gas.into())
 }
 
-// Internal funtion to charge gas for txs. Called by the other functions in this
-// file while the public version is left to be used directly from wasm and as a
-// hook for gas instrumentation
-fn consume_tx_gas<MEM, D, H, CA>(
-    env: &mut TxVmEnv<MEM, D, H, CA>,
-    used_gas: Gas,
-) -> Result<()>
-where
-    MEM: VmMemory,
-    D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: 'static + StorageHasher,
-    CA: WasmCacheAccess,
-{
-    let (gas_meter, sentinel) = env.ctx.gas_meter_and_sentinel();
-
-    // if we run out of gas, we need to stop the execution
-    gas_meter
-        .borrow_mut()
-        .consume(used_gas)
-        .map_err(|err| {
-            sentinel.borrow_mut().set_out_of_gas();
-            tracing::info!(
-                "Stopping transaction execution because of gas error: {}",
-                err
-            );
-
-            TxRuntimeError::OutOfGas(err)
-        })
-        .into_storage_result()
-}
-
 /// Called from VP wasm to request to use the given gas amount
 pub fn vp_charge_gas<MEM, D, H, EVAL, CA>(
     env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
@@ -668,6 +641,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len.try_into()?)
@@ -700,6 +675,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len.try_into()?)
@@ -743,6 +720,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len.try_into()?)
@@ -788,6 +767,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let result_buffer = unsafe { env.ctx.result_buffer.get_mut() };
     let value = result_buffer
         .take()
@@ -813,6 +794,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let (prefix, gas) = env
         .memory
         .read_string(prefix_ptr, prefix_len.try_into()?)
@@ -851,6 +834,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     tracing::debug!("tx_iter_next iter_id {}", iter_id,);
 
     let iterators = unsafe { env.ctx.iterators.get_mut() };
@@ -916,6 +901,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len.try_into()?)
@@ -956,6 +943,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len.try_into()?)
@@ -1037,6 +1026,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len.try_into()?)
@@ -1067,6 +1058,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let (event, gas) = env
         .memory
         .read_bytes(event_ptr, event_len.try_into()?)
@@ -1102,6 +1095,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let (event_type, gas) = env
         .memory
         .read_string(event_type_ptr, event_type_len.try_into()?)
@@ -1469,6 +1464,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let (addr, gas) = env
         .memory
         .read_string(addr_ptr, addr_len.try_into()?)
@@ -1507,6 +1504,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let (addr, gas) = env
         .memory
         .read_string(addr_ptr, addr_len.try_into()?)
@@ -1556,6 +1555,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let (code_hash, gas) = env
         .memory
         .read_bytes(code_hash_ptr, code_hash_len.try_into()?)
@@ -1606,6 +1607,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let state = env.state();
     let (chain_id, gas) = state.in_mem().get_chain_id();
     consume_tx_gas::<MEM, D, H, CA>(env, gas)?;
@@ -1628,6 +1631,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let state = env.state();
     let (height, gas) = state.in_mem().get_block_height();
     consume_tx_gas::<MEM, D, H, CA>(env, gas)?;
@@ -1646,6 +1651,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     consume_tx_gas::<MEM, D, H, CA>(
         env,
         (TX_INDEX_LENGTH as u64)
@@ -1688,6 +1695,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let state = env.state();
     let (epoch, gas) = state.in_mem().get_current_epoch();
     consume_tx_gas::<MEM, D, H, CA>(env, gas)?;
@@ -1704,6 +1713,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let state = env.state();
     let pred_epochs = state.in_mem().block.pred_epochs.clone();
     let bytes = pred_epochs.serialize_to_vec();
@@ -1732,6 +1743,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     // Gas for getting the native token address from storage
     consume_tx_gas::<MEM, D, H, CA>(
         env,
@@ -1761,6 +1774,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let state = env.state();
     let (header, gas) =
         StateRead::get_block_header(&state, Some(BlockHeight(height)))?;
@@ -2036,6 +2051,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let (str, _gas) = env
         .memory
         .read_string(str_ptr, str_len.try_into()?)
@@ -2056,6 +2073,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let code_hash = Hash::try_from(code_hash)
         .map_err(|e| TxRuntimeError::InvalidVpCodeHash(e.to_string()))?;
 
@@ -2131,6 +2150,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let (hash_list, gas) = env
         .memory
         .read_bytes(hash_list_ptr, hash_list_len.try_into()?)
@@ -2152,7 +2173,7 @@ where
     let tx = unsafe { env.ctx.tx.get() };
 
     let (gas_meter, sentinel) = env.ctx.gas_meter_and_sentinel();
-    match tx.verify_signatures(
+    let result = match tx.verify_signatures(
         &HashSet::from_iter(hashes),
         public_keys_map,
         &None,
@@ -2175,7 +2196,11 @@ where
             _ => Ok(HostEnvResult::Fail.to_i64()),
         },
     }
-    .into_storage_result()
+    .into_storage_result();
+
+    tx_sync_gas_into_wasm(env)?;
+
+    result
 }
 
 /// Appends the new note commitments to the tree in storage
@@ -2190,6 +2215,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let (serialized_transaction, gas) = env
         .memory
         .read_bytes(transaction_ptr, transaction_len.try_into()?)
@@ -2225,6 +2252,8 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
+    tx_sync_gas_from_wasm(env)?;
+
     let (value_to_yield, gas) = env
         .memory
         .read_bytes(buf_ptr, buf_len.try_into()?)
@@ -2352,6 +2381,111 @@ where
     vp_host_fns::add_gas(env.ctx.gas_meter(), gas)?;
     let host_buf = unsafe { env.ctx.yielded_value.get_mut() };
     host_buf.replace(value_to_yield);
+    Ok(())
+}
+
+// Internal funtion to charge gas for txs. Called by the other functions in this
+// file while the public version is left to be used directly from wasm and as a
+// hook for gas instrumentation
+fn consume_tx_gas<MEM, D, H, CA>(
+    env: &mut TxVmEnv<MEM, D, H, CA>,
+    used_gas: Gas,
+) -> Result<()>
+where
+    MEM: VmMemory,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let (gas_meter, sentinel) = env.ctx.gas_meter_and_sentinel();
+
+    // if we run out of gas, we need to stop the execution
+    let result = gas_meter
+        .borrow_mut()
+        .consume(used_gas)
+        .map_err(|err| {
+            sentinel.borrow_mut().set_out_of_gas();
+            tracing::info!(
+                "Stopping transaction execution because of gas error: {}",
+                err
+            );
+
+            TxRuntimeError::OutOfGas(err)
+        })
+        .into_storage_result();
+
+    tx_sync_gas_into_wasm(env)?;
+
+    result
+}
+
+/// Sync gas meter from WASM into host env
+fn tx_sync_gas_from_wasm<MEM, D, H, CA>(
+    env: &mut TxVmEnv<MEM, D, H, CA>,
+) -> Result<()>
+where
+    MEM: VmMemory,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+    CA: WasmCacheAccess,
+{
+    if let GasMeterKind::MutGlobal = env.ctx.gas_meter_kind {
+        let store = env
+            .memory
+            .store()
+            .upgrade()
+            .expect("Store must be accessible while the WASM is running");
+        let mut store = store.borrow_mut();
+        let wasm_gas = env
+            .ctx
+            .gas_global
+            .borrow()
+            .as_ref()
+            .unwrap()
+            .get(&mut store);
+        if let wasmer::Value::I64(available_gas) = wasm_gas {
+            // intentional wrap around the value
+            let available_gas = available_gas as u64;
+            let gas_meter = unsafe { env.ctx.gas_meter.get() };
+            gas_meter.borrow_mut().set_available_gas(available_gas);
+        } else {
+            return Err(Error::new_const("Unexpected WASM gas value type"));
+        }
+    }
+    Ok(())
+}
+
+/// Sync gas meter from host env back into WASM
+fn tx_sync_gas_into_wasm<MEM, D, H, CA>(
+    env: &mut TxVmEnv<MEM, D, H, CA>,
+) -> Result<()>
+where
+    MEM: VmMemory,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+    CA: WasmCacheAccess,
+{
+    if let GasMeterKind::MutGlobal = env.ctx.gas_meter_kind {
+        let store = env
+            .memory
+            .store()
+            .upgrade()
+            .expect("Store must be accessible while the WASM is running");
+        let mut store = store.borrow_mut();
+        let gas_meter = unsafe { env.ctx.gas_meter.get() };
+
+        // intentional wrap around the value
+        let available_gas =
+            u64::from(gas_meter.borrow().get_available_gas()) as i64;
+
+        env.ctx
+            .gas_global
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .set(&mut store, wasmer::Value::I64(available_gas))
+            .unwrap();
+    }
     Ok(())
 }
 
