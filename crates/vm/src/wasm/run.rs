@@ -1,7 +1,5 @@
 //! Wasm runners
 
-pub use namada_gas::GasMeterKind;
-
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::error::Error as _;
@@ -16,6 +14,7 @@ use namada_core::hash::{Error as TxHashError, Hash};
 use namada_core::internal::HostEnvResult;
 use namada_core::storage::{Key, TxIndex};
 use namada_core::validity_predicate::VpError;
+pub use namada_gas::GasMeterKind;
 use namada_gas::{GasMetering, TxGasMeter, VpGasMeter, WASM_MEMORY_PAGE_GAS};
 use namada_state::prefix_iter::PrefixIterators;
 use namada_state::{DB, DBIter, State, StateRead, StorageHasher, StorageRead};
@@ -74,6 +73,8 @@ pub enum Error {
     MissingModuleMemory(wasmer::ExportError),
     #[error("Missing wasm entrypoint: {0}")]
     MissingModuleEntrypoint(wasmer::ExportError),
+    #[error("Missing gas mutable global: {0}")]
+    MissingGasMutGlobal(wasmer::ExportError),
     #[error("Failed running wasm with: {0}")]
     RuntimeError(wasmer::RuntimeError),
     #[error("Failed instantiating wasm module with: {0}")]
@@ -209,6 +210,7 @@ where
     let mut verifiers = BTreeSet::new();
     let mut result_buffer: Option<Vec<u8>> = None;
     let mut yielded_value: Option<Vec<u8>> = None;
+    let mut gas_global: Option<wasmer::Global> = None;
 
     let sentinel = RefCell::new(TxSentinel::default());
     let (write_log, in_mem, db) = state.split_borrow();
@@ -232,6 +234,7 @@ where
         vp_wasm_cache,
         tx_wasm_cache,
         gas_meter_kind,
+        &gas_global,
     );
 
     // Instantiate the wasm module
@@ -243,17 +246,24 @@ where
     };
 
     if let GasMeterKind::MutGlobal = gas_meter_kind {
+        let mut store = store.borrow_mut();
+        let global = instance
+            .exports
+            .get_global(MUT_GLOBAL_GAS_NAME)
+            .map_err(Error::MissingGasMutGlobal)?;
+
         #[allow(clippy::cast_possible_wrap)]
         // intentional wrap around the value
         let available_gas =
             u64::from(gas_meter.borrow().get_available_gas()) as i64;
-        let mut store = store.borrow_mut();
-        instance
-            .exports
-            .get_global(MUT_GLOBAL_GAS_NAME)
-            .unwrap()
+        global
             .set(&mut *store, wasmer::Value::I64(available_gas))
-            .unwrap();
+            .map_err(Error::RuntimeError)?;
+
+        #[allow(unused_assignments)]
+        {
+            gas_global = Some(global.clone());
+        }
     }
 
     // Fetch guest's main memory
