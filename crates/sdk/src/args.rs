@@ -15,7 +15,7 @@ use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;
 use namada_core::key::{SchemeType, common};
-use namada_core::masp::{DiversifierIndex, MaspEpoch, PaymentAddress};
+use namada_core::masp::{DiversifierIndex, MaspEpoch};
 use namada_core::string_encoding::StringEncoded;
 use namada_core::time::DateTimeUtc;
 use namada_core::token::Amount;
@@ -131,7 +131,7 @@ impl NamadaTypes for SdkTypes {
     type EthereumAddress = ();
     type Keypair = namada_core::key::common::SecretKey;
     type MaspIndexerAddress = String;
-    type PaymentAddress = namada_core::masp::PaymentAddress;
+    type PaymentAddress = namada_core::masp::UnifiedPaymentAddress;
     type PublicKey = namada_core::key::common::PublicKey;
     type SpendingKey = PseudoExtendedKey;
     type TendermintAddress = tendermint_rpc::Url;
@@ -718,7 +718,7 @@ impl TxOsmosisSwap<SdkTypes> {
                     ),
                 };
 
-                let shielding_tx = tx::gen_ibc_shielding_transfer(
+                let (shielding_tx, fmd_flags) = tx::gen_ibc_shielding_transfer(
                     ctx,
                     GenIbcShieldingTransfer {
                         query: Query {
@@ -752,7 +752,10 @@ impl TxOsmosisSwap<SdkTypes> {
                     serde_json::to_value(&NamadaMemo {
                         namada: NamadaMemoData::OsmosisSwap {
                             shielding_data: StringEncoded::new(
-                                IbcShieldingData(shielding_tx),
+                                IbcShieldingData {
+                                    masp_tx: shielding_tx,
+                                    flag_ciphertexts: fmd_flags,
+                                },
                             ),
                             shielded_amount: amount_to_shield,
                             overflow_receiver,
@@ -2517,6 +2520,39 @@ pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     pub retry_strategy: RetryStrategy,
 }
 
+/// The type of FMD key management command
+#[derive(Copy, Clone, Debug)]
+pub enum FmdCommandType {
+    /// Register a key with a Kassandra services configured
+    RegisterKey,
+    /// Add a Kassandra service to the configuration file
+    AddService,
+}
+
+impl FromStr for FmdCommandType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_lowercase().as_str() {
+            "register" => Ok(Self::RegisterKey),
+            "add" => Ok(Self::AddService),
+            _ => Err("Could not parse {s} as a valid FMD command".to_string()),
+        }
+    }
+}
+
+/// An FMD key management command for interacting with
+/// Kassandra services
+#[derive(Clone, Debug)]
+pub struct FmdCommand<C: NamadaTypes = SdkTypes> {
+    /// The type of command
+    pub command: FmdCommandType,
+    /// The key that is being managed
+    pub viewing_key: C::DatedViewingKey,
+    /// A url for a Kassandra service
+    pub service: Option<String>,
+}
+
 /// Query PoS commission rate
 #[derive(Clone, Debug)]
 pub struct QueryCommissionRate<C: NamadaTypes = SdkTypes> {
@@ -2952,7 +2988,7 @@ pub struct KeyAddressFind {
     /// Public key hash to lookup keypair with
     pub public_key_hash: Option<String>,
     /// Payment address to find
-    pub payment_address: Option<PaymentAddress>,
+    pub payment_address: Option<namada_core::masp::UnifiedPaymentAddress>,
     /// Find keys only
     pub keys_only: bool,
     /// Find addresses only
@@ -3017,6 +3053,12 @@ pub struct KeyAddressRemove {
 /// Generate payment address arguments
 #[derive(Clone, Debug)]
 pub struct PayAddressGen {
+    /// Force generating a v0 payment address.
+    ///
+    /// This does not include an FMD public key, therefore
+    /// should not be shared as a payment target if you
+    /// intend to use FMD to speed up shielded sync.
+    pub v0: bool,
     /// Payment address alias
     pub alias: String,
     /// Whether to force overwrite the alias

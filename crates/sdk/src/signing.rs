@@ -1426,12 +1426,9 @@ pub async fn to_ledger_vector(
 
             // To facilitate lookups of MASP AssetTypes
             let mut asset_types = HashMap::new();
-            let builder = find_masp_builder(
-                tx,
-                transfer.shielded_section_hash,
-                &mut asset_types,
-            )
-            .map_err(|_| Error::Other("Invalid Data".to_string()))?;
+            let builder =
+                find_masp_builder(tx, transfer.masp_tx_id(), &mut asset_types)
+                    .map_err(|_| Error::Other("Invalid Data".to_string()))?;
             make_ledger_token_transfer_endpoints(
                 tokens,
                 &mut tv.output,
@@ -1526,7 +1523,7 @@ pub async fn to_ledger_vector(
                     let mut asset_types = HashMap::new();
                     let builder = find_masp_builder(
                         tx,
-                        transfer.shielded_section_hash,
+                        transfer.masp_tx_id(),
                         &mut asset_types,
                     )
                     .map_err(|_| Error::Other("Invalid Data".to_string()))?;
@@ -1695,7 +1692,7 @@ pub async fn to_ledger_vector(
                     let mut asset_types = HashMap::new();
                     let builder = find_masp_builder(
                         tx,
-                        transfer.shielded_section_hash,
+                        transfer.masp_tx_id(),
                         &mut asset_types,
                     )
                     .map_err(|_| Error::Other("Invalid Data".to_string()))?;
@@ -2190,7 +2187,7 @@ mod test_signing {
     use namada_core::hash::Hash;
     use namada_core::ibc::PGFIbcTarget;
     use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-    use namada_core::masp::TxIdInner;
+    use namada_core::masp::{MaspTxData, TxIdInner};
     use namada_core::token::{Denomination, MaspDigitPos};
     use namada_governance::storage::proposal::PGFInternalTarget;
     use namada_io::client::EncodedResponseQuery;
@@ -2616,7 +2613,7 @@ mod test_signing {
                 },
                 DenominatedAmount::new(Amount::from_u64(2), 0.into()),
             )]),
-            shielded_section_hash: None,
+            shielded_data: None,
         };
         let tokens = HashMap::from([
             (Address::Internal(InternalAddress::Governance), "SuperMoney"),
@@ -2768,15 +2765,19 @@ mod test_signing {
     fn test_find_masp_builder() {
         let mut tx = Tx::new(ChainId::default(), None);
         let mut asset_types = Default::default();
-        let shielded_section_hash = MaspTxId::from(TxIdInner::from_bytes([
+        let masp_tx_id = MaspTxId::from(TxIdInner::from_bytes([
             0, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         ]));
+        let shielded_data = MaspTxData {
+            masp_tx_id,
+            flag_ciphertext_sechash: Hash::zero(),
+        };
         // no masp builder present
         assert_eq!(
             find_masp_builder(
                 &tx,
-                Some(shielded_section_hash),
+                Some(shielded_data.masp_tx_id),
                 &mut asset_types
             )
             .expect("Test failed"),
@@ -2837,9 +2838,13 @@ mod test_signing {
         assert!(asset_types.is_empty());
 
         // now we should find the builder
-        find_masp_builder(&tx, Some(shielded_section_hash), &mut asset_types)
-            .expect("Test failed")
-            .expect("Test failed");
+        find_masp_builder(
+            &tx,
+            Some(shielded_data.masp_tx_id),
+            &mut asset_types,
+        )
+        .expect("Test failed")
+        .expect("Test failed");
         assert_eq!(
             asset_types
                 .values()

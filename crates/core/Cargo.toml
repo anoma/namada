@@ -16,13 +16,14 @@ rust-version.workspace = true
 [features]
 default = []
 mainnet = []
-rand = ["dep:rand", "rand_core"]
+rand = ["dep:rand", "dep:rand_core", "polyfuzzy/random-flag-ciphertexts"]
+default-flag-ciphertext = ["rand"]
 ethers-derive = ["ethbridge-structs/ethers-derive"]
 # for tests and test utilities
 testing = ["rand", "proptest"]
 migrations = ["namada_migrations", "linkme"]
 benches = ["proptest"]
-control_flow = ["lazy_static", "tokio", "wasmtimer"]
+control_flow = ["dep:lazy_static", "tokio", "wasmtimer"]
 arbitrary = [
   "dep:arbitrary",
   "chrono/arbitrary",
@@ -39,6 +40,7 @@ namada_migrations = { workspace = true, optional = true }
 arbitrary = { workspace = true, optional = true }
 arse-merkle-tree.workspace = true
 bech32.workspace = true
+bincode.workspace = true
 borsh.workspace = true
 chrono.workspace = true
 data-encoding.workspace = true
@@ -60,6 +62,7 @@ num_enum.workspace = true
 num-integer.workspace = true
 num-rational.workspace = true
 num-traits.workspace = true
+polyfuzzy = { workspace = true, features = ["serde"] }
 primitive-types.workspace = true
 proptest = { workspace = true, optional = true }
 prost-types.workspace = true

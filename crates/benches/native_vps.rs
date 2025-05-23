@@ -572,7 +572,7 @@ fn setup_storage_for_masp_verification(
     let (shielded_ctx, shield_tx) = shielded_ctx.generate_masp_tx(
         amount,
         TransferSource::Address(defaults::albert_address()),
-        TransferTarget::PaymentAddress(albert_payment_addr),
+        TransferTarget::PaymentAddress(albert_payment_addr.clone()),
     );
 
     shielded_ctx.shell.write().execute_tx(&shield_tx.to_ref());

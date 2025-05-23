@@ -74,6 +74,11 @@ pub struct ShieldedTransfer {
     pub metadata: SaplingMetadata,
     /// Epoch in which the transaction was created
     pub epoch: MaspEpoch,
+    /// Vector of FMD flag ciphertexts.
+    ///
+    /// There must be a flag ciphertext per shielded output
+    /// in the `builder`.
+    pub fmd_flags: Vec<FlagCiphertext>,
 }
 
 /// The data for a masp fee payment
@@ -191,6 +196,9 @@ pub enum TransferErr {
     /// Insufficient funds error
     #[error("Insufficient funds: {0}")]
     InsufficientFunds(MaspDataLog),
+    /// Invalid FMD public key
+    #[error("FMD public key included in the payment address is not valid")]
+    InvalidFmdPublicKey,
     /// Generic error
     #[error("{0}")]
     General(String),
@@ -253,6 +261,16 @@ pub trait ShieldedUtils:
     /// Load a cache of data as part of shielded sync if that
     /// process gets interrupted.
     async fn cache_load(&self) -> std::io::Result<DispatcherCache>;
+
+    /// Save the configuration file for fuzzy message detection
+    async fn fmd_config_save(
+        &self,
+        _config: &mut kassandra_client::config::Config,
+    ) -> std::io::Result<()>;
+
+    /// Load the fuzzy messaged detection configuration file
+    async fn fmd_config_load()
+    -> std::io::Result<kassandra_client::config::Config>;
 }
 
 /// Make a ViewingKey that can view notes encrypted by given ExtendedSpendingKey
@@ -984,7 +1002,8 @@ pub mod fs {
     const SPECULATIVE_TMP_FILE_PREFIX: &str = "speculative_shielded.tmp";
     const CACHE_FILE_NAME: &str = "shielded_sync.cache";
     const CACHE_FILE_TMP_PREFIX: &str = "shielded_sync.cache.tmp";
-
+    const FMD_CONF_FILE_NAME: &str = "fmd_config.toml";
+    const FMD_CONF_FILE_TMP_PREFIX: &str = "fmd_config.toml.tmp";
     #[derive(Debug, BorshSerialize, BorshDeserialize, Clone)]
     /// An implementation of ShieldedUtils for standard filesystems
     pub struct FsShieldedUtils {
@@ -1185,6 +1204,22 @@ pub mod fs {
             let file_name = self.context_dir.join(CACHE_FILE_NAME);
             let mut file = File::open(file_name)?;
             DispatcherCache::try_from_reader(&mut file)
+        }
+
+        async fn fmd_config_save(
+            &self,
+            config: &mut kassandra_client::config::Config,
+        ) -> std::io::Result<()> {
+            config.save(FMD_CONF_FILE_TMP_PREFIX)?;
+            std::fs::rename(
+                FMD_CONF_FILE_TMP_PREFIX,
+                self.context_dir.join(FMD_CONF_FILE_NAME),
+            )
+        }
+
+        async fn fmd_config_load()
+        -> std::io::Result<kassandra_client::config::Config> {
+            kassandra_client::config::Config::load_or_new(FMD_CONF_FILE_NAME)
         }
     }
 }

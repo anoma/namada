@@ -364,6 +364,93 @@ impl<PK: PublicKey> From<&PK> for PublicKeyHash {
     }
 }
 
+const FMD_KEY_HASH_LEN: usize = 32;
+const FMD_HASH_HEX_LEN: usize = 64;
+
+/// Key hash derived of a json serialized FMD secret key
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+#[derive(
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Default,
+)]
+pub struct FmdKeyHash(pub(crate) [u8; FMD_KEY_HASH_LEN]);
+
+impl serde::Serialize for FmdKeyHash {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let encoded = self.to_string();
+        serde::Serialize::serialize(&encoded, serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for FmdKeyHash {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+        let encoded: String = serde::Deserialize::deserialize(deserializer)?;
+        Self::from_str(&encoded).map_err(D::Error::custom)
+    }
+}
+
+impl Display for FmdKeyHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", HEXUPPER.encode(&self.0))
+    }
+}
+
+impl FromStr for FmdKeyHash {
+    type Err = FmdhFromStringError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() != FMD_HASH_HEX_LEN {
+            return Err(Self::Err::UnexpectedLen(s.len()));
+        }
+        let raw_bytes = HEXUPPER
+            .decode(s.as_bytes())
+            .map_err(Self::Err::DecodeUpperHex)?;
+        let mut bytes: [u8; FMD_KEY_HASH_LEN] = Default::default();
+        bytes.copy_from_slice(&raw_bytes);
+        Ok(Self(bytes))
+    }
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum FmdhFromStringError {
+    #[error("Wrong FMD hash len. Expected {FMD_HASH_HEX_LEN}, got {0}")]
+    UnexpectedLen(usize),
+    #[error("Failed decoding upper hex with {0}")]
+    DecodeUpperHex(data_encoding::DecodeError),
+}
+
+impl From<&polyfuzzy::FmdSecretKey> for FmdKeyHash {
+    fn from(sk: &polyfuzzy::FmdSecretKey) -> Self {
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(serde_json::to_string(sk).unwrap().as_bytes());
+        Self(hasher.finalize().into())
+    }
+}
+
+impl From<polyfuzzy::FmdSecretKey> for FmdKeyHash {
+    fn from(sk: polyfuzzy::FmdSecretKey) -> Self {
+        Self::from(&sk)
+    }
+}
+
 /// Derive Tendermint raw hash from the public key
 pub trait PublicKeyTmRawHash {
     /// Derive Tendermint raw hash from the public key

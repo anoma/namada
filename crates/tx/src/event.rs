@@ -4,6 +4,7 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::hash::Hash;
 use namada_core::ibc::IbcTxDataHash;
 use namada_core::masp::MaspTxId;
 use namada_events::extend::{
@@ -112,9 +113,13 @@ pub mod masp_types {
     /// General MASP transfer event
     pub const TRANSFER: EventType =
         namada_events::event_type!(MaspEvent, "transfer");
+
+    /// FMD flag ciphertexts event
+    pub const FLAG_CIPHERTEXTS: EventType =
+        namada_events::event_type!(MaspEvent, "flag");
 }
 
-/// MASP event kind
+/// The type of a MASP transaction
 #[derive(
     Debug,
     Default,
@@ -130,7 +135,7 @@ pub mod masp_types {
     Deserialize,
     Hash,
 )]
-pub enum MaspEventKind {
+pub enum MaspTxKind {
     /// A MASP transaction used for fee payment
     FeePayment,
     /// A general MASP transfer
@@ -138,24 +143,43 @@ pub enum MaspEventKind {
     Transfer,
 }
 
-impl From<&MaspEventKind> for EventType {
-    fn from(masp_event_kind: &MaspEventKind) -> Self {
-        match masp_event_kind {
-            MaspEventKind::FeePayment => masp_types::FEE_PAYMENT,
-            MaspEventKind::Transfer => masp_types::TRANSFER,
+impl From<MaspTxKind> for EventType {
+    fn from(kind: MaspTxKind) -> Self {
+        match kind {
+            MaspTxKind::FeePayment => masp_types::FEE_PAYMENT,
+            MaspTxKind::Transfer => masp_types::TRANSFER,
         }
     }
 }
 
-impl From<MaspEventKind> for EventType {
-    fn from(masp_event_kind: MaspEventKind) -> Self {
-        (&masp_event_kind).into()
+/// Represents a reference to an FMD flag ciphertext.
+///
+/// Store either in an IBC packet memo, or a Namada tx section.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FmdSectionRef {
+    /// Reference to a flag ciphertext tx section.
+    FmdSection(Hash),
+    /// Reference to an IBC tx data section.
+    IbcData(IbcTxDataHash),
+}
+
+impl Display for FmdSectionRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", serde_json::to_string(self).unwrap())
+    }
+}
+
+impl FromStr for FmdSectionRef {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
     }
 }
 
 /// A type representing the possible reference to some MASP data, either a masp
 /// section or ibc tx data
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MaspTxRef {
     /// Reference to a MASP section
     MaspSection(MaspTxId),
@@ -177,18 +201,54 @@ impl FromStr for MaspTxRef {
     }
 }
 
-/// A list of MASP tx references
-#[derive(Default, Clone, Serialize, Deserialize)]
-pub struct MaspTxRefs(pub Vec<(IndexedTx, MaspTxRef)>);
+/// MASP transaction event
+#[derive(Debug, Clone)]
+pub enum MaspEvent {
+    /// Emit emitted upon generating a new shielded output
+    ShieldedOutput {
+        /// The indexed transaction that generated this event
+        tx_index: IndexedTx,
+        /// A flag signaling the type of the MASP transaction
+        kind: MaspTxKind,
+        /// The reference to the masp data
+        data: MaspTxRef,
+    },
+    /// Emit emitted after flagging a new shielded output
+    ///
+    /// Generally follows the creation of [`Self::ShieldedOutput`]
+    FlagCiphertexts {
+        /// The indexed transaction that generated this event
+        tx_index: IndexedTx,
+        /// The tx section hash of the FMD flag ciphertext
+        section: FmdSectionRef,
+    },
+}
 
 /// MASP transaction event
-pub struct MaspEvent {
+#[derive(Debug, Clone)]
+pub struct MaspTxEvent {
     /// The indexed transaction that generated this event
     pub tx_index: IndexedTx,
-    /// A flag signaling the type of the masp transaction
-    pub kind: MaspEventKind,
+    /// A flag signaling the type of the MASP transaction
+    pub kind: MaspTxKind,
     /// The reference to the masp data
     pub data: MaspTxRef,
+}
+
+impl From<MaspTxEvent> for MaspEvent {
+    fn from(
+        MaspTxEvent {
+            tx_index,
+            kind,
+            data,
+        }: MaspTxEvent,
+    ) -> Self {
+        Self::ShieldedOutput {
+            tx_index,
+            kind,
+            data,
+        }
+    }
 }
 
 impl EventToEmit for MaspEvent {
@@ -197,10 +257,22 @@ impl EventToEmit for MaspEvent {
 
 impl From<MaspEvent> for Event {
     fn from(masp_event: MaspEvent) -> Self {
-        Self::new(masp_event.kind.into(), EventLevel::Tx)
-            .with(masp_event.data)
-            .with(masp_event.tx_index)
-            .into()
+        match masp_event {
+            MaspEvent::ShieldedOutput {
+                tx_index,
+                kind,
+                data,
+            } => Self::new(kind.into(), EventLevel::Tx)
+                .with(data)
+                .with(tx_index)
+                .into(),
+            MaspEvent::FlagCiphertexts { tx_index, section } => {
+                Self::new(masp_types::FLAG_CIPHERTEXTS, EventLevel::Tx)
+                    .with(section)
+                    .with(tx_index)
+                    .into()
+            }
+        }
     }
 }
 
@@ -220,6 +292,17 @@ impl EventAttributeEntry<'static> for IndexedTx {
     type ValueOwned = Self::Value;
 
     const KEY: &'static str = "indexed-tx";
+
+    fn into_value(self) -> Self::Value {
+        self
+    }
+}
+
+impl EventAttributeEntry<'static> for FmdSectionRef {
+    type Value = Self;
+    type ValueOwned = Self;
+
+    const KEY: &'static str = "ciphertext";
 
     fn into_value(self) -> Self::Value {
         self

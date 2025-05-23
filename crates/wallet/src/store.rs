@@ -15,6 +15,7 @@ use namada_core::collections::HashSet;
 use namada_core::key::*;
 use namada_core::masp::{
     DiversifierIndex, ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
+    UnifiedPaymentAddress,
 };
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
@@ -69,7 +70,7 @@ pub struct Store {
     /// Known spending keys
     spend_keys: BTreeMap<Alias, StoredKeypair<StoreSpendingKey>>,
     /// Payment address book
-    payment_addrs: BiBTreeMap<Alias, PaymentAddress>,
+    payment_addrs: BiBTreeMap<Alias, UnifiedPaymentAddress>,
     /// Diverisifier index of the next payment address to be generated for a
     /// given key.
     diversifier_indices: BTreeMap<Alias, DiversifierIndex>,
@@ -84,6 +85,9 @@ pub struct Store {
     /// Known mappings of public key hashes to their aliases in the `keys`
     /// field. Used for look-up by a public key.
     pkhs: BTreeMap<PublicKeyHash, Alias>,
+    /// Known mappings of FMD secret key hashes to their aliases in the
+    /// `viewing_keys` field.
+    fmdhs: BTreeMap<Alias, FmdKeyHash>,
     /// Special keys if the wallet belongs to a validator
     pub(crate) validator_data: Option<ValidatorData>,
     /// Namada address vp type
@@ -151,6 +155,15 @@ impl Store {
         self.view_keys.get(&alias.into())
     }
 
+    /// Find the hash of an FMD secret key from the alias of the viewing
+    /// key it was derived from.
+    pub fn find_fmd_key_hash(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Option<&FmdKeyHash> {
+        self.fmdhs.get(&alias.into())
+    }
+
     /// Find the birthday of the given alias
     pub fn find_birthday(
         &self,
@@ -171,14 +184,14 @@ impl Store {
     pub fn find_payment_addr(
         &self,
         alias: impl AsRef<str>,
-    ) -> Option<&PaymentAddress> {
+    ) -> Option<&UnifiedPaymentAddress> {
         self.payment_addrs.get_by_left(&alias.into())
     }
 
     /// Find an alias by the address if it's in the wallet.
     pub fn find_alias_by_payment_addr(
         &self,
-        payment_address: &PaymentAddress,
+        payment_address: &UnifiedPaymentAddress,
     ) -> Option<&Alias> {
         self.payment_addrs.get_by_right(payment_address)
     }
@@ -282,7 +295,9 @@ impl Store {
     }
 
     /// Get all known payment addresses by their alias.
-    pub fn get_payment_addrs(&self) -> &BiBTreeMap<Alias, PaymentAddress> {
+    pub fn get_payment_addrs(
+        &self,
+    ) -> &BiBTreeMap<Alias, UnifiedPaymentAddress> {
         &self.payment_addrs
     }
 
@@ -445,6 +460,9 @@ impl Store {
     }
 
     /// Insert viewing keys similarly to how it's done for keypairs
+    ///
+    /// Hashes of the FMD secret keys associated with a viewing key will
+    /// also be added to a map associating it with the alias provided.
     pub fn insert_viewing_key<U: WalletIo>(
         &mut self,
         alias: Alias,
@@ -476,6 +494,9 @@ impl Store {
         }
         self.remove_alias(&alias);
         birthday.map(|x| self.birthdays.insert(alias.clone(), x));
+        let fmd_key =
+            namada_core::masp::FmdSecretKey::from(&viewkey).fmd_secret_key();
+        self.fmdhs.insert(alias.clone(), fmd_key.into());
         self.view_keys.insert(alias.clone(), viewkey);
         path.map(|p| self.derivation_paths.insert(alias.clone(), p));
         Some(alias)
@@ -537,7 +558,7 @@ impl Store {
     pub fn insert_payment_addr<U: WalletIo>(
         &mut self,
         alias: Alias,
-        payment_addr: PaymentAddress,
+        payment_addr: UnifiedPaymentAddress,
         force: bool,
     ) -> Option<Alias> {
         // abort if the alias is reserved
@@ -670,6 +691,7 @@ impl Store {
             derivation_paths,
             addresses,
             pkhs,
+            fmdhs,
             validator_data: _,
             address_vp_types,
         } = self;
@@ -683,6 +705,7 @@ impl Store {
         derivation_paths.extend(store.derivation_paths);
         addresses.extend(store.addresses);
         pkhs.extend(store.pkhs);
+        fmdhs.extend(store.fmdhs);
         address_vp_types.extend(store.address_vp_types);
     }
 
@@ -910,12 +933,26 @@ pub struct StoreV0 {
 impl From<StoreV0> for Store {
     fn from(store: StoreV0) -> Self {
         let mut to = Store {
-            payment_addrs: store.payment_addrs,
+            payment_addrs: store
+                .payment_addrs
+                .into_iter()
+                .map(|(alias, pa)| (alias, UnifiedPaymentAddress::V0(pa)))
+                .collect(),
             secret_keys: store.secret_keys,
             public_keys: store.public_keys,
             derivation_paths: store.derivation_paths,
             addresses: store.addresses,
             pkhs: store.pkhs,
+            fmdhs: store
+                .view_keys
+                .iter()
+                .map(|(alias, vk)| {
+                    let fmd_key =
+                        namada_core::masp::FmdSecretKey::from(&vk.key)
+                            .fmd_secret_key();
+                    (alias.clone(), fmd_key.into())
+                })
+                .collect(),
             validator_data: store.validator_data,
             address_vp_types: store.address_vp_types,
             ..Store::default()
@@ -962,7 +999,7 @@ pub struct StoreV1 {
     /// Known spending keys
     spend_keys: BTreeMap<Alias, StoredKeypair<StoreSpendingKey>>,
     /// Payment address book
-    payment_addrs: BiBTreeMap<Alias, PaymentAddress>,
+    payment_addrs: BiBTreeMap<Alias, UnifiedPaymentAddress>,
     /// Cryptographic keypairs
     secret_keys: BTreeMap<Alias, StoredKeypair<common::SecretKey>>,
     /// Known public keys
