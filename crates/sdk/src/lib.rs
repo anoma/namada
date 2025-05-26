@@ -145,8 +145,6 @@ pub trait Namada: NamadaIo {
             expiration: Default::default(),
             chain_id: None,
             signing_keys: vec![],
-            signatures: vec![],
-            wrapper_signature: None,
             tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
             password: None,
             memo: None,
@@ -593,6 +591,8 @@ pub trait Namada: NamadaIo {
             code_path: None,
             data_path: None,
             serialized_tx: None,
+            signatures: vec![],
+            wrapper_signature: None,
         }
     }
 
@@ -718,8 +718,6 @@ where
                 expiration: Default::default(),
                 chain_id: None,
                 signing_keys: vec![],
-                signatures: vec![],
-                wrapper_signature: None,
                 tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
                 password: None,
                 memo: None,

@@ -95,8 +95,6 @@ fn get_tx_args(use_device: bool) -> TxArgs {
         expiration: Default::default(),
         chain_id: None,
         signing_keys: vec![],
-        signatures: vec![],
-        wrapper_signature: None,
         tx_reveal_code_path: Default::default(),
         password: None,
         memo: None,
@@ -771,9 +769,9 @@ impl<T> Signed<T> {
             account_public_keys_map: Some(pks.iter().cloned().collect()),
             public_keys: pks.clone(),
             threshold,
-            fee_payer: genesis_fee_payer_pk(),
+            fee_payer: Either::Left((genesis_fee_payer_pk(), false)),
             shielded_hash: None,
-            disposable_fee_payer: false,
+            signatures: vec![],
         };
 
         let mut tx = self.data.tx_to_sign();

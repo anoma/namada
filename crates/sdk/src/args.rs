@@ -176,6 +176,10 @@ pub struct TxCustom<C: NamadaTypes = SdkTypes> {
     pub serialized_tx: Option<C::Data>,
     /// The optional address that correspond to the signatures/signing-keys
     pub owner: Option<C::Address>,
+    /// List of signatures to attach to the transaction
+    pub signatures: Vec<C::Data>,
+    /// Optional path to a serialized wrapper signature
+    pub wrapper_signature: Option<C::Data>,
 }
 
 impl<C: NamadaTypes> TxBuilder<C> for TxCustom<C> {
@@ -2677,10 +2681,6 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub chain_id: Option<ChainId>,
     /// Sign the tx with the key for the given alias from your wallet
     pub signing_keys: Vec<C::PublicKey>,
-    /// List of signatures to attach to the transaction
-    pub signatures: Vec<C::Data>,
-    /// Optional path to a serialized wrapper signature
-    pub wrapper_signature: Option<C::Data>,
     /// Path to the TX WASM code file to reveal PK
     pub tx_reveal_code_path: PathBuf,
     /// Password to decrypt key
@@ -2822,10 +2822,6 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
     /// Sign the tx with the key for the given alias from your wallet
     fn signing_keys(self, signing_keys: Vec<C::PublicKey>) -> Self {
         self.tx(|x| Tx { signing_keys, ..x })
-    }
-    /// List of signatures to attach to the transaction
-    fn signatures(self, signatures: Vec<C::Data>) -> Self {
-        self.tx(|x| Tx { signatures, ..x })
     }
     /// Path to the TX WASM code file to reveal PK
     fn tx_reveal_code_path(self, tx_reveal_code_path: PathBuf) -> Self {
