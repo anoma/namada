@@ -157,10 +157,12 @@ pub trait Namada: NamadaIo {
     /// arguments
     fn new_transparent_transfer(
         &self,
-        data: Vec<args::TxTransparentTransferData>,
+        sources: Vec<args::TxShieldingTransferData>,
+        targets: Vec<args::TxUnshieldingTransferData>,
     ) -> args::TxTransparentTransfer {
         args::TxTransparentTransfer {
-            data,
+            sources,
+            targets,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
         }
@@ -170,11 +172,13 @@ pub trait Namada: NamadaIo {
     /// arguments
     fn new_shielded_transfer(
         &self,
-        data: Vec<args::TxShieldedTransferData>,
+        sources: Vec<args::TxShieldedSource>,
+        targets: Vec<args::TxShieldedTarget>,
         gas_spending_key: Option<PseudoExtendedKey>,
     ) -> args::TxShieldedTransfer {
         args::TxShieldedTransfer {
-            data,
+            sources,
+            targets,
             gas_spending_key,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
@@ -185,7 +189,7 @@ pub trait Namada: NamadaIo {
     /// arguments
     fn new_shielding_transfer(
         &self,
-        target: PaymentAddress,
+        target: Vec<args::TxShieldedTarget>,
         data: Vec<args::TxShieldingTransferData>,
     ) -> args::TxShieldingTransfer {
         args::TxShieldingTransfer {
@@ -200,7 +204,7 @@ pub trait Namada: NamadaIo {
     /// arguments
     fn new_unshielding_transfer(
         &self,
-        source: PseudoExtendedKey,
+        source: Vec<args::TxShieldedSource>,
         data: Vec<args::TxUnshieldingTransferData>,
         gas_spending_key: Option<PseudoExtendedKey>,
     ) -> args::TxUnshieldingTransfer {

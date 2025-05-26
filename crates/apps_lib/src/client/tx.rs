@@ -854,7 +854,7 @@ pub async fn submit_transparent_transfer(
     namada: &impl Namada,
     args: args::TxTransparentTransfer,
 ) -> Result<(), error::Error> {
-    if args.data.len() > 1 {
+    if args.sources.len() > 1 || args.targets.len() > 1 {
         // TODO(namada#3379): Vectorized transfers are not yet supported in the
         // CLI
         return Err(error::Error::Other(
@@ -868,7 +868,7 @@ pub async fn submit_transparent_transfer(
         tx::dump_tx(namada.io(), &args.tx, transfer_data.0)?;
     } else {
         let reveal_pks: Vec<_> =
-            args.data.iter().map(|datum| &datum.source).collect();
+            args.sources.iter().map(|datum| &datum.source).collect();
         batch_opt_reveal_pk_and_submit(
             namada,
             &args.tx,
@@ -1232,7 +1232,7 @@ pub async fn submit_shielded_transfer(
     );
 
     let sources = args
-        .data
+        .sources
         .iter_mut()
         .map(|x| &mut x.source)
         .chain(args.gas_spending_key.iter_mut());
@@ -1394,7 +1394,10 @@ pub async fn submit_unshielding_transfer(
          this command.",
     );
 
-    let sources = std::iter::once(&mut args.source)
+    let sources = args
+        .source
+        .iter_mut()
+        .map(|x| &mut x.source)
         .chain(args.gas_spending_key.iter_mut());
     let shielded_hw_keys =
         augment_masp_hardware_keys(namada, &args.tx, sources).await?;
