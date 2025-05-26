@@ -80,7 +80,7 @@ pub struct ShieldedTransfer {
 #[allow(missing_docs)]
 #[derive(Debug)]
 pub struct MaspFeeData {
-    pub source: Option<PseudoExtendedKey>,
+    pub source: PseudoExtendedKey,
     pub target: Address,
     pub token: Address,
     pub amount: token::DenominatedAmount,
@@ -106,7 +106,7 @@ pub struct MaspSourceTransferData {
 /// The data for a masp transfer relative to a given target
 #[derive(Debug, Hash, Eq, PartialEq)]
 pub struct MaspTargetTransferData {
-    source: Option<TransferSource>,
+    source: TransferSource,
     target: TransferTarget,
     token: Address,
 }
