@@ -697,40 +697,44 @@ where
         }
     };
 
-    const FEE_PAYMENT_DESCRIPTOR: std::borrow::Cow<'static, str> =
-        std::borrow::Cow::Borrowed("wrapper-fee-payment");
+    const BASE_FEE_PAYMENT_DESCRIPTOR: std::borrow::Cow<'static, str> =
+        std::borrow::Cow::Borrowed("wrapper-base-fee");
+    const FEE_TIP_PAYMENT_DESCRIPTOR: std::borrow::Cow<'static, str> =
+        std::borrow::Cow::Borrowed("wrapper-fee-tip");
     let current_block_height = shell_params
         .state
         .in_mem()
         .get_last_block_height()
         .next_height();
 
-    // Event for the tip
-    let proposer_post_balance = Some(
-        token::read_balance(
-            shell_params.state,
-            &wrapper.fee.token,
-            block_proposer,
-        )
-        .map_err(Error::Error)?
-        .into(),
-    );
-    shell_params.state.write_log_mut().emit_event(
-        TokenEvent {
-            descriptor: FEE_PAYMENT_DESCRIPTOR,
-            level: EventLevel::Tx,
-            operation: TokenOperation::transfer(
-                UserAccount::Internal(wrapper.fee_payer()),
-                UserAccount::Internal(block_proposer.clone()),
-                wrapper.fee.token.clone(),
-                fee_components.tip.into(),
-                post_bal.into(),
-                proposer_post_balance,
-            ),
-        }
-        .with(HeightAttr(current_block_height))
-        .with(TxHashAttr(tx.header_hash())),
-    );
+    // Event for the tip (if present)
+    if fee_components.tip.is_positive() {
+        let proposer_post_balance = Some(
+            token::read_balance(
+                shell_params.state,
+                &wrapper.fee.token,
+                block_proposer,
+            )
+            .map_err(Error::Error)?
+            .into(),
+        );
+        shell_params.state.write_log_mut().emit_event(
+            TokenEvent {
+                descriptor: FEE_TIP_PAYMENT_DESCRIPTOR,
+                level: EventLevel::Tx,
+                operation: TokenOperation::transfer(
+                    UserAccount::Internal(wrapper.fee_payer()),
+                    UserAccount::Internal(block_proposer.clone()),
+                    wrapper.fee.token.clone(),
+                    fee_components.tip.into(),
+                    post_bal.into(),
+                    proposer_post_balance,
+                ),
+            }
+            .with(HeightAttr(current_block_height))
+            .with(TxHashAttr(tx.header_hash())),
+        );
+    }
     // Event for the base fee
     let operation = if wrapper.fee.token
         == shell_params
@@ -765,7 +769,7 @@ where
     };
     shell_params.state.write_log_mut().emit_event(
         TokenEvent {
-            descriptor: FEE_PAYMENT_DESCRIPTOR,
+            descriptor: BASE_FEE_PAYMENT_DESCRIPTOR,
             level: EventLevel::Tx,
             operation,
         }
