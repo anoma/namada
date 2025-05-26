@@ -863,7 +863,6 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
                 &REMAINING_REWARDS_AMT.to_string(),
                 "--node",
                 RPC,
-                "--disposable-gas-payer",
                 "--gas-spending-key",
                 C_SPENDING_KEY,
                 "--gas-limit",
@@ -5596,9 +5595,6 @@ fn masp_fee_payment() -> Result<()> {
                 "20000",
                 "--gas-price",
                 "1",
-                "--gas-spending-key",
-                A_SPENDING_KEY,
-                "--disposable-gas-payer",
                 "--ledger-address",
                 validator_one_rpc,
             ]),
@@ -5736,9 +5732,6 @@ fn masp_fee_payment() -> Result<()> {
                 "10000",
                 "--gas-price",
                 "1",
-                "--gas-spending-key",
-                A_SPENDING_KEY,
-                "--disposable-gas-payer",
                 "--ledger-address",
                 validator_one_rpc,
             ]),
@@ -5878,9 +5871,6 @@ fn masp_fee_payment_gas_limit() -> Result<()> {
                 "1",
                 "--gas-price",
                 "1",
-                "--gas-spending-key",
-                A_SPENDING_KEY,
-                "--disposable-gas-payer",
                 "--ledger-address",
                 validator_one_rpc,
             ]),
@@ -6023,8 +6013,6 @@ fn masp_fee_payment_with_non_disposable() -> Result<()> {
                 "60000",
                 "--gas-payer",
                 ALBERT_KEY,
-                "--gas-spending-key",
-                A_SPENDING_KEY,
                 "--ledger-address",
                 validator_one_rpc,
             ]),
@@ -6202,7 +6190,6 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
                 "1",
                 "--gas-spending-key",
                 B_SPENDING_KEY,
-                "--disposable-gas-payer",
                 "--ledger-address",
                 validator_one_rpc,
             ]),
@@ -6448,7 +6435,6 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
                 "1",
                 "--gas-spending-key",
                 B_SPENDING_KEY,
-                "--disposable-gas-payer",
                 "--ledger-address",
                 validator_one_rpc,
             ]),
@@ -6614,6 +6600,7 @@ fn identical_output_descriptions() -> Result<()> {
         account_public_keys_map: None,
         fee_payer: adam_key.to_public(),
         shielded_hash: None,
+        disposable_fee_payer: false,
     };
 
     let (mut batched_tx, _signing_data) = namada_sdk::tx::build_batch(vec![
@@ -6918,6 +6905,7 @@ fn masp_batch() -> Result<()> {
         account_public_keys_map: None,
         fee_payer: adam_key.to_public(),
         shielded_hash: None,
+        disposable_fee_payer: false,
     };
 
     let mut txs = vec![];
@@ -7173,6 +7161,7 @@ fn masp_atomic_batch() -> Result<()> {
         account_public_keys_map: None,
         fee_payer: adam_key.to_public(),
         shielded_hash: None,
+        disposable_fee_payer: false,
     };
 
     let mut txs = vec![];
@@ -7516,6 +7505,7 @@ fn masp_failing_atomic_batch() -> Result<()> {
         account_public_keys_map: None,
         fee_payer: adam_key.to_public(),
         shielded_hash: None,
+        disposable_fee_payer: false,
     };
 
     let (mut batched_tx, _signing_data) = namada_sdk::tx::build_batch(vec![
@@ -8424,6 +8414,7 @@ fn masp_events() -> Result<()> {
         account_public_keys_map: None,
         fee_payer: cooper_pk.clone(),
         shielded_hash: None,
+        disposable_fee_payer: false,
     };
 
     let (batched_tx, _signing_data) = namada_sdk::tx::build_batch(vec![
