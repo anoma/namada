@@ -1353,6 +1353,7 @@ mod test_finalize_block {
 
     use super::*;
     use crate::oracle::control::Command;
+    use crate::protocol::ProtocolGasPrice;
     use crate::shell::test_utils::*;
     use crate::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
@@ -4033,9 +4034,16 @@ mod test_finalize_block {
             .add_code(TestWasms::TxNoOp.read_bytes(), None)
             .add_data("Transaction data");
         wrapper.sign_wrapper(albert_keypair());
+        let protocol_minimum_gas_price = parameters::read_gas_cost(
+            &shell.state,
+            &wrapper.header.wrapper().unwrap().fee.token,
+        )
+        .unwrap()
+        .unwrap();
         let fee_components = get_fee_components(
             &wrapper.header().wrapper().unwrap(),
             &shell.state,
+            &ProtocolGasPrice(protocol_minimum_gas_price),
         )
         .unwrap();
 
@@ -4169,9 +4177,16 @@ mod test_finalize_block {
             .add_code(TestWasms::TxNoOp.read_bytes(), None)
             .add_data("Transaction data");
         wrapper.sign_wrapper(albert_keypair());
+        let protocol_minimum_gas_price = parameters::read_gas_cost(
+            &shell.state,
+            &wrapper.header.wrapper().unwrap().fee.token,
+        )
+        .unwrap()
+        .unwrap();
         let fee_components = get_fee_components(
             &wrapper.header().wrapper().unwrap(),
             &shell.state,
+            &ProtocolGasPrice(protocol_minimum_gas_price),
         )
         .unwrap();
 

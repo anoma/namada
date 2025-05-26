@@ -1510,7 +1510,7 @@ where
     H: StorageHasher + Sync + 'static,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let minimum_gas_price =
+    let protocol_gas_price =
         parameters::read_gas_cost(shell_params.state, &wrapper.fee.token)
             .expect("Must be able to read gas cost parameter")
             .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
@@ -1518,7 +1518,11 @@ where
                 wrapper.fee.token
             ))))?;
 
-    fee_data_check(wrapper, minimum_gas_price, shell_params.state)?;
+    fee_data_check(
+        wrapper,
+        &crate::protocol::ProtocolGasPrice(protocol_gas_price),
+        shell_params.state,
+    )?;
     protocol::check_fees(shell_params, tx, wrapper)
         .map_err(Error::TxApply)
         .map(|_| ())
@@ -1526,9 +1530,9 @@ where
 
 /// Check the validity of the fee data and return the fee information split
 /// between base and tip
-pub fn fee_data_check(
+pub(crate) fn fee_data_check(
     wrapper: &WrapperTx,
-    minimum_gas_price: token::Amount,
+    minimum_gas_price: &impl crate::protocol::MinimumGasPrice,
     storage: &impl StorageRead,
 ) -> ShellResult<FeeComponents> {
     match token::denom_to_amount(
@@ -1537,17 +1541,17 @@ pub fn fee_data_check(
         storage,
     ) {
         Ok(amount_per_gas_unit) => {
-            if amount_per_gas_unit < minimum_gas_price {
+            if amount_per_gas_unit < minimum_gas_price.price() {
                 // The fees do not match the minimum required
                 Err(Error::TxApply(protocol::Error::FeeError(format!(
                     "Fee amount {:?} does not match the minimum required \
                      amount {:?} for token {}",
                     wrapper.fee.amount_per_gas_unit,
-                    minimum_gas_price,
+                    minimum_gas_price.price(),
                     wrapper.fee.token
                 ))))
             } else {
-                get_fee_components(wrapper, storage)
+                get_fee_components(wrapper, storage, minimum_gas_price)
             }
         }
         Err(err) => Err(Error::TxApply(protocol::Error::FeeError(format!(
@@ -1559,22 +1563,17 @@ pub fn fee_data_check(
 }
 
 /// Extract the components of the fee for the provided wrapper transaction
-pub fn get_fee_components(
+pub(crate) fn get_fee_components(
     wrapper: &WrapperTx,
     storage: &impl StorageRead,
+    minimum_gas_price: &impl crate::protocol::MinimumGasPrice,
 ) -> ShellResult<FeeComponents> {
     let denom_amt = wrapper.get_tx_fee().map_err(|e| {
         Error::TxApply(protocol::Error::FeeError(e.to_string()))
     })?;
     let fees = token::denom_to_amount(denom_amt, &wrapper.fee.token, storage)?;
-    let minimum_gas_price =
-        parameters::read_gas_cost(storage, &wrapper.fee.token)
-            .expect("Must be able to read gas cost parameter")
-            .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
-                "The provided {} token is not allowed for fee payment",
-                wrapper.fee.token
-            ))))?;
     let base_fee = minimum_gas_price
+        .protocol_price()
         .checked_mul(token::Amount::from(wrapper.gas_limit))
         .ok_or_else(|| {
             Error::TxApply(protocol::Error::FeeError(

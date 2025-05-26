@@ -469,6 +469,29 @@ pub struct MaspTxResult {
     masp_section_ref: MaspTxRef,
 }
 
+pub(crate) struct ProtocolGasPrice(pub(crate) token::Amount);
+
+/// A trait to handle the available gas prices for a given token, the protocol
+/// one and the optional override coming from a block proposer local
+/// configuration
+pub(crate) trait MinimumGasPrice {
+    /// The gas price, potentially coming from the local configuration of the
+    /// block proposer (only for prepare_proposal)
+    fn price(&self) -> token::Amount;
+    /// The protocol imposed gas price
+    fn protocol_price(&self) -> token::Amount;
+}
+
+impl MinimumGasPrice for ProtocolGasPrice {
+    fn price(&self) -> token::Amount {
+        self.0
+    }
+
+    fn protocol_price(&self) -> token::Amount {
+        self.0
+    }
+}
+
 /// Performs the required operation on a wrapper transaction:
 ///  - replay protection
 ///  - fee payment
@@ -501,14 +524,24 @@ where
         .write_log_mut()
         .write_tx_hash(tx.header_hash())
         .expect("Error while writing tx hash to storage");
+    let protocol_minimum_gas_price =
+        parameters::read_gas_cost(shell_params.state, &wrapper.fee.token)
+            .expect("Must be able to read gas cost parameter")
+            .ok_or(Error::FeeError(format!(
+                "The provided {} token is not allowed for fee payment",
+                wrapper.fee.token
+            )))?;
 
     // Charge or check fees, propagate any errors to prevent committing invalid
     // data
     let payment_result = match block_proposer {
         Some(block_proposer) => {
-            let fee_components =
-                crate::shell::get_fee_components(wrapper, shell_params.state)
-                    .map_err(|e| Error::FeeError(e.to_string()))?;
+            let fee_components = crate::shell::get_fee_components(
+                wrapper,
+                shell_params.state,
+                &ProtocolGasPrice(protocol_minimum_gas_price),
+            )
+            .map_err(|e| Error::FeeError(e.to_string()))?;
             transfer_fee(
                 shell_params,
                 block_proposer,
