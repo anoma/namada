@@ -90,8 +90,8 @@ pub struct MaspFeeData {
 #[allow(missing_docs)]
 #[derive(Debug, Default)]
 pub struct MaspTransferData {
-    pub source: Vec<(TransferSource, Address, token::DenominatedAmount)>,
-    pub target: Vec<(TransferTarget, Address, token::DenominatedAmount)>,
+    pub sources: Vec<(TransferSource, Address, token::DenominatedAmount)>,
+    pub targets: Vec<(TransferTarget, Address, token::DenominatedAmount)>,
 }
 
 /// Data to log the error of a single masp transaction
@@ -142,10 +142,13 @@ impl fmt::Display for MaspDataLog {
     }
 }
 
-#[allow(missing_docs)]
-pub struct MaspTxReorderedData {
+/// Represents the data used to construct a MASP Transfer
+pub struct MaspTxCombinedData {
+    /// Sources of assets going into the transfer
     source_data: HashMap<TransferSource, ValueSum<Address, token::Amount>>,
+    /// Destinations of assets going out of the transfer
     target_data: HashMap<TransferTarget, ValueSum<Address, token::Amount>>,
+    /// The denominations of the various tokens used in the transfer
     denoms: HashMap<Address, Denomination>,
 }
 

@@ -1323,7 +1323,7 @@ pub async fn submit_shielding_transfer(
         let wrapper_hash = tx.wrapper_hash();
 
         let reveal_pks: Vec<_> =
-            args.data.iter().map(|datum| &datum.source).collect();
+            args.sources.iter().map(|datum| &datum.source).collect();
         let result = batch_opt_reveal_pk_and_submit(
             namada,
             &args.tx,
@@ -1395,7 +1395,7 @@ pub async fn submit_unshielding_transfer(
     );
 
     let sources = args
-        .source
+        .sources
         .iter_mut()
         .map(|x| &mut x.source)
         .chain(args.gas_spending_key.iter_mut());

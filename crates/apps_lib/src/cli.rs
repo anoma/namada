@@ -4756,7 +4756,7 @@ pub mod args {
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
             for transfer_data in self.sources {
-                sources.push(TxShieldingTransferData {
+                sources.push(TxTransparentSource {
                     source: chain_ctx.get(&transfer_data.source),
                     token: chain_ctx.get(&transfer_data.token),
                     amount: transfer_data.amount,
@@ -4764,7 +4764,7 @@ pub mod args {
             }
             let mut targets = vec![];
             for transfer_data in self.targets {
-                targets.push(TxUnshieldingTransferData {
+                targets.push(TxTransparentTarget {
                     target: chain_ctx.get(&transfer_data.target),
                     token: chain_ctx.get(&transfer_data.token),
                     amount: transfer_data.amount,
@@ -4788,12 +4788,12 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
-            let sources = vec![TxShieldingTransferData {
+            let sources = vec![TxTransparentSource {
                 source,
                 token: token.clone(),
                 amount,
             }];
-            let targets = vec![TxUnshieldingTransferData {
+            let targets = vec![TxTransparentTarget {
                 target,
                 token,
                 amount,
@@ -4930,8 +4930,8 @@ pub mod args {
             let mut data = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
-            for transfer_data in self.data {
-                data.push(TxShieldingTransferData {
+            for transfer_data in self.sources {
+                data.push(TxTransparentSource {
                     source: chain_ctx.get(&transfer_data.source),
                     token: chain_ctx.get(&transfer_data.token),
                     amount: transfer_data.amount,
@@ -4939,7 +4939,7 @@ pub mod args {
             }
 
             let mut targets = vec![];
-            for transfer_data in self.target {
+            for transfer_data in self.targets {
                 targets.push(TxShieldedTarget {
                     target: chain_ctx.get(&transfer_data.target),
                     token: chain_ctx.get(&transfer_data.token),
@@ -4949,8 +4949,8 @@ pub mod args {
 
             Ok(TxShieldingTransfer::<SdkTypes> {
                 tx,
-                data,
-                target: targets,
+                sources: data,
+                targets,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4964,7 +4964,7 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
-            let data = vec![TxShieldingTransferData {
+            let data = vec![TxTransparentSource {
                 source,
                 token: token.clone(),
                 amount,
@@ -4977,8 +4977,8 @@ pub mod args {
 
             Self {
                 tx,
-                data,
-                target: targets,
+                sources: data,
+                targets,
                 tx_code_path,
             }
         }
@@ -5016,8 +5016,8 @@ pub mod args {
             let mut data = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
-            for transfer_data in self.data {
-                data.push(TxUnshieldingTransferData {
+            for transfer_data in self.targets {
+                data.push(TxTransparentTarget {
                     target: chain_ctx.get(&transfer_data.target),
                     token: chain_ctx.get(&transfer_data.token),
                     amount: transfer_data.amount,
@@ -5025,7 +5025,7 @@ pub mod args {
             }
 
             let mut sources = vec![];
-            for transfer_data in self.source {
+            for transfer_data in self.sources {
                 sources.push(TxShieldedSource {
                     source: chain_ctx.get_cached(&transfer_data.source),
                     token: chain_ctx.get(&transfer_data.token),
@@ -5037,9 +5037,9 @@ pub mod args {
 
             Ok(TxUnshieldingTransfer::<SdkTypes> {
                 tx,
-                data,
+                targets: data,
                 gas_spending_key,
-                source: sources,
+                sources,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -5053,7 +5053,7 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
-            let data = vec![TxUnshieldingTransferData {
+            let data = vec![TxTransparentTarget {
                 target,
                 token: token.clone(),
                 amount,
@@ -5067,8 +5067,8 @@ pub mod args {
 
             Self {
                 tx,
-                source: sources,
-                data,
+                sources,
+                targets: data,
                 gas_spending_key,
                 tx_code_path,
             }

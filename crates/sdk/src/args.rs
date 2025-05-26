@@ -267,9 +267,9 @@ pub struct TxTransparentTransfer<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// The transfer specific data
-    pub sources: Vec<TxShieldingTransferData<C>>,
+    pub sources: Vec<TxTransparentSource<C>>,
     /// The transfer specific data
-    pub targets: Vec<TxUnshieldingTransferData<C>>,
+    pub targets: Vec<TxTransparentTarget<C>>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -368,7 +368,7 @@ impl TxShieldedTransfer {
 
 /// Shielding transfer-specific arguments
 #[derive(Clone, Debug)]
-pub struct TxShieldingTransferData<C: NamadaTypes = SdkTypes> {
+pub struct TxTransparentSource<C: NamadaTypes = SdkTypes> {
     /// Transfer source spending key
     pub source: C::Address,
     /// Transferred token address
@@ -383,9 +383,9 @@ pub struct TxShieldingTransfer<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Transfer target address
-    pub target: Vec<TxShieldedTarget<C>>,
+    pub targets: Vec<TxShieldedTarget<C>>,
     /// Transfer-specific data
-    pub data: Vec<TxShieldingTransferData<C>>,
+    pub sources: Vec<TxTransparentSource<C>>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -415,7 +415,7 @@ impl TxShieldingTransfer {
 
 /// Unshielding transfer-specific arguments
 #[derive(Clone, Debug)]
-pub struct TxUnshieldingTransferData<C: NamadaTypes = SdkTypes> {
+pub struct TxTransparentTarget<C: NamadaTypes = SdkTypes> {
     /// Transfer target address
     pub target: C::Address,
     /// Transferred token address
@@ -430,12 +430,11 @@ pub struct TxUnshieldingTransfer<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Transfer source spending key
-    pub source: Vec<TxShieldedSource<C>>,
+    pub sources: Vec<TxShieldedSource<C>>,
     /// Transfer-specific data
-    pub data: Vec<TxUnshieldingTransferData<C>>,
+    pub targets: Vec<TxTransparentTarget<C>>,
     /// Optional additional keys for gas payment
     pub gas_spending_key: Option<C::SpendingKey>,
-
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }

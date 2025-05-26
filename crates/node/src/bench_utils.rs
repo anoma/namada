@@ -1248,12 +1248,12 @@ impl BenchShieldedCtx {
             native_token,
         );
         let masp_transfer_data = MaspTransferData {
-            source: vec![(
+            sources: vec![(
                 source.clone(),
                 address::testing::nam(),
                 denominated_amount,
             )],
-            target: vec![(
+            targets: vec![(
                 target.clone(),
                 address::testing::nam(),
                 denominated_amount,

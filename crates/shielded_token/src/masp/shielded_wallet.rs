@@ -51,7 +51,7 @@ use super::utils::MaspIndexedTx;
 use crate::masp::utils::MaspClient;
 use crate::masp::{
     ContextSyncStatus, Conversions, MaspAmount, MaspDataLogEntry, MaspFeeData,
-    MaspTransferData, MaspTxReorderedData, NETWORK, NoteIndex,
+    MaspTransferData, MaspTxCombinedData, NETWORK, NoteIndex,
     ShieldedSyncConfig, ShieldedTransfer, ShieldedUtils, SpentNotesTracker,
     TransferErr, WalletMap, WitnessMap,
 };
@@ -1202,7 +1202,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             let _ = self.load().await;
         }
 
-        let Some(MaspTxReorderedData {
+        let Some(MaspTxCombinedData {
             source_data,
             target_data,
             mut denoms,
@@ -1338,7 +1338,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         context: &impl NamadaIo,
         data: MaspTransferData,
         fee_data: Option<MaspFeeData>,
-    ) -> Result<Option<MaspTxReorderedData>, TransferErr> {
+    ) -> Result<Option<MaspTxCombinedData>, TransferErr> {
         let mut source_data =
             HashMap::<TransferSource, ValueSum<Address, Amount>>::new();
         let mut target_data =
@@ -1371,7 +1371,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             )
             .map_err(|e| TransferErr::General(e.to_string()))?;
         }
-        for (source, token, amount) in data.source {
+        for (source, token, amount) in data.sources {
             let denom =
                 Self::get_denom(context.client(), &mut denoms, &token).await?;
             let amount = amount
@@ -1385,7 +1385,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             *acc = checked!(ValueSum::from_pair(token.clone(), amount) + acc)
                 .map_err(|e| TransferErr::General(e.to_string()))?;
         }
-        for (target, token, amount) in data.target {
+        for (target, token, amount) in data.targets {
             let denom =
                 Self::get_denom(context.client(), &mut denoms, &token).await?;
             let amount = amount
@@ -1400,7 +1400,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 .map_err(|e| TransferErr::General(e.to_string()))?;
         }
 
-        Ok(Some(MaspTxReorderedData {
+        Ok(Some(MaspTxCombinedData {
             source_data,
             target_data,
             denoms,

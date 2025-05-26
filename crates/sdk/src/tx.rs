@@ -75,9 +75,7 @@ pub use namada_tx::{Authorization, *};
 use num_traits::Zero;
 use rand_core::{OsRng, RngCore};
 
-use crate::args::{
-    SdkTypes, TxShieldingTransferData, TxUnshieldingTransferData,
-};
+use crate::args::{SdkTypes, TxTransparentSource, TxTransparentTarget};
 use crate::borsh::BorshSerializeExt;
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, Result, TxSubmitError};
@@ -2784,13 +2782,13 @@ pub async fn build_ibc_transfer(
             .await
             .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
     let masp_transfer_data = MaspTransferData {
-        source: vec![(
+        sources: vec![(
             args.source.clone(),
             args.token.clone(),
             validated_amount,
         )],
         // The token will be escrowed to IBC address
-        target: vec![(
+        targets: vec![(
             TransferTarget::Ibc(args.receiver.clone()),
             args.token.clone(),
             validated_amount,
@@ -3157,7 +3155,7 @@ pub async fn build_transparent_transfer<N: Namada>(
         (signing_data, fee_amount, updated_balance)
     };
 
-    for TxShieldingTransferData {
+    for TxTransparentSource {
         source,
         token,
         amount,
@@ -3198,7 +3196,7 @@ pub async fn build_transparent_transfer<N: Namada>(
             .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
     }
 
-    for TxUnshieldingTransferData {
+    for TxTransparentTarget {
         target,
         token,
         amount,
@@ -3265,7 +3263,7 @@ pub async fn build_shielded_transfer<N: Namada>(
             validate_amount(context, amount.to_owned(), token, args.tx.force)
                 .await?;
 
-        transfer_data.source.push((
+        transfer_data.sources.push((
             TransferSource::ExtendedKey(source.to_owned()),
             token.to_owned(),
             validated_amount,
@@ -3282,7 +3280,7 @@ pub async fn build_shielded_transfer<N: Namada>(
             validate_amount(context, amount.to_owned(), token, args.tx.force)
                 .await?;
 
-        transfer_data.target.push((
+        transfer_data.targets.push((
             TransferTarget::PaymentAddress(target.to_owned()),
             token.to_owned(),
             validated_amount,
@@ -3411,9 +3409,9 @@ pub async fn build_shielding_transfer<N: Namada>(
     args: &mut args::TxShieldingTransfer,
     bparams: &mut impl BuildParams,
 ) -> Result<(Tx, SigningTxData, MaspEpoch)> {
-    let source = if args.data.len() == 1 {
+    let source = if args.sources.len() == 1 {
         // If only one transfer take its source as the signer
-        args.data
+        args.sources
             .first()
             .map(|transfer_data| transfer_data.source.clone())
     } else {
@@ -3444,11 +3442,11 @@ pub async fn build_shielding_transfer<N: Namada>(
 
     let mut transfer_data = MaspTransferData::default();
     let mut data = token::Transfer::default();
-    for TxShieldingTransferData {
+    for TxTransparentSource {
         source,
         token,
         amount,
-    } in &args.data
+    } in &args.sources
     {
         // Validate the amount given
         let validated_amount =
@@ -3476,7 +3474,7 @@ pub async fn build_shielding_transfer<N: Namada>(
             .await?;
         }
 
-        transfer_data.source.push((
+        transfer_data.sources.push((
             TransferSource::Address(source.to_owned()),
             token.to_owned(),
             validated_amount,
@@ -3491,13 +3489,13 @@ pub async fn build_shielding_transfer<N: Namada>(
         target,
         token,
         amount,
-    } in &args.target
+    } in &args.targets
     {
         // Validate the amount given
         let validated_amount =
             validate_amount(context, amount.to_owned(), token, args.tx.force)
                 .await?;
-        transfer_data.target.push((
+        transfer_data.targets.push((
             TransferTarget::PaymentAddress(target.to_owned()),
             token.to_owned(),
             validated_amount,
@@ -3586,18 +3584,18 @@ pub async fn build_unshielding_transfer<N: Namada>(
 
     let mut transfer_data = MaspTransferData::default();
     let mut data = token::Transfer::default();
-    for TxUnshieldingTransferData {
+    for TxTransparentTarget {
         target,
         token,
         amount,
-    } in &args.data
+    } in &args.targets
     {
         // Validate the amount given
         let validated_amount =
             validate_amount(context, amount.to_owned(), token, args.tx.force)
                 .await?;
 
-        transfer_data.target.push((
+        transfer_data.targets.push((
             TransferTarget::Address(target.to_owned()),
             token.to_owned(),
             validated_amount,
@@ -3611,14 +3609,14 @@ pub async fn build_unshielding_transfer<N: Namada>(
         source,
         token,
         amount,
-    } in &args.source
+    } in &args.sources
     {
         // Validate the amount given
         let validated_amount =
             validate_amount(context, amount.to_owned(), token, args.tx.force)
                 .await?;
 
-        transfer_data.source.push((
+        transfer_data.sources.push((
             TransferSource::ExtendedKey(source.to_owned()),
             token.to_owned(),
             validated_amount,
@@ -3638,7 +3636,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         fee_payer,
         // If no custom gas spending key is provided default to the source
         args.gas_spending_key
-            .or(args.source.first().map(|x| x.source)),
+            .or(args.sources.first().map(|x| x.source)),
     )
     .await?;
     if let Some(fee_data) = &masp_fee_data {
@@ -4125,12 +4123,12 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
         .await;
 
     let masp_transfer_data = MaspTransferData {
-        source: vec![(
+        sources: vec![(
             TransferSource::Address(source.clone()),
             token.clone(),
             validated_amount,
         )],
-        target: vec![(args.target, token.clone(), validated_amount)],
+        targets: vec![(args.target, token.clone(), validated_amount)],
     };
     let shielded_transfer = {
         let mut shielded = context.shielded_mut().await;
