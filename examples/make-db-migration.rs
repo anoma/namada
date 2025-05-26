@@ -7,13 +7,19 @@ use masp_primitives::ff::PrimeField;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
 use namada_core::borsh::BorshSerializeExt;
+use namada_core::chain::BlockHeight;
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::masp::{Precision, encode_asset_type};
 use namada_core::storage::Key;
+use namada_core::time::MIN_UTC;
 use namada_macros::BorshDeserializer;
 use namada_migrations::REGISTER_DESERIALIZERS;
-use namada_parameters::storage::get_tx_allowlist_storage_key;
+use namada_parameters::EpochDuration;
+use namada_parameters::storage::{
+    get_epoch_duration_storage_key, get_epochs_per_year_key,
+    get_masp_epoch_multiplier_key, get_tx_allowlist_storage_key,
+};
 use namada_sdk::address::Address;
 use namada_sdk::ibc::trace::ibc_token;
 use namada_sdk::masp_primitives::asset_type::AssetType;
@@ -734,6 +740,63 @@ pub fn shielded_reward_parameters_migration(
     }
 }
 
+/// Demonstrate accelerating epochs
+pub fn accelerate_epoch_migration(updates: &mut Vec<migrations::DbUpdateType>) {
+    // Set the number of epochs per year to the specified constant
+    const EPOCHS_PER_YEAR: u64 = 175200;
+    let epochs_per_year_key = get_epochs_per_year_key();
+    updates.push(migrations::DbUpdateType::Add {
+        key: epochs_per_year_key,
+        cf: DbColFam::SUBSPACE,
+        value: EPOCHS_PER_YEAR.into(),
+        force: false,
+    });
+    // Set the MASP epoch multiplier to the specified constant
+    const MASP_EPOCH_MULTIPLIER: u64 = 2;
+    let masp_epoch_multiplier_key = get_masp_epoch_multiplier_key();
+    updates.push(migrations::DbUpdateType::Add {
+        key: masp_epoch_multiplier_key,
+        cf: DbColFam::SUBSPACE,
+        value: MASP_EPOCH_MULTIPLIER.into(),
+        force: false,
+    });
+    // Set the epoch duration to the specified constant
+    const MIN_NUM_OF_BLOCKS: u64 = 4;
+    let epy_i64 = i64::try_from(EPOCHS_PER_YEAR)
+        .expect("`epochs_per_year` must not exceed `i64::MAX`");
+    #[allow(clippy::arithmetic_side_effects)]
+    let min_duration: i64 = 60 * 60 * 24 * 365 / epy_i64;
+    let epoch_duration = EpochDuration {
+        min_num_of_blocks: MIN_NUM_OF_BLOCKS,
+        min_duration: namada_sdk::time::Duration::seconds(min_duration).into(),
+    };
+    let epoch_duration_key = get_epoch_duration_storage_key();
+    updates.push(migrations::DbUpdateType::Add {
+        key: epoch_duration_key,
+        cf: DbColFam::SUBSPACE,
+        value: epoch_duration.into(),
+        force: false,
+    });
+    // Set the next epoch's block height to zero in order to force transition
+    updates.push(migrations::DbUpdateType::Add {
+        key: migrations::NEXT_EPOCH_MIN_START_HEIGHT_KEY
+            .parse()
+            .expect("unable to construct conversion state key"),
+        cf: DbColFam::STATE,
+        value: BlockHeight(0).into(),
+        force: false,
+    });
+    // Set the next epoch's start time to a minimum in order to force transition
+    updates.push(migrations::DbUpdateType::Add {
+        key: migrations::NEXT_EPOCH_MIN_START_TIME_KEY
+            .parse()
+            .expect("unable to construct conversion state key"),
+        cf: DbColFam::STATE,
+        value: MIN_UTC.into(),
+        force: false,
+    });
+}
+
 /// Generate various migrations
 pub fn main() {
     // Write an example migration that updates minted balances
@@ -794,6 +857,15 @@ pub fn main() {
     std::fs::write(
         "reward_parameters_migration.json",
         serde_json::to_string(&reward_parameter_changes).unwrap(),
+    )
+    .unwrap();
+    // Write an example migration that accelerates epochs
+    let mut accelerate_epochs_changes =
+        migrations::DbChanges { changes: vec![] };
+    accelerate_epoch_migration(&mut accelerate_epochs_changes.changes);
+    std::fs::write(
+        "accelerate_epochs_migration.json",
+        serde_json::to_string(&accelerate_epochs_changes).unwrap(),
     )
     .unwrap();
 }
