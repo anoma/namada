@@ -2903,6 +2903,7 @@ dependencies = [
  "futures",
  "itertools 0.14.0",
  "kassandra-client",
+ "kassandra-shared",
  "lazy_static",
  "masp_primitives",
  "masp_proofs",
