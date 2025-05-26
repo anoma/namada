@@ -71,7 +71,7 @@ pub async fn syncing<
     let vks = args
         .viewing_keys
         .into_iter()
-        .map(|vk| vk.map(|vk| vk.as_viewing_key()))
+        .map(|(vk, fmd)| (vk.map(|vk| vk.as_viewing_key()), fmd))
         .collect::<Vec<_>>();
 
     macro_rules! dispatch_client {
@@ -130,6 +130,8 @@ pub async fn syncing<
             client,
             url,
             true,
+            // TODO: Fix,
+            None,
             args.max_concurrent_fetches,
         ))?
     } else {

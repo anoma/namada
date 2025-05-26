@@ -4822,8 +4822,8 @@ dependencies = [
  "curve25519-dalek",
  "hex",
  "hkdf",
- "kassandra-shared",
- "polyfuzzy",
+ "kassandra-shared 0.0.3-alpha",
+ "polyfuzzy 0.5.0",
  "rand_core",
  "serde",
  "serde_cbor",
@@ -4839,6 +4839,27 @@ dependencies = [
 
 [[package]]
 name = "kassandra-shared"
+version = "0.0.2-alpha"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "248852e4390561ee568ec214be663837e2d254576ec6b210f5799c24450203b1"
+dependencies = [
+ "borsh",
+ "chacha20poly1305",
+ "cobs 0.3.0",
+ "hex",
+ "once_cell",
+ "polyfuzzy 0.1.0",
+ "rand_core",
+ "serde",
+ "serde_cbor",
+ "sha2 0.10.8",
+ "tdx-quote",
+ "thiserror 2.0.12",
+ "x25519-dalek",
+]
+
+[[package]]
+name = "kassandra-shared"
 version = "0.0.3-alpha"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14d0b36e1bea0a4147d47b33e8770253f6101d6efd3f0a89f522b999947ce834"
@@ -4848,7 +4869,7 @@ dependencies = [
  "cobs 0.3.0",
  "hex",
  "once_cell",
- "polyfuzzy",
+ "polyfuzzy 0.5.0",
  "rand_core",
  "serde",
  "serde_cbor",
@@ -5729,7 +5750,7 @@ dependencies = [
  "num-traits",
  "num256",
  "num_enum",
- "polyfuzzy",
+ "polyfuzzy 0.5.0",
  "primitive-types 0.13.1",
  "proptest",
  "prost-types 0.13.5",
@@ -6172,6 +6193,7 @@ dependencies = [
  "init-once",
  "itertools 0.14.0",
  "kassandra-client",
+ "kassandra-shared 0.0.2-alpha",
  "lazy_static",
  "linkme",
  "masp_primitives",
@@ -6236,6 +6258,7 @@ dependencies = [
  "futures",
  "itertools 0.14.0",
  "kassandra-client",
+ "kassandra-shared 0.0.2-alpha",
  "lazy_static",
  "linkme",
  "masp_primitives",
@@ -7397,6 +7420,19 @@ dependencies = [
  "cpufeatures",
  "opaque-debug",
  "universal-hash",
+]
+
+[[package]]
+name = "polyfuzzy"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4c8aa1a6ea51b5f6cb5053fd11ff19f71ba5ef5f9e99709aded1c030ddb4874"
+dependencies = [
+ "curve25519-dalek",
+ "rand_core",
+ "serde",
+ "sha2 0.10.8",
+ "subtle",
 ]
 
 [[package]]

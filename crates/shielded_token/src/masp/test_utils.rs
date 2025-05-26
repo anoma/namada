@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use borsh::BorshDeserialize;
 use eyre::eyre;
+use kassandra::{Index, IndexList};
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::{
     CommitmentTree, IncrementalWitness, MerklePath,
@@ -38,7 +39,7 @@ use crate::masp::utils::{
 
 /// A viewing key derived from A_SPENDING_KEY
 pub const AA_VIEWING_KEY: &str = "zvknam1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu6x74w9gjpw856zcu826qesdre628y6tjc26uhgj6d9zqur9l5u3p99d9ggc74ald6s8y3sdtka74qmheyqvdrasqpwyv2fsmxlz57lj4grm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxcpjdve6";
-
+pub const B_VIEWING_KEY: &str = "zvknam1q080khy2qgqqpqrp6vhyc2d39vpn5rty473yzycelycdlmlzxkj6jyevtw4x4ycm2jujg3463hx2nlgwuw45yfgl2dr86te7u4t4s6p57fzuvsxmkumk8mwpafv8cfdqcalrt9h2vngqag3q2hae0mp6ptv3zdgyjh0ycv38j07f0ckn9mkszd4kc6t3lpn37engast5lct67ef6dg3uezqzmxpmps43xlvgfjkxhlhd07k8c5klqhl0ymxpk0wlvr22wnshnqvuc0crg6tme";
 // A payment address derived from A_SPENDING_KEY
 pub const AA_PAYMENT_ADDRESS: &str = "znam1ky620tz7z658cralqt693qpvk42wvth468zp38nqvq2apmex5rfut3dfqm2asrsqv0tc7saqje7";
 
@@ -49,6 +50,14 @@ pub fn dated_arbitrary_vk() -> DatedKeypair<ViewingKey> {
 pub fn arbitrary_vk() -> ViewingKey {
     ExtendedFullViewingKey::from(
         ExtendedViewingKey::from_str(AA_VIEWING_KEY).expect("Test failed"),
+    )
+    .fvk
+    .vk
+}
+
+pub fn arbitrary_vk2() -> ViewingKey {
+    ExtendedFullViewingKey::from(
+        ExtendedViewingKey::from_str(B_VIEWING_KEY).expect("Test failed"),
     )
     .fvk
     .vk
@@ -357,6 +366,7 @@ pub fn arbitrary_masp_tx_with_fee_unshielding() -> Transaction {
 pub struct TestingMaspClient {
     last_height: BlockHeight,
     tx_recv: flume::Receiver<Option<IndexedNoteEntry>>,
+    fmd_indices: Option<IndexList>,
 }
 
 impl TestingMaspClient {
@@ -370,6 +380,7 @@ impl TestingMaspClient {
             Self {
                 last_height,
                 tx_recv,
+                fmd_indices: None,
             },
             sender,
         )
@@ -398,9 +409,18 @@ impl MaspClient for TestingMaspClient {
         to: BlockHeight,
     ) -> Result<Vec<IndexedNoteEntry>, Self::Error> {
         let mut txs = vec![];
-
-        for _height in from.0..=to.0 {
+        // all keys are already synced to height 1.
+        let from = std::cmp::max(from.0, 2);
+        for _height in from..=to.0 {
             if let Some(tx) = self.tx_recv.recv_async().await.unwrap() {
+                if let Some(indices) = self.fmd_indices.as_ref() {
+                    if !indices.contains(&Index {
+                        height: tx.0.indexed_tx.block_height.0,
+                        tx: tx.0.indexed_tx.block_index.0,
+                    }) {
+                        continue;
+                    }
+                }
                 txs.push(tx);
             } else {
                 return Err(TestError::FetchFailure);
@@ -445,6 +465,10 @@ impl MaspClient for TestingMaspClient {
         _: &Node,
     ) -> Result<bool, Self::Error> {
         Ok(true)
+    }
+
+    fn set_fmd_indices(&mut self, fmd_indices: Option<IndexList>) {
+        self.fmd_indices = fmd_indices;
     }
 }
 
