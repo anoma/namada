@@ -3673,7 +3673,6 @@ pub mod args {
     pub const SENDER: Arg<String> = arg("sender");
     pub const SHIELDED: ArgFlag = flag("shielded");
     pub const SHOW_IBC_TOKENS: ArgFlag = flag("show-ibc-tokens");
-    pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
     pub const SLIPPAGE: ArgOpt<f64> = arg_opt("slippage-percentage");
     pub const SIGNING_KEYS: ArgMulti<WalletPublicKey, GlobStar> =
         arg_multi("signing-keys");
@@ -4626,6 +4625,29 @@ pub mod args {
                 owner: self
                     .owner
                     .map(|owner| ctx.borrow_chain_or_exit().get(&owner)),
+                signatures: self
+                    .signatures
+                    .iter()
+                    .map(|path| {
+                        std::fs::read(path).map_err(|e| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                format!("Error reading signature file: {}", e),
+                            )
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+                wrapper_signature: self
+                    .wrapper_signature
+                    .map(|path| {
+                        std::fs::read(path).map_err(|e| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                format!("Error reading signature file: {}", e),
+                            )
+                        })
+                    })
+                    .transpose()?,
             })
         }
     }
@@ -4637,12 +4659,16 @@ pub mod args {
             let data_path = DATA_PATH_OPT.parse(matches);
             let serialized_tx = TX_PATH_OPT.parse(matches);
             let owner = OWNER_OPT.parse(matches);
+            let signatures = SIGNATURES.parse(matches);
+            let wrapper_signature = WRAPPER_SIGNATURE_OPT.parse(matches);
             Self {
                 tx,
                 code_path,
                 data_path,
                 serialized_tx,
                 owner,
+                signatures,
+                wrapper_signature,
             }
         }
 
@@ -4654,6 +4680,7 @@ pub mod args {
                         .help(wrap!("The path to the transaction's WASM code."))
                         .requires(DATA_PATH_OPT.name)
                         .conflicts_with_all([
+                            SIGNATURES.name,
                             TX_PATH_OPT.name,
                             WRAPPER_SIGNATURE_OPT.name,
                         ]),
@@ -4668,6 +4695,7 @@ pub mod args {
                         ))
                         .requires(CODE_PATH_OPT.name)
                         .conflicts_with_all([
+                            SIGNATURES.name,
                             TX_PATH_OPT.name,
                             WRAPPER_SIGNATURE_OPT.name,
                         ]),
@@ -4689,6 +4717,28 @@ pub mod args {
                     "The optional address corresponding to the signatures or \
                      signing keys."
                 )))
+                .arg(
+                    SIGNATURES
+                        .def()
+                        .help(wrap!(
+                            "List of file paths containing a serialized \
+                             signature to be attached to a transaction. \
+                             Requires to provide a gas payer."
+                        ))
+                        .conflicts_with_all([
+                            CODE_PATH_OPT.name,
+                            DATA_PATH_OPT.name,
+                        ]),
+                )
+                .arg(
+                    WRAPPER_SIGNATURE_OPT
+                        .def()
+                        .help(wrap!(
+                            "The file path containing a serialized signature \
+                             of the entire transaction for gas payment."
+                        ))
+                        .conflicts_with(FEE_PAYER_OPT.name),
+                )
         }
     }
 
@@ -7635,29 +7685,6 @@ pub mod args {
                     .iter()
                     .map(|key| ctx.get(key))
                     .collect(),
-                signatures: self
-                    .signatures
-                    .iter()
-                    .map(|path| {
-                        std::fs::read(path).map_err(|e| {
-                            std::io::Error::new(
-                                std::io::ErrorKind::InvalidInput,
-                                format!("Error reading signature file: {}", e),
-                            )
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?,
-                wrapper_signature: self
-                    .wrapper_signature
-                    .map(|path| {
-                        std::fs::read(path).map_err(|e| {
-                            std::io::Error::new(
-                                std::io::ErrorKind::InvalidInput,
-                                format!("Error reading signature file: {}", e),
-                            )
-                        })
-                    })
-                    .transpose()?,
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
                 expiration: self.expiration,
@@ -7759,35 +7786,17 @@ pub mod args {
                  this argument if the source of the transaction is a shielded \
                  address as it isn't needed and it would leak information."
             )))
-            .arg(SIGNATURES.def().help(wrap!(
-                "List of file paths containing a serialized signature to be \
-                 attached to a transaction. Requires to provide a gas payer."
-            )))
-            .arg(
-                WRAPPER_SIGNATURE_OPT
-                    .def()
-                    .help(wrap!(
-                        "The file path containing a serialized signature of \
-                         the entire transaction for gas payment."
-                    ))
-                    .conflicts_with(FEE_PAYER_OPT.name),
-            )
             .arg(OUTPUT_FOLDER_PATH.def().help(wrap!(
                 "The output folder path where the artifact will be stored."
             )))
             .arg(CHAIN_ID_OPT.def().help(wrap!("The chain ID.")))
-            .arg(
-                FEE_PAYER_OPT
-                    .def()
-                    .help(wrap!(
-                        "The implicit address of the gas payer. It defaults \
-                         to the address associated to the first key passed to \
-                         --signing-keys. Do not provide this argument if you \
-                         intend to pay fees via the MASP (recommended for \
-                         transactions where the source is a shielded address)."
-                    ))
-                    .conflicts_with(WRAPPER_SIGNATURE_OPT.name),
-            )
+            .arg(FEE_PAYER_OPT.def().help(wrap!(
+                "The implicit address of the gas payer. It defaults to the \
+                 address associated to the first key passed to \
+                 --signing-keys. Do not provide this argument if you intend \
+                 to pay fees via the MASP (recommended for transactions where \
+                 the source is a shielded address)."
+            )))
             .arg(
                 USE_DEVICE
                     .def()
@@ -7829,8 +7838,6 @@ pub mod args {
             let wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
             let expiration = EXPIRATION_OPT.parse(matches);
             let signing_keys = SIGNING_KEYS.parse(matches);
-            let signatures = SIGNATURES.parse(matches);
-            let wrapper_signature = WRAPPER_SIGNATURE_OPT.parse(matches);
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
@@ -7863,8 +7870,6 @@ pub mod args {
                 gas_limit,
                 expiration,
                 signing_keys,
-                signatures,
-                wrapper_signature,
                 tx_reveal_code_path,
                 password,
                 chain_id,
