@@ -2680,7 +2680,7 @@ pub async fn build_ibc_transfer(
         Some(source.clone()),
         Some(source.clone()),
         vec![],
-        args.disposable_signing_key,
+        args.source.spending_key().is_some(),
     )
     .await?;
     let (fee_per_gas_unit, updated_balance) =
@@ -2748,8 +2748,9 @@ pub async fn build_ibc_transfer(
         context,
         &args.tx,
         fee_per_gas_unit,
+        // If no custom gas spending key is provided default to the source
         &signing_data.fee_payer,
-        args.gas_spending_key,
+        args.gas_spending_key.or(args.source.spending_key()),
     )
     .await?;
     if let Some(fee_data) = &masp_fee_data {
@@ -3180,7 +3181,7 @@ pub async fn build_shielded_transfer<N: Namada>(
         Some(MASP),
         Some(MASP),
         vec![],
-        args.disposable_signing_key,
+        true,
     )
     .await?;
 
@@ -3217,7 +3218,10 @@ pub async fn build_shielded_transfer<N: Namada>(
         &args.tx,
         fee_per_gas_unit,
         &signing_data.fee_payer,
-        args.gas_spending_key,
+        // If no custom gas spending key is provided default to the first
+        // source
+        args.gas_spending_key
+            .or(args.data.first().map(|data| data.source)),
     )
     .await?;
     if let Some(fee_data) = &masp_fee_data {
@@ -3306,7 +3310,11 @@ async fn get_masp_fee_payment_amount<N: Namada>(
 
     Ok(match total_fee.checked_sub(balance) {
         Some(diff) if !diff.is_zero() => Some(MaspFeeData {
-            source: gas_spending_key,
+            source: gas_spending_key.ok_or(Error::Other(
+                "MASP fee payment is required for this transaction but a \
+                 spending key was not provided"
+                    .to_string(),
+            ))?,
             target: fee_payer_address,
             token: args.fee_token.clone(),
             amount: DenominatedAmount::new(diff, fee_amount.denom()),
@@ -3466,7 +3474,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         Some(MASP),
         Some(MASP),
         vec![],
-        args.disposable_signing_key,
+        true,
     )
     .await?;
 
@@ -3509,7 +3517,8 @@ pub async fn build_unshielding_transfer<N: Namada>(
         &args.tx,
         fee_per_gas_unit,
         &signing_data.fee_payer,
-        args.gas_spending_key,
+        // If no custom gas spending key is provided default to the source
+        args.gas_spending_key.or(Some(args.source)),
     )
     .await?;
     if let Some(fee_data) = &masp_fee_data {
