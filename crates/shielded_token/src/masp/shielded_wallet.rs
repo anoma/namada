@@ -1202,15 +1202,17 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             let _ = self.load().await;
         }
 
-        let Some(MaspTxCombinedData {
+        let MaspTxCombinedData {
             source_data,
             target_data,
             mut denoms,
-        }) = Self::combine_data_for_masp_transfer(context, data, fee_data)
-            .await?
-        else {
-            // No shielded components are needed when neither source nor
-            // destination are shielded
+        } = Self::combine_data_for_masp_transfer(context, data, fee_data)
+            .await?;
+        if source_data.iter().all(|x| x.0.spending_key().is_none())
+            && target_data.iter().all(|x| x.0.payment_address().is_none())
+        {
+            // No shielded components are needed when neither sources nor
+            // destinations are shielded
             return Ok(None);
         };
 
@@ -1338,7 +1340,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         context: &impl NamadaIo,
         data: MaspTransferData,
         fee_data: Option<MaspFeeData>,
-    ) -> Result<Option<MaspTxCombinedData>, TransferErr> {
+    ) -> Result<MaspTxCombinedData, TransferErr> {
         let mut source_data =
             HashMap::<TransferSource, ValueSum<Address, Amount>>::new();
         let mut target_data =
@@ -1400,11 +1402,11 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 .map_err(|e| TransferErr::General(e.to_string()))?;
         }
 
-        Ok(Some(MaspTxCombinedData {
+        Ok(MaspTxCombinedData {
             source_data,
             target_data,
             denoms,
-        }))
+        })
     }
 
     /// Computes added_amt - required_amt taking care of denominations and asset
