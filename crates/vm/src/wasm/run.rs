@@ -214,6 +214,7 @@ where
     let (write_log, in_mem, db) = state.split_borrow();
     const ZERO_HASH: Hash = Hash::zero();
     let wrapper_hash = wrapper_hash.unwrap_or(&ZERO_HASH);
+    let mut gas_global = RefCell::new(None);
     let mut env = TxVmEnv::new(
         WasmMemory::new(Rc::downgrade(&store)),
         write_log,
@@ -232,6 +233,7 @@ where
         vp_wasm_cache,
         tx_wasm_cache,
         gas_meter_kind,
+        &mut gas_global,
     );
 
     // Instantiate the wasm module
@@ -244,18 +246,18 @@ where
 
     if let GasMeterKind::MutGlobal = gas_meter_kind {
         let mut store = store.borrow_mut();
-        let gas_global =
-            instance.exports.get_global(MUT_GLOBAL_GAS_NAME).unwrap();
+        let global = instance.exports.get_global(MUT_GLOBAL_GAS_NAME).unwrap();
 
         #[allow(clippy::cast_poss_globalble_wrap)]
         // intentional wrap around the value
         let available_gas =
             u64::from(gas_meter.borrow().get_available_gas()) as i64;
-        gas_global
+        global
             .set(&mut *store, wasmer::Value::I64(available_gas))
             .unwrap();
 
-        *env.ctx.gas_global.borrow_mut() = Some(gas_global.clone());
+        let mut gas_global = gas_global.borrow_mut();
+        *gas_global = Some(global.clone());
     }
 
     // Fetch guest's main memory

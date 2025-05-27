@@ -146,7 +146,7 @@ where
     /// WASM intructions gas meter kind
     pub gas_meter_kind: GasMeterKind,
     /// Global mutable gas variable, only set when gas meter kind is `MutGlobal`
-    pub gas_global: RefCell<Option<wasmer::Global>>,
+    pub gas_global: HostRef<RwAccess, RefCell<Option<wasmer::Global>>>,
 }
 
 impl<MEM, D, H, CA> TxVmEnv<MEM, D, H, CA>
@@ -181,6 +181,7 @@ where
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
         #[cfg(feature = "wasm-runtime")] tx_wasm_cache: &mut TxCache<CA>,
         gas_meter_kind: GasMeterKind,
+        gas_global: &mut RefCell<Option<wasmer::Global>>,
     ) -> Self {
         let write_log = unsafe { RwHostRef::new(write_log) };
         let in_mem = unsafe { RoHostRef::new(in_mem) };
@@ -199,6 +200,7 @@ where
         let vp_wasm_cache = unsafe { RwHostRef::new(vp_wasm_cache) };
         #[cfg(feature = "wasm-runtime")]
         let tx_wasm_cache = unsafe { RwHostRef::new(tx_wasm_cache) };
+        let gas_global = unsafe { RwHostRef::new(gas_global) };
         let ctx = TxCtx {
             write_log,
             db,
@@ -220,7 +222,7 @@ where
             #[cfg(not(feature = "wasm-runtime"))]
             cache_access: std::marker::PhantomData,
             gas_meter_kind,
-            gas_global: RefCell::new(None),
+            gas_global,
         };
 
         Self { memory, ctx }
@@ -2436,9 +2438,7 @@ where
             .upgrade()
             .expect("Store must be accessible while the WASM is running");
         let mut store = store.borrow_mut();
-        let wasm_gas = env
-            .ctx
-            .gas_global
+        let wasm_gas = unsafe { env.ctx.gas_global.get() }
             .borrow()
             .as_ref()
             .unwrap()
@@ -2478,8 +2478,7 @@ where
         let available_gas =
             u64::from(gas_meter.borrow().get_available_gas()) as i64;
 
-        env.ctx
-            .gas_global
+        unsafe { env.ctx.gas_global.get() }
             .borrow_mut()
             .as_mut()
             .unwrap()
@@ -2519,6 +2518,7 @@ pub mod testing {
         CA: WasmCacheAccess,
     {
         let (write_log, in_mem, db) = state.split_borrow();
+        let mut gas_global = RefCell::new(None);
         TxVmEnv::new(
             NativeMemory,
             write_log,
@@ -2539,6 +2539,7 @@ pub mod testing {
             #[cfg(feature = "wasm-runtime")]
             tx_wasm_cache,
             GasMeterKind::MutGlobal,
+            &mut gas_global,
         )
     }
 
@@ -2570,6 +2571,7 @@ pub mod testing {
         };
 
         let (write_log, in_mem, db) = state.split_borrow();
+        let mut gas_global = RefCell::new(None);
         let mut env = TxVmEnv::new(
             WasmMemory::new(Rc::downgrade(&store)),
             write_log,
@@ -2590,6 +2592,7 @@ pub mod testing {
             #[cfg(feature = "wasm-runtime")]
             tx_wasm_cache,
             GasMeterKind::MutGlobal,
+            &mut gas_global,
         );
 
         env.memory.init_from(&wasm_memory);
