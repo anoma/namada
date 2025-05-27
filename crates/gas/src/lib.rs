@@ -524,8 +524,18 @@ impl TxGasMeter {
     /// never increase the amount available.
     pub fn set_available_gas(&mut self, gas: impl Into<Gas>) {
         let gas: Gas = gas.into();
-        debug_assert!(gas <= self.transaction_gas);
-        self.transaction_gas = gas;
+        let used_gas = self
+            .tx_gas_limit
+            .checked_sub(gas)
+            .unwrap_or_else(|| self.tx_gas_limit.clone());
+        debug_assert!(
+            used_gas > self.transaction_gas,
+            "Used gas must not decrease from {:?}, but trying to set it to \
+             {:?}",
+            self.transaction_gas,
+            used_gas
+        );
+        self.transaction_gas = used_gas;
     }
 }
 
