@@ -541,7 +541,7 @@ where
             .unwrap_or_default();
 
         let slashed =
-            apply_list_slashes(params, &list_slashes, slashable_amount)?
+            apply_list_slashes(params, list_slashes.iter(), slashable_amount)?
                 .mul_ceil(slash_rate)?;
 
         let list_slashes = slashes
@@ -557,7 +557,7 @@ where
             .collect::<Vec<_>>();
 
         let slashable_stake =
-            apply_list_slashes(params, &list_slashes, slashable_amount)?
+            apply_list_slashes(params, list_slashes.iter(), slashable_amount)?
                 .mul_ceil(slash_rate)?;
 
         init_tot_unbonded = updated_total_unbonded;
@@ -749,7 +749,7 @@ where
                 params,
                 redelegated_bonds,
                 start,
-                &list_slashes,
+                list_slashes.iter(),
                 slash_epoch_filter,
             )
         })
@@ -759,7 +759,7 @@ where
     let total_not_redelegated =
         checked!(amount - result_fold.total_redelegated)?;
     let after_not_redelegated =
-        apply_list_slashes(params, &list_slashes, total_not_redelegated)?;
+        apply_list_slashes(params, list_slashes.iter(), total_not_redelegated)?;
 
     Ok(checked!(
         after_not_redelegated + result_fold.total_after_slashing
@@ -837,9 +837,9 @@ where
 /// - `slashes` - a list of slashes ordered by misbehaving epoch.
 /// - `amount` - the amount of slashable tokens.
 // `def applyListSlashes`
-pub fn apply_list_slashes(
+pub fn apply_list_slashes<'a>(
     params: &OwnedPosParams,
-    slashes: &[Slash],
+    slashes: impl Iterator<Item = &'a Slash>,
     amount: token::Amount,
 ) -> std::result::Result<token::Amount, arith::Error> {
     let mut final_amount = amount;
@@ -1041,7 +1041,7 @@ where
                 params,
                 redelegated_unbonds,
                 start_epoch,
-                &list_slashes,
+                list_slashes.iter(),
                 |_| true,
             )?
         } else {
@@ -1052,8 +1052,11 @@ where
             .checked_sub(result_fold.total_redelegated)
             .unwrap_or_default();
         // `val afterNoRedelegated`
-        let after_not_redelegated =
-            apply_list_slashes(params, &list_slashes, total_not_redelegated)?;
+        let after_not_redelegated = apply_list_slashes(
+            params,
+            list_slashes.iter(),
+            total_not_redelegated,
+        )?;
         // `val amountAfterSlashing`
         let amount_after_slashing =
             checked!(after_not_redelegated + result_fold.total_after_slashing)?;
@@ -1112,7 +1115,7 @@ where
             params,
             redelegated_unbonds,
             *start_epoch,
-            &list_slashes,
+            list_slashes.iter(),
             |_| true,
         )?;
 
@@ -1120,8 +1123,11 @@ where
         let total_not_redelegated =
             checked!(amount - result_fold.total_redelegated)?;
         // Find how much remains after slashing non-redelegated amount
-        let after_not_redelegated =
-            apply_list_slashes(params, &list_slashes, total_not_redelegated)?;
+        let after_not_redelegated = apply_list_slashes(
+            params,
+            list_slashes.iter(),
+            total_not_redelegated,
+        )?;
 
         // Add back the unbond and redelegated unbond amount after slashing
         let amount_after_slashing =

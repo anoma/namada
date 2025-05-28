@@ -733,29 +733,33 @@ fn test_apply_list_slashes() {
         rate: Dec::one(),
     };
 
-    let list1 = vec![slash1.clone()];
-    let list2 = vec![slash1.clone(), slash2.clone()];
-    let list3 = vec![slash1.clone(), slash1.clone()];
-    let list4 = vec![slash1.clone(), slash1, slash2];
+    let list1 = [slash1.clone()];
+    let list2 = [slash1.clone(), slash2.clone()];
+    let list3 = [slash1.clone(), slash1.clone()];
+    let list4 = [slash1.clone(), slash1, slash2];
 
-    let res =
-        apply_list_slashes(&params, &[], token::Amount::from(100)).unwrap();
+    let res = apply_list_slashes(&params, [].iter(), token::Amount::from(100))
+        .unwrap();
     assert_eq!(res, token::Amount::from(100));
 
     let res =
-        apply_list_slashes(&params, &list1, token::Amount::from(100)).unwrap();
+        apply_list_slashes(&params, list1.iter(), token::Amount::from(100))
+            .unwrap();
     assert_eq!(res, token::Amount::zero());
 
     let res =
-        apply_list_slashes(&params, &list2, token::Amount::from(100)).unwrap();
+        apply_list_slashes(&params, list2.iter(), token::Amount::from(100))
+            .unwrap();
     assert_eq!(res, token::Amount::zero());
 
     let res =
-        apply_list_slashes(&params, &list3, token::Amount::from(100)).unwrap();
+        apply_list_slashes(&params, list3.iter(), token::Amount::from(100))
+            .unwrap();
     assert_eq!(res, token::Amount::zero());
 
     let res =
-        apply_list_slashes(&params, &list4, token::Amount::from(100)).unwrap();
+        apply_list_slashes(&params, list4.iter(), token::Amount::from(100))
+            .unwrap();
     assert_eq!(res, token::Amount::zero());
 }
 
@@ -862,7 +866,7 @@ fn test_fold_and_slash_redelegated_bonds() {
         &params,
         &eager_redel_bonds,
         start_epoch,
-        &[],
+        [].iter(),
         |_| true,
     )
     .unwrap();
@@ -880,7 +884,7 @@ fn test_fold_and_slash_redelegated_bonds() {
         &params,
         &eager_redel_bonds,
         start_epoch,
-        &[test_slash],
+        [test_slash].iter(),
         |_| true,
     )
     .unwrap();
@@ -908,7 +912,7 @@ fn test_fold_and_slash_redelegated_bonds() {
         &params,
         &eager_redel_bonds,
         start_epoch,
-        &[],
+        [].iter(),
         |_| true,
     )
     .unwrap();
