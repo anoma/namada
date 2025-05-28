@@ -759,9 +759,7 @@ pub fn prepare_wasm_code<T: AsRef<[u8]>>(
         .map_err(|_original_module| Error::GasMeterInjection)?,
         GasMeterKind::MutGlobal => wasm_instrument::gas_metering::inject(
             module,
-            wasm_instrument::gas_metering::mutable_global::Injector::new(
-                MUT_GLOBAL_GAS_NAME,
-            ),
+            WasmMutGlobalGasBackend,
             &GasRules,
         )
         .map_err(|_original_module| Error::GasMeterInjection)?,
@@ -1081,6 +1079,48 @@ impl wasm_instrument::gas_metering::Rules for GasRules {
 
     fn call_per_local_cost(&self) -> u32 {
         0
+    }
+}
+
+struct WasmMutGlobalGasBackend;
+
+impl wasm_instrument::gas_metering::Backend for WasmMutGlobalGasBackend {
+    fn gas_meter<R: wasm_instrument::gas_metering::Rules>(
+        self,
+        module: &elements::Module,
+        _rules: &R,
+    ) -> wasm_instrument::gas_metering::GasMeter {
+        #[allow(clippy::cast_possible_truncation)]
+        let gas_global_idx = module.globals_space() as u32;
+
+        let func_instructions = vec![
+            // test if we still have gas
+            GetGlobal(gas_global_idx),
+            GetLocal(0),
+            I64GeU,
+            If(elements::BlockType::NoResult),
+            // we still have gas, decrement mut global
+            GetGlobal(gas_global_idx),
+            GetLocal(0),
+            I64Sub,
+            SetGlobal(gas_global_idx),
+            // out of gas, set sentinel and abort
+            Else,
+            I64Const(-1i64),
+            SetGlobal(gas_global_idx),
+            Unreachable,
+            // end if
+            End,
+            // end block
+            End,
+        ];
+
+        wasm_instrument::gas_metering::GasMeter::Internal {
+            global: MUT_GLOBAL_GAS_NAME,
+            func_instructions: elements::Instructions::new(func_instructions),
+            // we charge no gas for the gas function itself
+            cost: 0u64,
+        }
     }
 }
 
