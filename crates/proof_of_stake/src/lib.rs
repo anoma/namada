@@ -929,28 +929,42 @@ struct FoldRedelegatedBondsResult {
 /// Iterates over a `redelegated_unbonds` and computes the both the sum of all
 /// redelegated tokens and how much is left after applying all relevant slashes.
 // `def foldAndSlashRedelegatedBondsMap`
-fn fold_and_slash_redelegated_bonds<S>(
+fn fold_and_slash_redelegated_bonds<'a, S>(
     storage: &S,
     params: &OwnedPosParams,
     redelegated_unbonds: &EagerRedelegatedBondsMap,
     start_epoch: Epoch,
-    list_slashes: &[Slash],
+    list_slashes: impl Iterator<Item = &'a Slash> + Clone,
     slash_epoch_filter: impl Fn(Epoch) -> bool,
 ) -> Result<FoldRedelegatedBondsResult>
 where
     S: StorageRead,
 {
+    use std::collections::hash_map;
+
     let mut result = FoldRedelegatedBondsResult::default();
+
+    #[allow(clippy::disallowed_types)] // The cache ordering doesn't matter
+    let mut src_slash_cache = hash_map::HashMap::<Address, Vec<Slash>>::new();
+
     for (src_validator, bonds_map) in redelegated_unbonds {
         for (bond_start, &change) in bonds_map {
             // Look-up slashes for this validator ...
-            let validator_slashes: Vec<Slash> =
-                validator_slashes_handle(src_validator)
-                    .iter(storage)?
-                    .collect::<Result<Vec<Slash>>>()?;
-            // Merge the two lists of slashes
+            let validator_slashes = match src_slash_cache
+                .entry(src_validator.clone())
+            {
+                hash_map::Entry::Vacant(vacant_entry) => vacant_entry.insert(
+                    validator_slashes_handle(src_validator)
+                        .iter(storage)?
+                        .collect::<Result<Vec<Slash>>>()?,
+                ),
+                hash_map::Entry::Occupied(occupied_entry) => {
+                    occupied_entry.into_mut()
+                }
+            };
+
             let mut merged: Vec<Slash> = validator_slashes
-                .into_iter()
+                .iter()
                 .filter(|slash| {
                     params.in_redelegation_slashing_window(
                         slash.epoch,
@@ -959,8 +973,9 @@ where
                     ) && *bond_start <= slash.epoch
                         && slash_epoch_filter(slash.epoch)
                 })
+                .cloned()
                 // ... and add `list_slashes`
-                .chain(list_slashes.iter().cloned())
+                .chain(list_slashes.clone().cloned())
                 .collect();
 
             // Sort slashes by epoch
@@ -968,7 +983,8 @@ where
 
             result.total_redelegated =
                 checked!(result.total_redelegated + change)?;
-            let list_slashes = apply_list_slashes(params, &merged, change)?;
+            let list_slashes =
+                apply_list_slashes(params, merged.iter(), change)?;
             result.total_after_slashing =
                 checked!(result.total_after_slashing + list_slashes)?;
         }
@@ -1915,7 +1931,7 @@ where
                 &params,
                 &redelegated_bonds,
                 start,
-                &list_slashes,
+                list_slashes.iter(),
                 slash_epoch_filter,
             )?;
 
@@ -1924,7 +1940,7 @@ where
 
             let after_not_redelegated = apply_list_slashes(
                 &params,
-                &list_slashes,
+                list_slashes.iter(),
                 total_not_redelegated,
             )?;
 
@@ -1959,6 +1975,8 @@ where
     S: StorageRead,
     Gov: governance::Read<S>,
 {
+    use std::collections::hash_map;
+
     let params = read_pos_params::<S, Gov>(storage)?;
     // Outer key is every epoch in which the a bond amount contributed to stake
     // and the inner key is the start epoch used to calculate slashes. The inner
@@ -1973,10 +1991,12 @@ where
     for next in bonds.iter(storage)? {
         let (start, delta) = next?;
 
-        for ep in Epoch::iter_bounds_inclusive(claim_start, claim_end) {
-            // A bond that wasn't unbonded is added to all epochs up to
-            // `claim_end`
-            if start <= ep {
+        // A bond that wasn't unbonded is added to all epochs up to `claim_end`
+        if claim_end >= start {
+            for ep in Epoch::iter_bounds_inclusive(
+                cmp::max(claim_start, start),
+                claim_end,
+            ) {
                 let amount =
                     amounts.entry(ep).or_default().entry(start).or_default();
                 *amount = checked!(amount + delta)?;
@@ -1985,42 +2005,50 @@ where
     }
 
     if !amounts.is_empty() {
-        let slashes = find_validator_slashes(storage, &bond_id.validator)?;
+        let list_slashes = find_validator_slashes(storage, &bond_id.validator)?;
         let redelegated_bonded =
             delegator_redelegated_bonds_handle(&bond_id.source)
                 .at(&bond_id.validator);
 
+        #[allow(clippy::disallowed_types)] // The cache ordering doesn't matter
+        let mut redelegated_bonds_cache = hash_map::HashMap::new();
+
         // Apply slashes
         for (&ep, amounts) in amounts.iter_mut() {
-            for (&start, amount) in amounts.iter_mut() {
-                let list_slashes = slashes
-                    .iter()
-                    .filter(|slash| {
-                        let processing_epoch = slash.epoch.unchecked_add(
-                            params.slash_processing_epoch_offset(),
-                        );
-                        // Only use slashes that were processed before or at the
-                        // epoch associated with the bond amount. This assumes
-                        // that slashes are applied before inflation.
-                        processing_epoch <= ep && start <= slash.epoch
-                    })
-                    .cloned()
-                    .collect::<Vec<_>>();
+            let slash_epoch_filter = |e: Epoch| {
+                e.unchecked_add(params.slash_processing_epoch_offset()) <= ep
+            };
 
-                let slash_epoch_filter = |e: Epoch| {
-                    e.unchecked_add(params.slash_processing_epoch_offset())
-                        <= ep
-                };
+            for (&start, amount) in amounts.iter_mut() {
+                let slashes = list_slashes.iter().filter(|slash| {
+                    let processing_epoch = slash
+                        .epoch
+                        .unchecked_add(params.slash_processing_epoch_offset());
+                    // Only use slashes that were processed before or at the
+                    // epoch associated with the bond amount. This assumes
+                    // that slashes are applied before inflation.
+                    processing_epoch <= ep && start <= slash.epoch
+                });
 
                 let redelegated_bonds =
-                    redelegated_bonded.at(&start).collect_map(storage)?;
+                    match redelegated_bonds_cache.entry(start) {
+                        hash_map::Entry::Vacant(vacant_entry) => vacant_entry
+                            .insert(
+                                redelegated_bonded
+                                    .at(&start)
+                                    .collect_map(storage)?,
+                            ),
+                        hash_map::Entry::Occupied(occupied_entry) => {
+                            occupied_entry.into_mut()
+                        }
+                    };
 
                 let result_fold = fold_and_slash_redelegated_bonds(
                     storage,
                     &params,
-                    &redelegated_bonds,
+                    redelegated_bonds,
                     start,
-                    &list_slashes,
+                    slashes.clone(),
                     slash_epoch_filter,
                 )?;
 
@@ -2029,7 +2057,7 @@ where
 
                 let after_not_redelegated = apply_list_slashes(
                     &params,
-                    &list_slashes,
+                    slashes,
                     total_not_redelegated,
                 )?;
 
