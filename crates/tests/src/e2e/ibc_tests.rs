@@ -2681,7 +2681,7 @@ fn propose_funding(
             "content": {
                 "title": "PGF",
                 "authors": "test@test.com",
-                "discussions-to": "www.github.com/anoma/aip/1",
+                "discussions-to": "https://github.com/anoma/namada-docs/blob/master/packages/docs/pages/users/governance.mdx",
                 "created": "2022-03-10T08:54:37Z",
                 "license": "MIT",
                 "abstract": "PGF proposal",
@@ -2723,7 +2723,7 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
             "content": {
                 "title": "IBC token inflation",
                 "authors": "test@test.com",
-                "discussions-to": "www.github.com/anoma/aip/1",
+                "discussions-to": "https://github.com/anoma/namada-docs/blob/master/packages/docs/pages/users/governance.mdx",
                 "created": "2022-03-10T08:54:37Z",
                 "license": "MIT",
                 "abstract": "IBC token inflation",
@@ -2836,7 +2836,7 @@ fn propose_gas_token(test: &Test) -> Result<Epoch> {
             "content": {
                 "title": "IBC token gas",
                 "authors": "test@test.com",
-                "discussions-to": "www.github.com/anoma/aip/1",
+                "discussions-to": "https://github.com/anoma/namada-docs/blob/master/packages/docs/pages/users/governance.mdx",
                 "created": "2022-03-10T08:54:37Z",
                 "license": "MIT",
                 "abstract": "IBC token gas",
