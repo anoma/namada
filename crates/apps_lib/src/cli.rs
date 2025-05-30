@@ -4752,12 +4752,19 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<TxTransparentTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
-            let mut data = vec![];
+            let mut sources = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
-            for transfer_data in self.data {
-                data.push(TxTransparentTransferData {
+            for transfer_data in self.sources {
+                sources.push(TxTransparentSource {
                     source: chain_ctx.get(&transfer_data.source),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
+            let mut targets = vec![];
+            for transfer_data in self.targets {
+                targets.push(TxTransparentTarget {
                     target: chain_ctx.get(&transfer_data.target),
                     token: chain_ctx.get(&transfer_data.token),
                     amount: transfer_data.amount,
@@ -4766,7 +4773,8 @@ pub mod args {
 
             Ok(TxTransparentTransfer::<SdkTypes> {
                 tx,
-                data,
+                sources,
+                targets,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4780,8 +4788,12 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
-            let data = vec![TxTransparentTransferData {
+            let sources = vec![TxTransparentSource {
                 source,
+                token: token.clone(),
+                amount,
+            }];
+            let targets = vec![TxTransparentTarget {
                 target,
                 token,
                 amount,
@@ -4789,7 +4801,8 @@ pub mod args {
 
             Self {
                 tx,
-                data,
+                sources,
+                targets,
                 tx_code_path,
             }
         }
@@ -4818,12 +4831,20 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<TxShieldedTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
-            let mut data = vec![];
+            let mut sources = vec![];
+            let mut targets = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
-            for transfer_data in self.data {
-                data.push(TxShieldedTransferData {
+            for transfer_data in self.sources {
+                sources.push(TxShieldedSource {
                     source: chain_ctx.get_cached(&transfer_data.source),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
+
+            for transfer_data in self.targets {
+                targets.push(TxShieldedTarget {
                     target: chain_ctx.get(&transfer_data.target),
                     token: chain_ctx.get(&transfer_data.token),
                     amount: transfer_data.amount,
@@ -4835,7 +4856,8 @@ pub mod args {
 
             Ok(TxShieldedTransfer::<SdkTypes> {
                 tx,
-                data,
+                sources,
+                targets,
                 gas_spending_key,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
@@ -4850,8 +4872,12 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
-            let data = vec![TxShieldedTransferData {
+            let sources = vec![TxShieldedSource {
                 source,
+                token: token.clone(),
+                amount,
+            }];
+            let targets = vec![TxShieldedTarget {
                 target,
                 token,
                 amount,
@@ -4860,7 +4886,8 @@ pub mod args {
 
             Self {
                 tx,
-                data,
+                sources,
+                targets,
                 gas_spending_key,
                 tx_code_path,
             }
@@ -4903,9 +4930,18 @@ pub mod args {
             let mut data = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
-            for transfer_data in self.data {
-                data.push(TxShieldingTransferData {
+            for transfer_data in self.sources {
+                data.push(TxTransparentSource {
                     source: chain_ctx.get(&transfer_data.source),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
+
+            let mut targets = vec![];
+            for transfer_data in self.targets {
+                targets.push(TxShieldedTarget {
+                    target: chain_ctx.get(&transfer_data.target),
                     token: chain_ctx.get(&transfer_data.token),
                     amount: transfer_data.amount,
                 });
@@ -4913,8 +4949,8 @@ pub mod args {
 
             Ok(TxShieldingTransfer::<SdkTypes> {
                 tx,
-                data,
-                target: chain_ctx.get(&self.target),
+                sources: data,
+                targets,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4928,16 +4964,21 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
-            let data = vec![TxShieldingTransferData {
+            let data = vec![TxTransparentSource {
                 source,
+                token: token.clone(),
+                amount,
+            }];
+            let targets = vec![TxShieldedTarget {
+                target,
                 token,
                 amount,
             }];
 
             Self {
                 tx,
-                data,
-                target,
+                sources: data,
+                targets,
                 tx_code_path,
             }
         }
@@ -4975,9 +5016,18 @@ pub mod args {
             let mut data = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
-            for transfer_data in self.data {
-                data.push(TxUnshieldingTransferData {
+            for transfer_data in self.targets {
+                data.push(TxTransparentTarget {
                     target: chain_ctx.get(&transfer_data.target),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
+
+            let mut sources = vec![];
+            for transfer_data in self.sources {
+                sources.push(TxShieldedSource {
+                    source: chain_ctx.get_cached(&transfer_data.source),
                     token: chain_ctx.get(&transfer_data.token),
                     amount: transfer_data.amount,
                 });
@@ -4987,9 +5037,9 @@ pub mod args {
 
             Ok(TxUnshieldingTransfer::<SdkTypes> {
                 tx,
-                data,
+                targets: data,
                 gas_spending_key,
-                source: chain_ctx.get_cached(&self.source),
+                sources,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -5003,8 +5053,13 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
-            let data = vec![TxUnshieldingTransferData {
+            let data = vec![TxTransparentTarget {
                 target,
+                token: token.clone(),
+                amount,
+            }];
+            let sources = vec![TxShieldedSource {
+                source,
                 token,
                 amount,
             }];
@@ -5012,8 +5067,8 @@ pub mod args {
 
             Self {
                 tx,
-                source,
-                data,
+                sources,
+                targets: data,
                 gas_spending_key,
                 tx_code_path,
             }
