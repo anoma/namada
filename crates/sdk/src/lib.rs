@@ -52,8 +52,8 @@ use namada_core::ethereum_events::EthAddress;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::key::*;
 pub use namada_core::masp::{
-    ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress, TransferSource,
-    TransferTarget,
+    ExtendedSpendingKey, ExtendedViewingKey, FlagCiphertext, FmdPaymentAddress,
+    PaymentAddress, TransferSource, TransferTarget, UnifiedPaymentAddress,
 };
 pub use namada_core::{control_flow, task_env};
 use namada_io::{Client, Io, NamadaIo};
@@ -185,7 +185,7 @@ pub trait Namada: NamadaIo {
     /// arguments
     fn new_shielding_transfer(
         &self,
-        target: PaymentAddress,
+        target: UnifiedPaymentAddress,
         data: Vec<args::TxShieldingTransferData>,
     ) -> args::TxShieldingTransfer {
         args::TxShieldingTransfer {
@@ -1138,6 +1138,9 @@ pub mod testing {
             if let Some((shielded_transfer, asset_types, build_params)) = aux {
                 let shielded_section_hash =
                     tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
+                tx.add_fmd_flag_ciphertexts(
+                    &shielded_transfer.fmd_flags,
+                );
                 tx.add_masp_builder(MaspBuilder {
                     asset_types: asset_types.into_keys().collect(),
                     // Store how the Info objects map to Descriptors/Outputs

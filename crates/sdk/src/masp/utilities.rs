@@ -18,12 +18,12 @@ use namada_token::masp::utils::{
     IndexedNoteEntry, MaspClient, MaspClientCapabilities, MaspIndexedTx,
     MaspTxKind,
 };
-use namada_tx::event::MaspEvent;
+use namada_tx::event::MaspTxEvent;
 use namada_tx::{IndexedTx, Tx};
 use tokio::sync::Semaphore;
 
 use crate::error::{Error, QueryError};
-use crate::masp::{extract_masp_tx, get_indexed_masp_events_at_height};
+use crate::masp::{extract_masp_tx, get_indexed_masp_txs_at_height};
 
 struct LedgerMaspClientInner<C> {
     client: C,
@@ -82,7 +82,7 @@ impl<C: Client + Send + Sync> LedgerMaspClient<C> {
 
         for height in from.0..=to.0 {
             let maybe_txs_results = async {
-                get_indexed_masp_events_at_height(
+                get_indexed_masp_txs_at_height(
                     &self.inner.client,
                     height.into(),
                 )
@@ -109,7 +109,7 @@ impl<C: Client + Send + Sync> LedgerMaspClient<C> {
             // Cache the last tx seen to avoid multiple deserializations
             let mut last_tx: Option<(Tx, TxIndex)> = None;
 
-            for MaspEvent {
+            for MaspTxEvent {
                 tx_index,
                 kind,
                 data,
@@ -133,7 +133,7 @@ impl<C: Client + Send + Sync> LedgerMaspClient<C> {
                 txs.push((
                     MaspIndexedTx {
                         indexed_tx: tx_index,
-                        kind: kind.into(),
+                        kind,
                     },
                     extracted_masp_tx,
                 ));

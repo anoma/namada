@@ -749,7 +749,7 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
                 "--node",
                 RPC,
                 "--gas-limit",
-                "65000",
+                "75000",
             ]),
         )
     });
@@ -867,7 +867,7 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
                 "--gas-spending-key",
                 C_SPENDING_KEY,
                 "--gas-limit",
-                "65000",
+                "75000",
             ]),
         )
     });

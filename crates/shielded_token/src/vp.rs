@@ -17,7 +17,9 @@ use namada_core::address::{self, Address};
 use namada_core::arith::{CheckedAdd, CheckedSub, checked};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashSet;
-use namada_core::masp::{MaspEpoch, TAddrData, addr_taddr, encode_asset_type};
+use namada_core::masp::{
+    FlagCiphertext, MaspEpoch, TAddrData, addr_taddr, encode_asset_type,
+};
 use namada_core::storage::Key;
 use namada_core::token;
 use namada_core::token::{Amount, MaspDigitPos};
@@ -435,12 +437,13 @@ where
             .data(batched_tx.cmt)
             .ok_or_err_msg("No transaction data")?;
         let actions = ctx.read_actions()?;
-        // Try to get the Transaction object from the tx first (IBC) and from
-        // the actions afterwards
-        let shielded_tx = if let Some(tx) =
-            Ibc::try_extract_masp_tx_from_envelope::<Transfer>(&tx_data)?
+
+        // Try to get the Transaction object and FMD flag ciphertexts
+        // from the tx first (IBC) and from the actions afterwards
+        let (shielded_tx, fmd_flags) = if let Some(shielding_data) =
+            Ibc::try_extract_shielding_data_from_envelope::<Transfer>(&tx_data)?
         {
-            tx
+            shielding_data
         } else {
             let masp_section_ref =
                 namada_tx::action::get_masp_section_ref(&actions)
@@ -450,14 +453,33 @@ where
                             "Missing MASP section reference in action",
                         )
                     })?;
+            let flag_ciphertexts_ref =
+                namada_tx::action::get_fmd_flag_ciphertexts_ref(&actions)
+                    .map_err(Error::new_const)?
+                    .ok_or_else(|| {
+                        Error::new_const(
+                            "Missing FMD flag ciphertexts reference in action",
+                        )
+                    })?;
 
-            batched_tx
+            let masp_tx = batched_tx
                 .tx
                 .get_masp_section(&masp_section_ref)
                 .cloned()
                 .ok_or_else(|| {
                     Error::new_const("Missing MASP section in transaction")
-                })?
+                })?;
+            let fmd_flags = batched_tx
+                .tx
+                .get_fmd_flag_ciphertexts(&flag_ciphertexts_ref)
+                .map_err(Error::new)?
+                .ok_or_else(|| {
+                    Error::new_const(
+                        "Missing FMD flag ciphertexts in transaction",
+                    )
+                })?;
+
+            (masp_tx, fmd_flags)
         };
 
         if u64::from(ctx.get_block_height()?)
@@ -467,6 +489,8 @@ where
             tracing::debug!("{error}");
             return Err(error);
         }
+
+        validate_flag_ciphertexts(&shielded_tx, fmd_flags)?;
 
         // Check the validity of the keys and get the transfer data
         let changed_balances = Self::validate_state_and_get_transfer_data(
@@ -947,6 +971,39 @@ fn verify_sapling_balancing_value(
     } else {
         Ok(())
     }
+}
+
+/// Check if the flag ciphertexts included in the tx are valid.
+fn validate_flag_ciphertexts(
+    masp_tx: &Transaction,
+    fmd_flags: Vec<FlagCiphertext>,
+) -> Result<()> {
+    let shielded_outputs_len = masp_tx
+        .sapling_bundle()
+        .map_or(0, |bundle| bundle.shielded_outputs.len());
+
+    if shielded_outputs_len != fmd_flags.len() {
+        let error = Error::new(format!(
+            "The number of shielded outputs in the MASP tx ({}) does not \
+             match the number of FMD flag ciphertexts ({})",
+            shielded_outputs_len,
+            fmd_flags.len()
+        ));
+        tracing::debug!("{error}");
+        return Err(error);
+    }
+
+    fmd_flags
+        .iter()
+        .all(FlagCiphertext::is_valid)
+        .ok_or_else(|| {
+            let error = Error::new_const(
+                "Not all FMD flag ciphertexts in the MASP tx were considered \
+                 valid, either because of invalid gamma or tampered bits",
+            );
+            tracing::debug!("{error}");
+            error
+        })
 }
 
 #[cfg(test)]

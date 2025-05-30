@@ -27,6 +27,8 @@ pub const ADDRESS_HRP: &str = "tnam";
 pub const MASP_EXT_FULL_VIEWING_KEY_HRP: &str = "zvknam";
 /// MASP payment address human-readable part
 pub const MASP_PAYMENT_ADDRESS_HRP: &str = "znam";
+/// MASP payment address with FMD public key human-readable part
+pub const MASP_FMD_PAYMENT_ADDRESS_HRP: &str = "zfnam";
 /// MASP extended spending key human-readable part
 pub const MASP_EXT_SPENDING_KEY_HRP: &str = "zsknam";
 /// `common::PublicKey` human-readable part
