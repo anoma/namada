@@ -157,10 +157,12 @@ pub trait Namada: NamadaIo {
     /// arguments
     fn new_transparent_transfer(
         &self,
-        data: Vec<args::TxTransparentTransferData>,
+        sources: Vec<args::TxTransparentSource>,
+        targets: Vec<args::TxTransparentTarget>,
     ) -> args::TxTransparentTransfer {
         args::TxTransparentTransfer {
-            data,
+            sources,
+            targets,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
         }
@@ -170,11 +172,13 @@ pub trait Namada: NamadaIo {
     /// arguments
     fn new_shielded_transfer(
         &self,
-        data: Vec<args::TxShieldedTransferData>,
+        sources: Vec<args::TxShieldedSource>,
+        targets: Vec<args::TxShieldedTarget>,
         gas_spending_key: Option<PseudoExtendedKey>,
     ) -> args::TxShieldedTransfer {
         args::TxShieldedTransfer {
-            data,
+            sources,
+            targets,
             gas_spending_key,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
@@ -185,12 +189,12 @@ pub trait Namada: NamadaIo {
     /// arguments
     fn new_shielding_transfer(
         &self,
-        target: PaymentAddress,
-        data: Vec<args::TxShieldingTransferData>,
+        targets: Vec<args::TxShieldedTarget>,
+        sources: Vec<args::TxTransparentSource>,
     ) -> args::TxShieldingTransfer {
         args::TxShieldingTransfer {
-            data,
-            target,
+            sources,
+            targets,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
         }
@@ -200,13 +204,13 @@ pub trait Namada: NamadaIo {
     /// arguments
     fn new_unshielding_transfer(
         &self,
-        source: PseudoExtendedKey,
-        data: Vec<args::TxUnshieldingTransferData>,
+        sources: Vec<args::TxShieldedSource>,
+        targets: Vec<args::TxTransparentTarget>,
         gas_spending_key: Option<PseudoExtendedKey>,
     ) -> args::TxUnshieldingTransfer {
         args::TxUnshieldingTransfer {
-            source,
-            data,
+            sources,
+            targets,
             gas_spending_key,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
