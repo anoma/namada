@@ -47,6 +47,9 @@ pub enum Error {
     /// An interrupt was called
     #[error("Process {0} received an interrupt signal")]
     Interrupt(String),
+    /// A Masp client error
+    #[error("Encountered error during shielded sync: {0}")]
+    MaspClient(String),
 }
 
 /// Errors that deal with querying some kind of data

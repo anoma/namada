@@ -1,9 +1,12 @@
 //! Helper functions and types
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
+use std::fmt::{Display, Formatter};
 use std::ops::{Bound, RangeBounds};
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use kassandra::IndexList;
+use kassandra_client::config::Config;
 use masp_primitives::memo::MemoBytes;
 use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
 use masp_primitives::sapling::{Node, Note, PaymentAddress, ViewingKey};
@@ -12,41 +15,10 @@ use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
 use namada_state::TxIndex;
 use namada_tx::IndexedTx;
-use namada_tx::event::MaspEventKind;
+pub use namada_tx::event::MaspTxKind;
 use serde::{Deserialize, Serialize};
 
-/// The type of a MASP transaction
-#[derive(
-    Debug,
-    Default,
-    Clone,
-    Copy,
-    BorshSerialize,
-    BorshDeserialize,
-    PartialOrd,
-    PartialEq,
-    Eq,
-    Ord,
-    Serialize,
-    Deserialize,
-    Hash,
-)]
-pub enum MaspTxKind {
-    /// A MASP transaction used for fee payment
-    FeePayment,
-    /// A general MASP transfer
-    #[default]
-    Transfer,
-}
-
-impl From<MaspEventKind> for MaspTxKind {
-    fn from(value: MaspEventKind) -> Self {
-        match value {
-            MaspEventKind::FeePayment => Self::FeePayment,
-            MaspEventKind::Transfer => Self::Transfer,
-        }
-    }
-}
+use crate::masp::shielded_wallet::FmdIndices;
 
 /// An indexed masp tx carrying information on whether it was a fee paying tx or
 /// a normal transfer
@@ -370,6 +342,48 @@ impl MaspClientCapabilities {
     }
 }
 
+/// A result of FMD indices successfully queried
+/// and a report on failed queries
+#[derive(Debug, Default)]
+pub struct FetchFmdReport {
+    /// The indices successfully queried
+    pub result: Option<FmdIndices>,
+    /// The urls that could be reached
+    pub failed_urls: Vec<String>,
+    /// The errors encountered while querying Kassandra services
+    pub failed_queries: Vec<kassandra_client::error::Error>,
+}
+
+impl FetchFmdReport {
+    /// Check is no errors occurred
+    pub fn is_ok(&self) -> bool {
+        self.failed_urls.is_empty() && self.failed_queries.is_empty()
+    }
+
+    /// Get a cumulative report of failed attempts to query FMD indices from
+    /// Kassandra services.
+    fn report(&self) -> String {
+        let mut report = String::from("Fetching FMD indices report\n");
+        report.push_str("-------------------------\n\n\n");
+        for url in &self.failed_urls {
+            report.push_str(&format!(
+                "::: Failed to query Kassandra service at {url}\n"
+            ));
+        }
+        report.push_str("\n\n\n-------------------------\n\n\n");
+        for error in &self.failed_queries {
+            report.push_str(&format!(":::: {error}\n"));
+        }
+        report
+    }
+}
+
+impl Display for FetchFmdReport {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.report())
+    }
+}
+
 /// This abstracts away the implementation details
 /// of how shielded-sync fetches the necessary data
 /// from a remote server.
@@ -423,6 +437,20 @@ pub trait MaspClient: Clone {
         &self,
         root: &Node,
     ) -> Result<bool, Self::Error>;
+
+    /// The set of MASP txs to be downloaded as determined by fuzzy
+    /// message detection. If `None`, everything is fetched
+    fn set_fmd_indices(&mut self, fmd_indices: Option<IndexList>);
+
+    /// Query a set of FMD indices from a Kassandra service given a
+    /// config file and hash of the FMD key.
+    #[allow(async_fn_in_trait)]
+    #[allow(clippy::ptr_arg)]
+    async fn query_fmd(
+        &self,
+        config: &Config,
+        key_hash: &String,
+    ) -> FetchFmdReport;
 }
 
 /// Given a block height range we wish to request and a cache of fetched block

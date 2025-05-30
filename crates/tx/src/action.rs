@@ -10,6 +10,7 @@ use std::fmt;
 
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::hash::Hash;
 use namada_core::masp::MaspTxId;
 use namada_core::storage::KeySeg;
 use namada_core::{address, storage};
@@ -71,6 +72,11 @@ pub enum PgfAction {
 pub enum MaspAction {
     /// The hash of the masp [`crate::Section`]
     MaspSectionRef(MaspTxId),
+    /// The hash of the fmd [`crate::Section`]
+    ///
+    /// The data section encodes a vector of flag ciphertexts,
+    /// one per shielded output
+    FmdSectionRef(Hash),
     /// A required authorizer for the transaction
     MaspAuthorizer(Address),
 }
@@ -145,6 +151,31 @@ pub fn get_masp_section_ref(
         Err("The transaction pushed multiple MASP Actions")
     } else {
         Ok(masp_sections.first().cloned())
+    }
+}
+
+/// Helper function to get the optional fmd section reference from the
+/// [`Actions`]. If more than one [`MaspAction`] is found we return an error
+pub fn get_fmd_flag_ciphertexts_ref(
+    actions: &Actions,
+) -> Result<Option<Hash>, &'static str> {
+    let flag_ciphertext_refs: Vec<_> = actions
+        .iter()
+        .filter_map(|action| {
+            if let Action::Masp(MaspAction::FmdSectionRef(fmd_section_ref)) =
+                action
+            {
+                Some(*fmd_section_ref)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if flag_ciphertext_refs.len() > 1 {
+        Err("The transaction pushed multiple FMD flag ciphertext sections")
+    } else {
+        Ok(flag_ciphertext_refs.first().cloned())
     }
 }
 

@@ -117,13 +117,14 @@ base58 = "0.2"
 base64 = "0.22"
 bech32 = "0.11"
 bimap = {version = "0.6", features = ["serde"]}
+bincode = "1.3.3"
 bit-set = "0.8"
 bitflags = { version = "2.5", features = ["serde"] }
 blake2b-rs = "0.2"
+borsh = {version = "1.2", features = ["unstable__schema", "derive"]}
 byte-unit = "5.1"
 byteorder = "1.4"
 bytes = "1.1"
-borsh = {version = "1.2", features = ["unstable__schema", "derive"]}
 cargo_metadata = "0.19"
 chrono = {version = "0.4", default-features = false, features = ["clock", "std"]}
 circular-queue = "0.2"
@@ -169,12 +170,13 @@ ibc-middleware-overflow-receive = { version = "0.5.0" }
 ibc-middleware-packet-forward = { version = "0.10.0", features = ["borsh"] }
 ibc-testkit = { version = "0.57.0", default-features = false }
 ics23 = "0.12"
-usize-set = { version = "0.10", features = ["serialize-borsh", "serialize-serde"] }
 impl-num-traits = "0.2"
 indexmap = { package = "nam-indexmap", version = "2.7.1-nam.0", features = ["borsh-schema", "serde"] }
 init-once = "0.6"
 itertools = "0.14"
 jubjub = { package = "nam-jubjub", version = "0.10.1-nam.0" }
+kassandra = {package = "kassandra-shared", version = "0.0.3-alpha", features = ["std"]}
+kassandra-client = "0.0.14-alpha"
 k256 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8", "precomputed-tables", "serde", "std"]}
 kdam = "0.6"
 konst = { version = "0.3", default-features = false }
@@ -204,6 +206,7 @@ owo-colors = "4.1"
 parity-wasm = { version = "0.45", features = ["sign_ext"] }
 paste = "1.0"
 patricia_tree = "0.8"
+polyfuzzy = "0.5.0"
 pretty_assertions = "1.4"
 primitive-types = "0.13"
 proc-macro2 = "1.0"
@@ -246,7 +249,7 @@ test-log = {version = "0.2", default-features = false, features = ["trace"]}
 textwrap-macros = "0.3"
 tiny-bip39 = {version = "2.0"}
 tiny-hderive = {package = "nam-tiny-hderive", version = "0.3.1-nam.0"}
-tiny-keccak = { version = "2.0", features = ["keccak"] }
+tiny-keccak = { version = "2.0", features = ["keccak", "k12"] }
 thiserror = "2.0"
 tokio = {version = "1.8", default-features = false}
 tokio-test = "0.4"
@@ -261,6 +264,7 @@ tracing-log = "0.2"
 tracing-subscriber = {version = "0.3", default-features = false, features = ["env-filter", "fmt"]}
 typed-builder = "0.20"
 uint = "0.10"
+usize-set = { version = "0.10", features = ["serialize-borsh", "serialize-serde"] }
 warp = "0.3"
 wasmparser = "0.121"
 wasm-instrument = {version = "0.4.0", features = ["sign_ext"]}

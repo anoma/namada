@@ -1,8 +1,10 @@
 use std::io::Read;
 
 use color_eyre::eyre::Result;
+use namada_sdk::args::FmdCommandType;
 use namada_sdk::io::{Io, NamadaIo, display_line};
 use namada_sdk::masp::ShieldedContext;
+use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_sdk::wallet::DatedViewingKey;
 use namada_sdk::{Namada, NamadaImpl};
 
@@ -385,6 +387,30 @@ impl CliApi {
                             &io,
                         )
                         .await?;
+                    }
+                    Sub::Fmd(FmdCommand(args)) => {
+                        use namada_sdk::masp::fmd;
+                        let args = args.to_sdk(&mut ctx)?;
+                        let chain_ctx = ctx.take_chain_or_exit();
+                        match args.command {
+                            FmdCommandType::RegisterKey => {
+                                fmd::register_keys::<FsShieldedUtils>(
+                                    args.viewing_key,
+                                )
+                                .await
+                                .unwrap();
+                            }
+                            FmdCommandType::AddService => {
+                                fmd::add_service(
+                                    ShieldedContext::new(chain_ctx.shielded)
+                                        .into(),
+                                    args.viewing_key,
+                                    args.service.as_ref().unwrap(),
+                                )
+                                .await
+                                .unwrap();
+                            }
+                        }
                     }
                     Sub::GenIbcShieldingTransfer(GenIbcShieldingTransfer(
                         args,

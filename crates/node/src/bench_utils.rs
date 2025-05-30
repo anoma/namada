@@ -88,13 +88,18 @@ use namada_sdk::queries::{
 use namada_sdk::state::StorageRead;
 use namada_sdk::state::write_log::StorageModification;
 use namada_sdk::storage::{Key, KeySeg, TxIndex};
+use namada_sdk::tendermint::abci::Event as AbciEvent;
 use namada_sdk::time::DateTimeUtc;
-use namada_sdk::token::{self, Amount, DenominatedAmount, Transfer};
+use namada_sdk::token::{
+    self, Amount, DenominatedAmount, MaspTxData, Transfer,
+};
 use namada_sdk::tx::data::pos::Bond;
 use namada_sdk::tx::data::{
     BatchedTxResult, Fee, TxResult, VpsResult, compute_inner_tx_hash,
 };
-use namada_sdk::tx::event::{Batch, MaspEvent, MaspTxRef, new_tx_event};
+use namada_sdk::tx::event::{
+    Batch, FmdSectionRef, MaspEvent, MaspTxKind, MaspTxRef, new_tx_event,
+};
 use namada_sdk::tx::{
     Authorization, BatchedTx, BatchedTxRef, Code, Data, IndexedTx, Section, Tx,
 };
@@ -113,8 +118,9 @@ pub use namada_sdk::tx::{
 };
 use namada_sdk::wallet::{DatedSpendingKey, Wallet};
 use namada_sdk::{
-    Namada, NamadaImpl, PaymentAddress, TransferSource, TransferTarget,
-    parameters, proof_of_stake, tendermint,
+    FlagCiphertext, Namada, NamadaImpl, PaymentAddress, TransferSource,
+    TransferTarget, UnifiedPaymentAddress, parameters, proof_of_stake,
+    tendermint,
 };
 use namada_test_utils::tx_data::TxWriteData;
 use namada_vm::wasm::run;
@@ -141,6 +147,8 @@ const SPECULATIVE_FILE_NAME: &str = "speculative_shielded.dat";
 const SPECULATIVE_TMP_FILE_NAME: &str = "speculative_shielded.tmp";
 const CACHE_FILE_NAME: &str = "shielded_sync.cache";
 const CACHE_FILE_TMP_PREFIX: &str = "shielded_sync.cache.tmp";
+const FMD_CONF_FILE_NAME: &str = "fmd_config.toml";
+const FMD_CONF_FILE_TMP_PREFIX: &str = "fmd_config.toml.tmp";
 
 /// For `tracing_subscriber`, which fails if called more than once in the same
 /// process
@@ -882,6 +890,23 @@ impl ShieldedUtils for BenchShieldedUtils {
         let mut file = File::open(file_name)?;
         DispatcherCache::try_from_reader(&mut file)
     }
+
+    async fn fmd_config_save(
+        &self,
+        config: &mut kassandra_client::config::Config,
+    ) -> kassandra_client::error::Result<()> {
+        config.save(FMD_CONF_FILE_TMP_PREFIX)?;
+        std::fs::rename(
+            FMD_CONF_FILE_TMP_PREFIX,
+            self.context_dir.0.path().join(FMD_CONF_FILE_NAME),
+        )
+        .map_err(kassandra_client::error::Error::Io)
+    }
+
+    async fn fmd_config_load()
+    -> kassandra_client::error::Result<kassandra_client::config::Config> {
+        kassandra_client::config::Config::load_or_new(FMD_CONF_FILE_NAME)
+    }
 }
 
 #[async_trait::async_trait(?Send)]
@@ -1059,43 +1084,71 @@ impl Client for BenchShell {
                 let tx_event: Event = new_tx_event(tx, height.value())
                     .with(Batch(&tx_result))
                     .into();
-                // Expect a single masp tx in the batch
-                let masp_ref = tx.sections.iter().find_map(|section| {
-                    if let Section::MaspTx(transaction) = section {
-                        Some(MaspTxRef::MaspSection(transaction.txid().into()))
-                    } else {
-                        None
-                    }
-                });
 
                 let first_inner_tx_hash = compute_inner_tx_hash(
                     tx.wrapper_hash().as_ref(),
                     Either::Right(tx.first_commitments().unwrap()),
                 );
-                let masp_event = masp_ref.map(|data| {
-                    let masp_event: Event = MaspEvent {
-                        tx_index: IndexedTx {
-                            block_height: namada_sdk::chain::BlockHeight(
-                                u64::from(height),
-                            ),
-                            block_index: TxIndex::must_from_usize(idx),
-                            batch_index: Some(0),
-                        },
-                        kind: namada_sdk::tx::event::MaspEventKind::Transfer,
-                        data,
-                    }
-                    .with(TxHash(tx.header_hash()))
-                    .with(InnerTxHash(first_inner_tx_hash))
-                    .into();
-                    masp_event
-                });
+                let wrapper_hash = tx.wrapper_hash().unwrap_or_default();
+                let indexed_tx = IndexedTx {
+                    block_height: namada_sdk::chain::BlockHeight(u64::from(
+                        height,
+                    )),
+                    block_index: TxIndex::must_from_usize(idx),
+                    batch_index: Some(0),
+                };
 
-                res.push(namada_sdk::tendermint::abci::Event::from(tx_event));
+                let masp_tx_event =
+                    tx.sections.iter().find_map(|section| match section {
+                        Section::MaspTx(transaction) => {
+                            Some(AbciEvent::from(Event::from(
+                                MaspEvent::ShieldedOutput {
+                                    tx_index: indexed_tx,
+                                    kind: MaspTxKind::Transfer,
+                                    data: MaspTxRef::MaspSection(
+                                        transaction.txid().into(),
+                                    ),
+                                }
+                                .with(TxHash(wrapper_hash))
+                                .with(InnerTxHash(first_inner_tx_hash)),
+                            )))
+                        }
+                        _ => None,
+                    });
+                let masp_fmd_event =
+                    tx.sections.iter().find_map(|section| match section {
+                        sec @ Section::ExtraData(extra_data)
+                            if extra_data.id().is_some_and(|extra_data| {
+                                <Vec<FlagCiphertext>>::try_from_slice(
+                                    extra_data,
+                                )
+                                .is_ok()
+                            }) =>
+                        {
+                            Some(AbciEvent::from(Event::from(
+                                MaspEvent::FlagCiphertexts {
+                                    tx_index: indexed_tx,
+                                    section: FmdSectionRef::FmdSection(
+                                        sec.get_hash(),
+                                    ),
+                                }
+                                .with(TxHash(wrapper_hash))
+                                .with(InnerTxHash(first_inner_tx_hash)),
+                            )))
+                        }
+                        _ => None,
+                    });
 
-                if let Some(event) = masp_event {
-                    res.push(namada_sdk::tendermint::abci::Event::from(event));
+                res.push(AbciEvent::from(tx_event));
+
+                if let Some((masp_tx_event, masp_fmd_event)) =
+                    masp_tx_event.zip(masp_fmd_event)
+                {
+                    res.push(masp_tx_event);
+                    res.push(masp_fmd_event);
                 }
             }
+
             Some(res)
         } else {
             None
@@ -1186,7 +1239,9 @@ impl Default for BenchShieldedCtx {
                 .wallet
                 .insert_payment_addr(
                     alias,
-                    PaymentAddress::from(payment_addr),
+                    UnifiedPaymentAddress::V0(PaymentAddress::from(
+                        payment_addr,
+                    )),
                     true,
                 )
                 .unwrap();
@@ -1253,7 +1308,7 @@ impl BenchShieldedCtx {
             token: address::testing::nam(),
             amount: denominated_amount,
         };
-        let shielded = async_runtime
+        let (shielded, fmd_flags) = async_runtime
             .block_on(async {
                 let expiration =
                     Namada::tx_builder(&namada).expiration.to_datetime();
@@ -1275,25 +1330,32 @@ impl BenchShieldedCtx {
                      masp_tx,
                      metadata: _,
                      epoch: _,
-                 }| masp_tx,
+                     fmd_flags,
+                 }| (masp_tx, fmd_flags),
             )
             .expect("MASP must have shielded part");
 
-        let shielded_section_hash = shielded.txid().into();
+        let fmd_section =
+            Section::ExtraData(Code::from_borsh_encoded(&fmd_flags));
+        let shielded_data = MaspTxData {
+            masp_tx_id: shielded.txid().into(),
+            flag_ciphertext_sechash: fmd_section.get_hash(),
+        };
+
         let tx = if source.effective_address() == MASP
             && target.effective_address() == MASP
         {
             namada.client().read().generate_tx(
                 TX_TRANSFER_WASM,
-                Transfer::masp(shielded_section_hash),
+                Transfer::masp(shielded_data),
                 Some(shielded),
-                None,
+                Some(vec![fmd_section]),
                 vec![&defaults::albert_keypair()],
             )
         } else if target.effective_address() == MASP {
             namada.client().read().generate_tx(
                 TX_TRANSFER_WASM,
-                Transfer::masp(shielded_section_hash)
+                Transfer::masp(shielded_data)
                     .transfer(
                         source.effective_address(),
                         MASP,
@@ -1302,13 +1364,13 @@ impl BenchShieldedCtx {
                     )
                     .unwrap(),
                 Some(shielded),
-                None,
+                Some(vec![fmd_section]),
                 vec![&defaults::albert_keypair()],
             )
         } else {
             namada.client().read().generate_tx(
                 TX_TRANSFER_WASM,
-                Transfer::masp(shielded_section_hash)
+                Transfer::masp(shielded_data)
                     .transfer(
                         MASP,
                         target.effective_address(),
@@ -1317,7 +1379,7 @@ impl BenchShieldedCtx {
                     )
                     .unwrap(),
                 Some(shielded),
-                None,
+                Some(vec![fmd_section]),
                 vec![&defaults::albert_keypair()],
             )
         };
@@ -1382,6 +1444,7 @@ impl BenchShieldedCtx {
         let vectorized_transfer =
             Transfer::deserialize(&mut tx.tx.data(&tx.cmt).unwrap().as_slice())
                 .unwrap();
+        let masp_tx_id = vectorized_transfer.masp_tx_id().unwrap();
         let sources =
             vec![vectorized_transfer.sources.into_iter().next().unwrap()]
                 .into_iter()
@@ -1390,18 +1453,24 @@ impl BenchShieldedCtx {
             vec![vectorized_transfer.targets.into_iter().next().unwrap()]
                 .into_iter()
                 .collect();
+        let masp_tx = tx.tx.get_masp_section(&masp_tx_id).unwrap().clone();
+        let fmd_section = Section::ExtraData(Code::from_borsh_encoded(
+            &std::iter::repeat_with(FlagCiphertext::default)
+                .take(
+                    masp_tx
+                        .sapling_bundle()
+                        .map_or(0, |x| x.shielded_outputs.len()),
+                )
+                .collect::<Vec<_>>(),
+        ));
         let transfer = Transfer {
             sources,
             targets,
-            shielded_section_hash: Some(
-                vectorized_transfer.shielded_section_hash.unwrap(),
-            ),
+            shielded_data: Some(MaspTxData {
+                masp_tx_id,
+                flag_ciphertext_sechash: fmd_section.get_hash(),
+            }),
         };
-        let masp_tx = tx
-            .tx
-            .get_masp_section(&transfer.shielded_section_hash.unwrap())
-            .unwrap()
-            .clone();
         let msg = MsgTransfer::<token::Transfer> {
             message: msg,
             transfer: Some(transfer),
@@ -1412,6 +1481,7 @@ impl BenchShieldedCtx {
             .read()
             .generate_ibc_tx(TX_IBC_WASM, msg.serialize_to_vec());
         ibc_tx.tx.add_masp_tx_section(masp_tx);
+        ibc_tx.tx.add_section(fmd_section);
 
         (ctx, ibc_tx)
     }

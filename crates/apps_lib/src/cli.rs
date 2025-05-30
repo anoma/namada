@@ -500,6 +500,7 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    #[allow(clippy::large_enum_variant)]
     pub enum NamadaClientWithContext {
         // Ledger cmds
         TxCustom(TxCustom),
@@ -560,6 +561,7 @@ pub mod cmds {
         QueryRewards(QueryRewards),
         QueryIbcRateLimit(QueryIbcRateLimit),
         ShieldedSync(ShieldedSync),
+        Fmd(FmdCommand),
         GenIbcShieldingTransfer(GenIbcShieldingTransfer),
     }
 
@@ -1626,6 +1628,28 @@ pub mod cmds {
                      specified block height."
                 ))
                 .add_args::<args::ShieldedSync<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct FmdCommand(pub args::FmdCommand<args::CliTypes>);
+
+    impl SubCmd for FmdCommand {
+        const CMD: &'static str = "fmd";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| FmdCommand(args::FmdCommand::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!(
+                    "Key management commands for fuzzy message detection and \
+                     interacting with Kassandra services."
+                ))
+                .add_args::<args::FmdCommand<args::CliTypes>>()
         }
     }
 
@@ -3401,7 +3425,9 @@ pub mod args {
 
     use data_encoding::HEXUPPER;
     use either::Either;
-    use namada_core::masp::{DiversifierIndex, MaspEpoch, PaymentAddress};
+    use namada_core::masp::{
+        DiversifierIndex, MaspEpoch, UnifiedPaymentAddress,
+    };
     use namada_sdk::address::{Address, EstablishedAddress};
     pub use namada_sdk::args::*;
     use namada_sdk::chain::{ChainId, ChainIdPrefix};
@@ -3442,6 +3468,7 @@ pub mod args {
     pub const ADDRESS: Arg<WalletAddress> = arg("address");
     pub const ADDRESS_OPT: ArgOpt<WalletAddress> = arg_opt("address");
     pub const ADD_PERSISTENT_PEERS: ArgFlag = flag("add-persistent-peers");
+    pub const ADD_SERVICE: ArgOpt<String> = arg_opt("add-service");
     pub const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
     pub const ALIAS: Arg<String> = arg("alias");
     pub const ALIAS_FORCE: ArgFlag = flag("alias-force");
@@ -3505,6 +3532,8 @@ pub mod args {
     pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
     pub const DATED_SPENDING_KEYS: ArgMulti<WalletDatedSpendingKey, GlobStar> =
         arg_multi("spending-keys");
+    pub const DATED_VIEWING_KEY: Arg<WalletDatedViewingKey> =
+        arg("viewing-key");
     pub const DATED_VIEWING_KEYS: ArgMulti<WalletDatedViewingKey, GlobStar> =
         arg_multi("viewing-keys");
     pub const DB_KEY: Arg<String> = arg("db-key");
@@ -3627,6 +3656,7 @@ pub mod args {
     pub const PAYMENT_ADDRESS_TARGET: Arg<WalletPaymentAddr> = arg("target");
     pub const PAYMENT_ADDRESS_TARGET_OPT: ArgOpt<WalletPaymentAddr> =
         arg_opt("target-pa");
+    pub const PAYMENT_ADDRESS_V0: ArgFlag = flag("v0");
     pub const PORT_ID: ArgDefault<PortId> = arg_default(
         "port-id",
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
@@ -3651,8 +3681,9 @@ pub mod args {
     pub const RAW_ADDRESS_ESTABLISHED: Arg<EstablishedAddress> = arg("address");
     pub const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     pub const RAW_KEY_GEN: ArgFlag = flag("raw");
-    pub const RAW_PAYMENT_ADDRESS: Arg<PaymentAddress> = arg("payment-address");
-    pub const RAW_PAYMENT_ADDRESS_OPT: ArgOpt<PaymentAddress> =
+    pub const RAW_PAYMENT_ADDRESS: Arg<UnifiedPaymentAddress> =
+        arg("payment-address");
+    pub const RAW_PAYMENT_ADDRESS_OPT: ArgOpt<UnifiedPaymentAddress> =
         RAW_PAYMENT_ADDRESS.opt();
     pub const RAW_PUBLIC_KEY: Arg<common::PublicKey> = arg("public-key");
     pub const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> =
@@ -3663,6 +3694,7 @@ pub mod args {
     pub const RECEIVER: Arg<String> = arg("receiver");
     pub const REFUND_TARGET: ArgOpt<WalletTransferTarget> =
         arg_opt("refund-target");
+    pub const REGISTER_KEY: ArgFlag = flag("register");
     pub const RELAYER: Arg<Address> = arg("relayer");
     pub const RETRIES: ArgOpt<u64> = arg_opt("retries");
     pub const SCHEME: ArgDefault<SchemeType> =
@@ -7156,6 +7188,66 @@ pub mod args {
         }
     }
 
+    impl Args for FmdCommand<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let viewing_key = DATED_VIEWING_KEY.parse(matches);
+            if REGISTER_KEY.parse(matches) {
+                Self {
+                    command: FmdCommandType::RegisterKey,
+                    viewing_key,
+                    service: None,
+                }
+            } else {
+                Self {
+                    command: FmdCommandType::AddService,
+                    viewing_key,
+                    service: Some(
+                        ADD_SERVICE.parse(matches).expect(
+                            "Adding a Kassandra service requires a url",
+                        ),
+                    ),
+                }
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                DATED_VIEWING_KEY
+                    .def()
+                    .help(wrap!("The MASP viewing key being managed.")),
+            )
+            .arg(REGISTER_KEY.def().help(wrap!(
+                "Register the viewing keys with Kassandra services using the \
+                 configuration file."
+            )))
+            .arg(ADD_SERVICE.def().help(wrap!(
+                "Add a the url of a Kassandra service to the configuration \
+                 file."
+            )))
+            .group(
+                ArgGroup::new("fmd_command_type")
+                    .args([REGISTER_KEY.name, ADD_SERVICE.name])
+                    .required(true),
+            )
+        }
+    }
+
+    impl CliToSdk<FmdCommand<SdkTypes>> for FmdCommand<CliTypes> {
+        type Error = std::convert::Infallible;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<FmdCommand<SdkTypes>, Self::Error> {
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            Ok(FmdCommand {
+                command: self.command,
+                viewing_key: chain_ctx.get_cached(&self.viewing_key),
+                service: self.service,
+            })
+        }
+    }
+
     impl CliToSdk<GenIbcShieldingTransfer<SdkTypes>>
         for GenIbcShieldingTransfer<CliTypes>
     {
@@ -7946,6 +8038,7 @@ pub mod args {
             _ctx: &mut Context,
         ) -> Result<PayAddressGen, Self::Error> {
             Ok(PayAddressGen {
+                v0: self.v0,
                 alias: self.alias,
                 alias_force: self.alias_force,
                 viewing_key: self.viewing_key,
@@ -7960,11 +8053,13 @@ pub mod args {
             let alias_force = ALIAS_FORCE.parse(matches);
             let diversifier_index = DIVERSIFIER_INDEX.parse(matches);
             let viewing_key = VIEWING_KEY_ALIAS.parse(matches);
+            let v0 = PAYMENT_ADDRESS_V0.parse(matches);
             Self {
                 alias,
                 alias_force,
                 diversifier_index,
                 viewing_key,
+                v0,
             }
         }
 
@@ -7979,6 +8074,10 @@ pub mod args {
                 "Set the viewing key's current diversifier index beforehand."
             )))
             .arg(VIEWING_KEY.def().help(wrap!("The viewing key.")))
+            .arg(PAYMENT_ADDRESS_V0.def().help(wrap!(
+                "Force generating a v0 payment address. Not compatible with \
+                 FMD."
+            )))
         }
     }
 

@@ -225,7 +225,7 @@ where
     pub fn new(key: T, birthday: Option<BlockHeight>) -> Self {
         Self {
             key,
-            birthday: birthday.unwrap_or(BlockHeight(0)),
+            birthday: birthday.unwrap_or(BlockHeight(1)),
         }
     }
 
