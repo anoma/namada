@@ -329,20 +329,20 @@ impl TransparentTransfersRef<'_> {
     }
 }
 
-/// Soft limit on the amount of transfer targets
-const TRANSFER_TARGETS_LIMIT: usize = 20;
+/// Soft limit on the amount of transfer inputs and outputs
+const TRANSFER_INOUT_LIMIT: usize = 20;
 
-/// Validate the targets in a transparent transfer.
-pub fn validate_transfer_targets(
+/// Validate the inputs and outputs in a transparent transfer.
+pub fn validate_transfer_in_out(
     sources: &BTreeMap<Account, DenominatedAmount>,
     targets: &BTreeMap<Account, DenominatedAmount>,
 ) -> core::result::Result<(), String> {
-    let total_targets = sources.len().saturating_add(targets.len());
+    let total_inout = sources.len().saturating_add(targets.len());
 
-    if total_targets > TRANSFER_TARGETS_LIMIT {
+    if total_inout > TRANSFER_INOUT_LIMIT {
         return Err(format!(
             "Transfer has {} inputs and {} outputs, which combined exceed the \
-             limit of {TRANSFER_TARGETS_LIMIT} total targets",
+             limit of {TRANSFER_INOUT_LIMIT} total inputs and outputs",
             sources.len(),
             targets.len()
         ));
@@ -721,16 +721,16 @@ mod test_token_transfer_actions {
         }
     }
 
-    /// The number of unique transfer targets allowed, per sink
+    /// The number of unique transfer addresses allowed, per sink
     /// (i.e. input and output vector).
     ///
     /// Since the limit is computed by summing the inputs and outputs,
     /// if all addresses are distinct, sources and targets alike can
-    /// have at most `TRANSFER_TARGETS_LIMIT / 2` elements.
-    const TRANSFER_TARGETS_SINK_UNIQUE: usize = TRANSFER_TARGETS_LIMIT / 2;
+    /// have at most `TRANSFER_INOUT_LIMIT / 2` elements.
+    const TRANSFER_INOUT_SINK_UNIQUE: usize = TRANSFER_INOUT_LIMIT / 2;
 
     /// Test the validation of transparent transfers exceeding the
-    /// limit of targets.
+    /// limit of inputs and outputs.
     #[test]
     fn test_transparent_transfer_validation_exceeding_limit() {
         fn gen(id: usize) -> (Account, DenominatedAmount) {
@@ -751,16 +751,16 @@ mod test_token_transfer_actions {
         }
 
         let sources: BTreeMap<_, _> =
-            (0..TRANSFER_TARGETS_SINK_UNIQUE).map(gen).collect();
-        let targets: BTreeMap<_, _> = (TRANSFER_TARGETS_SINK_UNIQUE..)
-            .take(TRANSFER_TARGETS_SINK_UNIQUE + 1)
+            (0..TRANSFER_INOUT_SINK_UNIQUE).map(gen).collect();
+        let targets: BTreeMap<_, _> = (TRANSFER_INOUT_SINK_UNIQUE..)
+            .take(TRANSFER_INOUT_SINK_UNIQUE + 1)
             .map(gen)
             .collect();
 
-        assert_eq!(sources.len() + targets.len(), TRANSFER_TARGETS_LIMIT + 1);
+        assert_eq!(sources.len() + targets.len(), TRANSFER_INOUT_LIMIT + 1);
 
         assert!(
-            validate_transfer_targets(&sources, &targets,).is_err(),
+            validate_transfer_in_out(&sources, &targets,).is_err(),
             "sources {}, targets {}",
             sources.len(),
             targets.len()
@@ -769,15 +769,15 @@ mod test_token_transfer_actions {
 
     proptest! {
         /// Test the validation of transparent transfers under the
-        /// limit of targets.
+        /// limit of inputs and outputs.
         #[test]
         fn test_transparent_transfer_validation_under_limit(
             transfer in testing::arb_transparent_transfer(
-                0..=TRANSFER_TARGETS_SINK_UNIQUE,
+                0..=TRANSFER_INOUT_SINK_UNIQUE,
             )
         ) {
             prop_assert!(
-                validate_transfer_targets(
+                validate_transfer_in_out(
                     &transfer.sources,
                     &transfer.targets,
                 )
