@@ -329,6 +329,28 @@ impl TransparentTransfersRef<'_> {
     }
 }
 
+/// Soft limit on the amount of transfer targets
+const TRANSFER_TARGETS_LIMIT: usize = 20;
+
+/// Validate the targets in a transparent transfer.
+pub fn validate_transfer_targets(
+    sources: &BTreeMap<Account, DenominatedAmount>,
+    targets: &BTreeMap<Account, DenominatedAmount>,
+) -> core::result::Result<(), String> {
+    let total_targets = sources.len().saturating_add(targets.len());
+
+    if total_targets > TRANSFER_TARGETS_LIMIT {
+        return Err(format!(
+            "Transfer has {} inputs and {} outputs, which combined exceed the \
+             limit of {TRANSFER_TARGETS_LIMIT} total targets",
+            sources.len(),
+            targets.len()
+        ));
+    }
+
+    Ok(())
+}
+
 #[cfg(all(any(test, feature = "testing"), feature = "masp"))]
 /// Testing helpers and strategies for tokens
 pub mod testing {
@@ -539,6 +561,7 @@ mod test_token_transfer_actions {
     use namada_core::address::{self};
     use namada_core::storage::DbKeySeg;
     use namada_shielded_token::storage_key::is_masp_balance_key;
+    use proptest::prelude::*;
 
     use super::*;
 
@@ -695,6 +718,74 @@ mod test_token_transfer_actions {
                 }
             };
             assert!(!is_masp_balance_key(&key));
+        }
+    }
+
+    /// The number of unique transfer targets allowed, per sink
+    /// (i.e. input and output vector).
+    ///
+    /// Since the limit is computed by summing the inputs and outputs,
+    /// if all addresses are distinct, sources and targets alike can
+    /// have at most `TRANSFER_TARGETS_LIMIT / 2` elements.
+    const TRANSFER_TARGETS_SINK_UNIQUE: usize = TRANSFER_TARGETS_LIMIT / 2;
+
+    /// Test the validation of transparent transfers exceeding the
+    /// limit of targets.
+    #[test]
+    fn test_transparent_transfer_validation_exceeding_limit() {
+        fn gen(id: usize) -> (Account, DenominatedAmount) {
+            let id = u64::try_from(id).unwrap();
+            let addr = {
+                let mut addr = [0u8; 20];
+                addr[..8].copy_from_slice(&id.to_ne_bytes());
+                Address::Established(addr.into())
+            };
+
+            let account = Account {
+                owner: addr.clone(),
+                token: addr,
+            };
+            let amount = DenominatedAmount::native(id.into());
+
+            (account, amount)
+        }
+
+        let sources: BTreeMap<_, _> =
+            (0..TRANSFER_TARGETS_SINK_UNIQUE).map(gen).collect();
+        let targets: BTreeMap<_, _> = (TRANSFER_TARGETS_SINK_UNIQUE..)
+            .take(TRANSFER_TARGETS_SINK_UNIQUE + 1)
+            .map(gen)
+            .collect();
+
+        assert_eq!(sources.len() + targets.len(), TRANSFER_TARGETS_LIMIT + 1);
+
+        assert!(
+            validate_transfer_targets(&sources, &targets,).is_err(),
+            "sources {}, targets {}",
+            sources.len(),
+            targets.len()
+        );
+    }
+
+    proptest! {
+        /// Test the validation of transparent transfers under the
+        /// limit of targets.
+        #[test]
+        fn test_transparent_transfer_validation_under_limit(
+            transfer in testing::arb_transparent_transfer(
+                0..=TRANSFER_TARGETS_SINK_UNIQUE,
+            )
+        ) {
+            prop_assert!(
+                validate_transfer_targets(
+                    &transfer.sources,
+                    &transfer.targets,
+                )
+                .is_ok(),
+                "sources {}, targets {}",
+                transfer.sources.len(),
+                transfer.targets.len()
+            );
         }
     }
 }
