@@ -1,6 +1,6 @@
 //! Virtual machine's memory.
 
-use std::error::Error;
+use std::{cell::RefCell, error::Error, rc};
 
 use namada_gas::Gas;
 
@@ -36,6 +36,8 @@ pub trait VmMemory: Clone + Send + Sync {
         offset: u64,
         string: String,
     ) -> Result<Gas, Self::Error>;
+
+    fn store(&self) -> rc::Weak<RefCell<wasmer::Store>>;
 }
 
 /// Helper module for VM testing
@@ -97,6 +99,10 @@ pub mod testing {
                 unsafe { slice::from_raw_parts_mut(offset as _, len as _) };
             target.clone_from_slice(bytes);
             Ok(Gas::default())
+        }
+
+        fn store(&self) -> rc::Weak<RefCell<wasmer::Store>> {
+            unimplemented!()
         }
     }
 }
