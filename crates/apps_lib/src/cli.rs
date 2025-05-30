@@ -500,6 +500,7 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    #[allow(clippy::large_enum_variant)]
     pub enum NamadaClientWithContext {
         // Ledger cmds
         TxCustom(TxCustom),
@@ -3401,7 +3402,9 @@ pub mod args {
 
     use data_encoding::HEXUPPER;
     use either::Either;
-    use namada_core::masp::{DiversifierIndex, MaspEpoch, PaymentAddress};
+    use namada_core::masp::{
+        DiversifierIndex, MaspEpoch, UnifiedPaymentAddress,
+    };
     use namada_sdk::address::{Address, EstablishedAddress};
     pub use namada_sdk::args::*;
     use namada_sdk::chain::{ChainId, ChainIdPrefix};
@@ -3627,6 +3630,7 @@ pub mod args {
     pub const PAYMENT_ADDRESS_TARGET: Arg<WalletPaymentAddr> = arg("target");
     pub const PAYMENT_ADDRESS_TARGET_OPT: ArgOpt<WalletPaymentAddr> =
         arg_opt("target-pa");
+    pub const PAYMENT_ADDRESS_V0: ArgFlag = flag("v0");
     pub const PORT_ID: ArgDefault<PortId> = arg_default(
         "port-id",
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
@@ -3651,8 +3655,9 @@ pub mod args {
     pub const RAW_ADDRESS_ESTABLISHED: Arg<EstablishedAddress> = arg("address");
     pub const RAW_ADDRESS_OPT: ArgOpt<Address> = RAW_ADDRESS.opt();
     pub const RAW_KEY_GEN: ArgFlag = flag("raw");
-    pub const RAW_PAYMENT_ADDRESS: Arg<PaymentAddress> = arg("payment-address");
-    pub const RAW_PAYMENT_ADDRESS_OPT: ArgOpt<PaymentAddress> =
+    pub const RAW_PAYMENT_ADDRESS: Arg<UnifiedPaymentAddress> =
+        arg("payment-address");
+    pub const RAW_PAYMENT_ADDRESS_OPT: ArgOpt<UnifiedPaymentAddress> =
         RAW_PAYMENT_ADDRESS.opt();
     pub const RAW_PUBLIC_KEY: Arg<common::PublicKey> = arg("public-key");
     pub const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> =
@@ -7946,6 +7951,7 @@ pub mod args {
             _ctx: &mut Context,
         ) -> Result<PayAddressGen, Self::Error> {
             Ok(PayAddressGen {
+                v0: self.v0,
                 alias: self.alias,
                 alias_force: self.alias_force,
                 viewing_key: self.viewing_key,
@@ -7960,11 +7966,13 @@ pub mod args {
             let alias_force = ALIAS_FORCE.parse(matches);
             let diversifier_index = DIVERSIFIER_INDEX.parse(matches);
             let viewing_key = VIEWING_KEY_ALIAS.parse(matches);
+            let v0 = PAYMENT_ADDRESS_V0.parse(matches);
             Self {
                 alias,
                 alias_force,
                 diversifier_index,
                 viewing_key,
+                v0,
             }
         }
 
@@ -7979,6 +7987,10 @@ pub mod args {
                 "Set the viewing key's current diversifier index beforehand."
             )))
             .arg(VIEWING_KEY.def().help(wrap!("The viewing key.")))
+            .arg(PAYMENT_ADDRESS_V0.def().help(wrap!(
+                "Force generating a v0 payment address. Not compatible with \
+                 FMD."
+            )))
         }
     }
 

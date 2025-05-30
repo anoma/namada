@@ -182,8 +182,8 @@ pub struct Transfer {
     pub sources: BTreeMap<Account, DenominatedAmount>,
     /// Targets of this transfer
     pub targets: BTreeMap<Account, DenominatedAmount>,
-    /// Hash of tx section that contains the MASP transaction
-    pub shielded_section_hash: Option<MaspTxId>,
+    /// Pointers to MASP data within a transfer tx
+    pub shielded_data: Option<MaspTxData>,
 }
 
 /// References to the transparent sections of a [`Transfer`].
@@ -197,11 +197,17 @@ pub struct TransparentTransfersRef<'a> {
 
 impl Transfer {
     /// Create a MASP transaction
-    pub fn masp(hash: MaspTxId) -> Self {
+    pub fn masp(shielded_data: MaspTxData) -> Self {
         Self {
-            shielded_section_hash: Some(hash),
+            shielded_data: Some(shielded_data),
             ..Self::default()
         }
+    }
+
+    /// Return the (optional) MASP tx id associated with this [`Transfer`].
+    pub fn masp_tx_id(&self) -> Option<MaspTxId> {
+        self.shielded_data
+            .map(|shielded_data| shielded_data.masp_tx_id)
     }
 
     /// Set the key to the given amount
@@ -351,7 +357,9 @@ pub mod testing {
     use namada_core::address::testing::arb_non_internal_address;
     use namada_core::address::{Address, MASP};
     use namada_core::collections::HashMap;
-    use namada_core::masp::{AssetData, TAddrData, encode_asset_type};
+    use namada_core::masp::{
+        AssetData, FlagCiphertext, MaspTxData, TAddrData, encode_asset_type,
+    };
     pub use namada_core::token::*;
     use namada_shielded_token::masp::testing::{
         MockTxProver, TestCsprng, arb_masp_epoch, arb_output_descriptions,
@@ -514,7 +522,13 @@ pub mod testing {
             prover_rng in arb_rng().prop_map(TestCsprng),
             mut rng in arb_rng().prop_map(TestCsprng),
             bparams_rng in arb_rng().prop_map(TestCsprng),
-        ) -> (Transfer, ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams) {
+        ) -> (
+            Transfer,
+            ShieldedTransfer,
+            HashMap<AssetData, u64>,
+            StoredBuildParams,
+            namada_tx::Section,
+        ) {
             let mut rng_build_params = RngBuildParams::new(bparams_rng);
             let (masp_tx, metadata) = builder.clone().build(
                 &MockTxProver(Mutex::new(prover_rng)),
@@ -522,13 +536,31 @@ pub mod testing {
                 &mut rng,
                 &mut rng_build_params,
             ).unwrap();
-            transfer.shielded_section_hash = Some(masp_tx.txid().into());
-            (transfer, ShieldedTransfer {
-                builder: builder.map_builder(WalletMap),
-                metadata,
-                masp_tx,
-                epoch,
-            }, asset_types, rng_build_params.to_stored().unwrap())
+            let fmd_flags = std::iter::repeat_with(
+                || FlagCiphertext::random(&mut rng)
+            )
+            .take(builder.sapling_outputs().len())
+            .collect();
+            let fmd_sec = namada_tx::Section::ExtraData(
+                namada_tx::Code::from_borsh_encoded(&fmd_flags),
+            );
+            transfer.shielded_data = Some(MaspTxData {
+                masp_tx_id: masp_tx.txid().into(),
+                flag_ciphertext_sechash: fmd_sec.get_hash(),
+            });
+            (
+                transfer,
+                ShieldedTransfer {
+                    builder: builder.map_builder(WalletMap),
+                    metadata,
+                    masp_tx,
+                    epoch,
+                    fmd_flags,
+                },
+                asset_types,
+                rng_build_params.to_stored().unwrap(),
+                fmd_sec,
+            )
         }
     }
 }

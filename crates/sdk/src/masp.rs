@@ -19,7 +19,7 @@ use namada_ibc::{IbcMessage, decode_message, extract_masp_tx_from_envelope};
 use namada_io::client::Client;
 use namada_token::masp::shielded_wallet::ShieldedQueries;
 pub use namada_token::masp::{utils, *};
-use namada_tx::event::{MaspEvent, MaspEventKind, MaspTxRef};
+use namada_tx::event::{MaspTxEvent, MaspTxKind, MaspTxRef};
 use namada_tx::{IndexedTx, Tx};
 pub use utilities::{IndexerMaspClient, LedgerMaspClient};
 
@@ -92,10 +92,10 @@ fn extract_masp_tx(
 }
 
 // Retrieves all the masp events at the specified height.
-async fn get_indexed_masp_events_at_height<C: Client + Sync>(
+async fn get_indexed_masp_txs_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
-) -> Result<Vec<MaspEvent>, Error> {
+) -> Result<Vec<MaspTxEvent>, Error> {
     let maybe_masp_events: Result<Vec<_>, Error> = client
         .block_results(height.0)
         .await
@@ -111,9 +111,9 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
             };
 
             let kind = if kind == namada_tx::event::masp_types::TRANSFER {
-                MaspEventKind::Transfer
+                MaspTxKind::Transfer
             } else if kind == namada_tx::event::masp_types::FEE_PAYMENT {
-                MaspEventKind::FeePayment
+                MaspTxKind::FeePayment
             } else {
                 return Ok(None);
             };
@@ -125,7 +125,7 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
             let tx_index =
                 IndexedTx::read_from_event_attributes(&event.attributes)?;
 
-            Ok(Some(MaspEvent {
+            Ok(Some(MaspTxEvent {
                 tx_index,
                 kind,
                 data,

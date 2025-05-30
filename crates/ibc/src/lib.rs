@@ -92,7 +92,7 @@ use namada_core::ibc::core::channel::types::commitment::{
     AcknowledgementCommitment, PacketCommitment, compute_packet_commitment,
 };
 pub use namada_core::ibc::*;
-use namada_core::masp::{TAddrData, addr_taddr, ibc_taddr};
+use namada_core::masp::{FlagCiphertext, TAddrData, addr_taddr, ibc_taddr};
 use namada_core::masp_primitives::transaction::components::ValueSum;
 use namada_core::token::Amount;
 use namada_events::EmitEvents;
@@ -237,18 +237,19 @@ impl<S> namada_systems::ibc::Read<S> for Store<S>
 where
     S: StorageRead,
 {
-    fn try_extract_masp_tx_from_envelope<Transfer: BorshDeserialize>(
+    fn try_extract_shielding_data_from_envelope<Transfer: BorshDeserialize>(
         tx_data: &[u8],
-    ) -> StorageResult<Option<masp_primitives::transaction::Transaction>> {
+    ) -> StorageResult<Option<(MaspTransaction, Vec<FlagCiphertext>)>> {
         let msg = decode_message::<Transfer>(tx_data)
             .into_storage_result()
             .ok();
         let tx = if let Some(IbcMessage::Envelope(ref envelope)) = msg {
-            Some(extract_masp_tx_from_envelope(envelope).ok_or_else(|| {
-                StorageError::new_const(
-                    "Missing MASP transaction in IBC message",
-                )
-            })?)
+            let shielding_data = extract_shielding_data_from_envelope(envelope)
+                .ok_or(StorageError::new_const(
+                    "Missing MASP shielding data in IBC message",
+                ))?;
+
+            Some((shielding_data.masp_tx, shielding_data.flag_ciphertexts))
         } else {
             None
         };
@@ -578,7 +579,7 @@ pub struct InternalData<Transfer> {
     /// The transparent transfer that happens in parallel to IBC processes
     pub transparent: Option<Transfer>,
     /// The shielded transaction that happens in parallel to IBC processes
-    pub shielded: Option<MaspTransaction>,
+    pub shielded: Option<IbcShieldingData>,
     /// IBC tokens that are credited/debited to internal accounts
     pub ibc_tokens: BTreeSet<Address>,
 }
@@ -760,13 +761,16 @@ where
                             .map_err(Error::Storage)?;
                             tokens.insert(token);
                         }
-                        (extract_masp_tx_from_packet(&msg.packet), tokens)
+                        (
+                            extract_shielding_data_from_packet(&msg.packet),
+                            tokens,
+                        )
                     }
                     #[cfg(is_apple_silicon)]
                     MsgEnvelope::Packet(PacketMsg::Ack(msg)) => {
                         // NOTE: This is unneeded but wasm compilation error
                         // happened if deleted on macOS with Apple Silicon
-                        let _ = extract_masp_tx_from_packet(&msg.packet);
+                        let _ = extract_shielding_data_from_packet(&msg.packet);
                         (None, BTreeSet::new())
                     }
                     _ => (None, BTreeSet::new()),

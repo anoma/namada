@@ -6,6 +6,7 @@ use std::io;
 use std::ops::{Bound, RangeBounds};
 use std::str::FromStr;
 
+use data_encoding::HEXUPPER;
 use masp_primitives::transaction::Transaction;
 use namada_account::AccountPublicKeysMap;
 use namada_core::address::Address;
@@ -15,7 +16,7 @@ use namada_core::borsh::{
 use namada_core::chain::{BlockHeight, ChainId};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
-use namada_core::masp::MaspTxId;
+use namada_core::masp::{FlagCiphertext, MaspTxId};
 use namada_core::storage::TxIndex;
 use namada_core::time::DateTimeUtc;
 use namada_macros::BorshDeserializer;
@@ -46,6 +47,8 @@ pub enum DecodeError {
     InvalidTimestamp(prost_types::TimestampError),
     #[error("Couldn't serialize transaction from JSON at {0}")]
     InvalidJSONDeserialization(String),
+    #[error("Could not decode FMD flag ciphertexts from tx section {0}")]
+    InvalidFlagCiphertexts(String),
 }
 
 #[allow(missing_docs)]
@@ -285,6 +288,48 @@ impl Tx {
             }
         }
         None
+    }
+
+    /// Add an FMD flag ciphertext section to the transaction
+    pub fn add_fmd_flag_ciphertexts(
+        &mut self,
+        flag_ciphertexts: &[FlagCiphertext],
+    ) -> &mut Self {
+        self.add_section(Section::ExtraData(Code::from_borsh_encoded(
+            flag_ciphertexts,
+        )));
+        self
+    }
+
+    /// Get the FMD flag ciphertext with the given hash
+    pub fn get_fmd_flag_ciphertexts(
+        &self,
+        hash: &namada_core::hash::Hash,
+    ) -> Result<Option<Vec<FlagCiphertext>>, DecodeError> {
+        let maybe_section = self.get_section(hash);
+
+        let code = match maybe_section.as_ref().map(Cow::as_ref) {
+            Some(Section::ExtraData(code)) => code,
+            Some(_) => {
+                return Err(DecodeError::InvalidFlagCiphertexts(
+                    HEXUPPER.encode(&hash.0),
+                ));
+            }
+            None => return Ok(None),
+        };
+
+        let Some(data) = code.id() else {
+            return Err(DecodeError::InvalidFlagCiphertexts(
+                HEXUPPER.encode(&hash.0),
+            ));
+        };
+
+        let decoded =
+            BorshDeserialize::try_from_slice(data).map_err(|_err| {
+                DecodeError::InvalidFlagCiphertexts(HEXUPPER.encode(&hash.0))
+            })?;
+
+        Ok(Some(decoded))
     }
 
     /// Remove the transaction section with the given hash
