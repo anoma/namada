@@ -16,7 +16,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         if let Some(transfers) = data.transparent {
             let (_debited_accounts, tokens) =
                 if let Some(transparent) = transfers.transparent_part() {
-                    token::validate_transfer_targets(
+                    token::validate_transfer_in_out(
                         transparent.sources,
                         transparent.targets,
                     )
