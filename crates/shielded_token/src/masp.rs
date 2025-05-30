@@ -266,11 +266,11 @@ pub trait ShieldedUtils:
     async fn fmd_config_save(
         &self,
         _config: &mut kassandra_client::config::Config,
-    ) -> std::io::Result<()>;
+    ) -> kassandra_client::error::Result<()>;
 
     /// Load the fuzzy messaged detection configuration file
     async fn fmd_config_load()
-    -> std::io::Result<kassandra_client::config::Config>;
+    -> kassandra_client::error::Result<kassandra_client::config::Config>;
 }
 
 /// Make a ViewingKey that can view notes encrypted by given ExtendedSpendingKey
@@ -1209,16 +1209,18 @@ pub mod fs {
         async fn fmd_config_save(
             &self,
             config: &mut kassandra_client::config::Config,
-        ) -> std::io::Result<()> {
+        ) -> kassandra_client::error::Result<()> {
             config.save(FMD_CONF_FILE_TMP_PREFIX)?;
             std::fs::rename(
                 FMD_CONF_FILE_TMP_PREFIX,
                 self.context_dir.join(FMD_CONF_FILE_NAME),
             )
+            .map_err(kassandra_client::error::Error::Io)
         }
 
         async fn fmd_config_load()
-        -> std::io::Result<kassandra_client::config::Config> {
+        -> kassandra_client::error::Result<kassandra_client::config::Config>
+        {
             kassandra_client::config::Config::load_or_new(FMD_CONF_FILE_NAME)
         }
     }

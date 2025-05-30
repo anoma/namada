@@ -370,16 +370,12 @@ impl CliApi {
                                 .get_viewing_keys()
                                 .into_iter()
                                 .map(|(k, v)| {
-                                    // TODO: Fix
-                                    (
-                                        DatedViewingKey::new(
-                                            v,
-                                            chain_ctx
-                                                .wallet
-                                                .find_birthday(k)
-                                                .copied(),
-                                        ),
-                                        None,
+                                    DatedViewingKey::new(
+                                        v,
+                                        chain_ctx
+                                            .wallet
+                                            .find_birthday(k)
+                                            .copied(),
                                     )
                                 }),
                         );
@@ -401,7 +397,8 @@ impl CliApi {
                                 fmd::register_keys::<FsShieldedUtils>(
                                     args.viewing_key,
                                 )
-                                .await;
+                                .await
+                                .unwrap();
                             }
                             FmdCommandType::AddService => {
                                 fmd::add_service(
@@ -411,6 +408,7 @@ impl CliApi {
                                     args.service.as_ref().unwrap(),
                                 )
                                 .await
+                                .unwrap();
                             }
                         }
                     }

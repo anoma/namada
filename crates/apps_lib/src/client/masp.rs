@@ -71,7 +71,7 @@ pub async fn syncing<
     let vks = args
         .viewing_keys
         .into_iter()
-        .map(|(vk, fmd)| (vk.map(|vk| vk.as_viewing_key()), fmd))
+        .map(|vk| vk.map(|vk| vk.as_viewing_key()))
         .collect::<Vec<_>>();
 
     macro_rules! dispatch_client {

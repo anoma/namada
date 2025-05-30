@@ -894,16 +894,17 @@ impl ShieldedUtils for BenchShieldedUtils {
     async fn fmd_config_save(
         &self,
         config: &mut kassandra_client::config::Config,
-    ) -> std::io::Result<()> {
+    ) -> kassandra_client::error::Result<()> {
         config.save(FMD_CONF_FILE_TMP_PREFIX)?;
         std::fs::rename(
             FMD_CONF_FILE_TMP_PREFIX,
             self.context_dir.0.path().join(FMD_CONF_FILE_NAME),
         )
+        .map_err(kassandra_client::error::Error::Io)
     }
 
     async fn fmd_config_load()
-    -> std::io::Result<kassandra_client::config::Config> {
+    -> kassandra_client::error::Result<kassandra_client::config::Config> {
         kassandra_client::config::Config::load_or_new(FMD_CONF_FILE_NAME)
     }
 }
@@ -1281,7 +1282,7 @@ impl BenchShieldedCtx {
                     ledger_address: FromStr::from_str("http://127.0.0.1:1337")
                         .unwrap(),
                     last_query_height: None,
-                    spending_keys: vec![(spending_key, None)],
+                    spending_keys: vec![spending_key],
                     viewing_keys: vec![],
                     with_indexer: None,
                     wait_for_last_query_height: false,

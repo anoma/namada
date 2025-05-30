@@ -26,7 +26,7 @@ use namada_wallet::{DatedKeypair, DatedSpendingKey};
 
 use super::utils::{IndexedNoteEntry, MaspClient, MaspIndexedTx, MaspTxKind};
 use crate::masp::shielded_sync::trial_decrypt;
-use crate::masp::shielded_wallet::{FmdIndices, KeySyncData};
+use crate::masp::shielded_wallet::KeySyncData;
 use crate::masp::utils::{
     DecryptedData, Fetched, RetryStrategy, TrialDecrypted, blocks_left_to_fetch,
 };
@@ -322,8 +322,8 @@ where
         mut self,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
-        sks: &[(DatedSpendingKey, Option<FmdIndices>)],
-        fvks: &[(DatedKeypair<ViewingKey>, Option<FmdIndices>)],
+        sks: &[DatedSpendingKey],
+        fvks: &[DatedKeypair<ViewingKey>],
     ) -> Result<Option<ShieldedWallet<U>>, eyre::Error> {
         let initial_state = self
             .perform_initial_setup(
@@ -465,8 +465,8 @@ where
         &mut self,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
-        sks: &[(DatedSpendingKey, Option<FmdIndices>)],
-        fvks: &[(DatedKeypair<ViewingKey>, Option<FmdIndices>)],
+        sks: &[DatedSpendingKey],
+        fvks: &[DatedKeypair<ViewingKey>],
     ) -> Result<InitialState, eyre::Error> {
         if start_query_height > last_query_height {
             return Err(eyre!(
@@ -476,15 +476,12 @@ where
             ));
         }
 
-        for (vk, mut fmd) in sks
+        for vk in sks
             .iter()
-            .map(|(esk, fmd)| {
-                (
-                    esk.map(|k| {
-                        to_viewing_key(&MaspExtendedSpendingKey::from(k)).vk
-                    }),
-                    fmd.clone(),
-                )
+            .map(|esk| {
+                esk.map(|k| {
+                    to_viewing_key(&MaspExtendedSpendingKey::from(k)).vk
+                })
             })
             .chain(fvks.iter().cloned())
         {
@@ -493,12 +490,6 @@ where
                 if birthday > h.height.indexed_tx {
                     h.height.indexed_tx = birthday;
                 }
-                if let Some(ixs) = fmd.as_mut() {
-                    ixs.retain(|ix| {
-                        ix.height >= h.height.indexed_tx.block_height.0
-                    });
-                }
-                h.fmd_indices = fmd;
             } else {
                 self.ctx.vk_sync.insert(
                     vk.key,
@@ -507,10 +498,17 @@ where
                             indexed_tx: IndexedTx::entire_block(vk.birthday),
                             kind: MaspTxKind::Transfer,
                         },
-                        fmd_indices: fmd,
+                        fmd_indices: None,
                     },
                 );
             }
+            self.ctx
+                .query_fmd_indices(
+                    &self.client,
+                    &mut self.config.fetched_tracker,
+                    vk.key,
+                )
+                .await?;
         }
 
         // Add the fmd indices to the client
@@ -900,6 +898,8 @@ mod dispatcher_tests {
     use kassandra::Index;
     use namada_core::chain::BlockHeight;
     use namada_core::control_flow::testing::shutdown_signal;
+    use namada_core::key::FmdKeyHash;
+    use namada_core::masp::FmdSecretKey;
     use namada_core::storage::TxIndex;
     use namada_core::task_env::TaskEnvironment;
     use namada_io::DevNullProgressBar;
@@ -938,46 +938,40 @@ mod dispatcher_tests {
             .expect("Test failed")
             .run(|s| async {
                 let mut dispatcher = config.dispatcher(s, &utils).await;
+                let vk = arbitrary_vk();
                 dispatcher.ctx.vk_sync = BTreeMap::from([(
-                    arbitrary_vk(),
+                    vk,
                     KeySyncData {
                         height: MaspIndexedTx {
                             kind: Default::default(),
                             indexed_tx: IndexedTx::entire_block(10.into()),
                         },
-                        fmd_indices: Some(
-                            [
-                                Index { height: 5, tx: 0 },
-                                Index { height: 15, tx: 0 },
-                            ]
-                            .into_iter()
-                            .collect(),
-                        ),
+                        fmd_indices: None,
                     },
                 )]);
+                dispatcher.client.fmd_queries.insert(
+                    {
+                        let fmd_key =
+                            FmdSecretKey::from(vk.ivk()).fmd_secret_key();
+                        FmdKeyHash::from(fmd_key).to_string()
+                    },
+                    vec![
+                        [
+                            Index { height: 5, tx: 0 },
+                            Index { height: 15, tx: 0 },
+                            Index { height: 20, tx: 0 },
+                        ]
+                        .into_iter()
+                        .collect(),
+                    ],
+                );
                 dispatcher
-                    .perform_initial_setup(
-                        None,
-                        None,
-                        &[],
-                        &[(
-                            arbitrary_vk().into(),
-                            Some(
-                                [
-                                    Index { height: 5, tx: 0 },
-                                    Index { height: 15, tx: 0 },
-                                    Index { height: 20, tx: 0 },
-                                ]
-                                .into_iter()
-                                .collect(),
-                            ),
-                        )],
-                    )
+                    .perform_initial_setup(None, None, &[], &[vk.into()])
                     .await
                     .expect("Test failed");
 
                 let expected = BTreeMap::from([(
-                    arbitrary_vk(),
+                    vk,
                     KeySyncData {
                         height: MaspIndexedTx {
                             kind: Default::default(),
@@ -1298,8 +1292,7 @@ mod dispatcher_tests {
                 masp_tx_sender.send(None).expect("Test failed");
                 let dispatcher = config.clone().dispatcher(s, &utils).await;
 
-                let result =
-                    dispatcher.run(None, None, &[], &[(vk, None)]).await;
+                let result = dispatcher.run(None, None, &[], &[vk]).await;
                 match result {
                     Err(msg) => assert_eq!(
                         msg.to_string(),
@@ -1349,7 +1342,7 @@ mod dispatcher_tests {
                 let dispatcher = config.dispatcher(s, &utils).await;
                 // This should complete successfully
                 let ctx = dispatcher
-                    .run(None, None, &[], &[(vk, None)])
+                    .run(None, None, &[], &[vk])
                     .await
                     .expect("Test failed")
                     .expect("Test failed");
@@ -1387,8 +1380,8 @@ mod dispatcher_tests {
             .await;
     }
 
-    /// Test that if fetching filters out MASP txs not
-    /// list in fmd flags.
+    /// Test that fetching filters out MASP txs not
+    /// listed in fmd flags.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_fetch_with_fmd_flags() {
         let temp_dir = tempdir().unwrap();
@@ -1463,26 +1456,25 @@ mod dispatcher_tests {
                         masp_tx.clone(),
                     )))
                     .expect("Test failed");
-                let dispatcher = config.clone().dispatcher(s, &utils).await;
-
+                let mut dispatcher = config.clone().dispatcher(s, &utils).await;
+                dispatcher.client.fmd_queries.insert(
+                    {
+                        let fmd_key =
+                            FmdSecretKey::from(vk.key.ivk()).fmd_secret_key();
+                        FmdKeyHash::from(fmd_key).to_string()
+                    },
+                    vec![
+                        [
+                            Index { height: 3, tx: 0 },
+                            Index { height: 3, tx: 1 },
+                            Index { height: 5, tx: 0 },
+                        ]
+                        .into_iter()
+                        .collect(),
+                    ],
+                );
                 let ctx = dispatcher
-                    .run(
-                        None,
-                        None,
-                        &[],
-                        &[(
-                            vk,
-                            Some(
-                                [
-                                    Index { height: 3, tx: 0 },
-                                    Index { height: 3, tx: 1 },
-                                    Index { height: 5, tx: 0 },
-                                ]
-                                .into_iter()
-                                .collect(),
-                            ),
-                        )],
-                    )
+                    .run(None, None, &[], &[vk])
                     .await
                     .expect("Test failed")
                     .expect("Test failed");
@@ -1574,8 +1566,7 @@ mod dispatcher_tests {
                     )))
                     .expect("Test failed");
                 masp_tx_sender.send(None).expect("Test failed");
-                let result =
-                    dispatcher.run(None, None, &[], &[(vk, None)]).await;
+                let result = dispatcher.run(None, None, &[], &[vk]).await;
                 match result {
                     Err(msg) => assert_eq!(
                         msg.to_string(),
@@ -1664,21 +1655,16 @@ mod dispatcher_tests {
                     },
                     masp_tx.clone(),
                 );
-
+                dispatcher.client.fmd_queries.insert(
+                    {
+                        let fmd_key =
+                            FmdSecretKey::from(vk.key.ivk()).fmd_secret_key();
+                        FmdKeyHash::from(fmd_key).to_string()
+                    },
+                    vec![[Index { height: 2, tx: 0 }].into_iter().collect()],
+                );
                 let ctx = dispatcher
-                    .run(
-                        Some(2.into()),
-                        Some(2.into()),
-                        &[],
-                        &[(
-                            vk,
-                            Some(
-                                [Index { height: 2, tx: 0 }]
-                                    .into_iter()
-                                    .collect(),
-                            ),
-                        )],
-                    )
+                    .run(Some(2.into()), Some(2.into()), &[], &[vk])
                     .await
                     .expect("Test failed")
                     .expect("Test failed");
@@ -1733,7 +1719,7 @@ mod dispatcher_tests {
 
                 send.send_replace(true);
                 let res = dispatcher
-                    .run(None, None, &[], &[(dated_arbitrary_vk(), None)])
+                    .run(None, None, &[], &[dated_arbitrary_vk()])
                     .await
                     .expect("Test failed");
                 assert!(res.is_none());
@@ -1794,8 +1780,8 @@ mod dispatcher_tests {
                 MaspLocalTaskEnv::new(4).unwrap(),
                 config.clone(),
                 None,
-                &[(sk, None)],
-                &[(vk, None)],
+                &[sk],
+                &[vk],
             )
             .await
             .expect("Test failed");
@@ -1841,8 +1827,8 @@ mod dispatcher_tests {
                 MaspLocalTaskEnv::new(4).unwrap(),
                 config,
                 None,
-                &[(sk, None)],
-                &[(vk, None)],
+                &[sk],
+                &[vk],
             )
             .await
             .expect("Test failed");

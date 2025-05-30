@@ -6,6 +6,9 @@ use std::sync::{Arc, RwLock};
 
 use borsh::BorshDeserialize;
 use kassandra::IndexList;
+use kassandra_client::config::{Config, Service};
+use kassandra_client::get_host_uuid;
+use kassandra_client::query::query_service;
 use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::Transaction as MaspTx;
@@ -27,6 +30,8 @@ use tokio::sync::Semaphore;
 use xorf::BinaryFuse16;
 
 use crate::error::{Error, QueryError};
+use crate::masp::shielded_wallet::FmdIndices;
+use crate::masp::utils::FetchFmdReport;
 use crate::masp::{extract_masp_tx, get_indexed_masp_txs_at_height};
 
 struct LedgerMaspClientInner<C> {
@@ -193,7 +198,7 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
         &self,
         _: BlockHeight,
     ) -> Result<CommitmentTree<Node>, Error> {
-        Err(Error::Other(
+        Err(Error::MaspClient(
             "Commitment tree fetching is not implemented by this client"
                 .to_string(),
         ))
@@ -203,7 +208,7 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
         &self,
         _: BlockHeight,
     ) -> Result<BTreeMap<MaspIndexedTx, usize>, Error> {
-        Err(Error::Other(
+        Err(Error::MaspClient(
             "Transaction notes map fetching is not implemented by this client"
                 .to_string(),
         ))
@@ -213,7 +218,7 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
         &self,
         _: BlockHeight,
     ) -> Result<HashMap<usize, IncrementalWitness<Node>>, Error> {
-        Err(Error::Other(
+        Err(Error::MaspClient(
             "Witness map fetching is not implemented by this client"
                 .to_string(),
         ))
@@ -229,6 +234,31 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
     }
 
     fn set_fmd_indices(&mut self, _: Option<IndexList>) {}
+
+    async fn query_fmd(
+        &self,
+        config: &Config,
+        key_hash: &String,
+    ) -> FetchFmdReport {
+        let mut report = FetchFmdReport::default();
+        if !config.services.contains_key(key_hash) {
+            return report;
+        }
+        let services = config.get_services(key_hash);
+        let mut indices = vec![];
+        for Service { url, enc_key, .. } in services {
+            let Ok(uuid) = get_host_uuid(&url) else {
+                report.failed_urls.push(url);
+                continue;
+            };
+            match query_service(&url, &enc_key, &uuid) {
+                Ok(list) => indices.push(list),
+                Err(e) => report.failed_queries.push(e),
+            }
+        }
+        report.result = Some(FmdIndices::from(indices));
+        report
+    }
 }
 
 /// A bloom filter we can use to avoid unnecessary fetches
@@ -419,18 +449,18 @@ impl MaspClient for IndexerMaspClient {
             .send()
             .await
             .map_err(|err| {
-                Error::Other(format!(
+                Error::MaspClient(format!(
                     "Failed to fetch latest block height: {err}"
                 ))
             })?;
         if !response.status().is_success() {
             let err = Self::get_server_error(response).await?;
-            return Err(Error::Other(format!(
+            return Err(Error::MaspClient(format!(
                 "Failed to fetch last block height: {err}"
             )));
         }
         let payload: Response = response.json().await.map_err(|err| {
-            Error::Other(format!(
+            Error::MaspClient(format!(
                 "Could not deserialize latest block height JSON response: \
                  {err}"
             ))
@@ -510,20 +540,20 @@ impl MaspClient for IndexerMaspClient {
 
                 let payload: TxResponse = {
                     let response = request.send().await.map_err(|err| {
-                        Error::Other(format!(
+                        Error::MaspClient(format!(
                             "Failed to fetch transactions in the height range \
                              {from_height}--{to_height}: {err}"
                         ))
                     })?;
                     if !response.status().is_success() {
                         let err = Self::get_server_error(response).await?;
-                        return Err(Error::Other(format!(
+                        return Err(Error::MaspClient(format!(
                             "Failed to fetch transactions in the range \
                              {from_height}-{to_height}: {err}"
                         )));
                     }
                     response.json().await.map_err(|err| {
-                        Error::Other(format!(
+                        Error::MaspClient(format!(
                             "Could not deserialize the transactions JSON \
                              response in the height range \
                              {from_height}-{to_height}: {err}"
@@ -549,7 +579,7 @@ impl MaspClient for IndexerMaspClient {
                 for slot in transactions {
                     let extracted_masp_tx = MaspTx::try_from_slice(&slot.bytes)
                         .map_err(|err| {
-                            Error::Other(format!(
+                            Error::MaspClient(format!(
                                 "Could not deserialize the masp txs borsh \
                                  data at height {}, block index {} and batch \
                                  index: {:#?}: {err}",
@@ -606,18 +636,18 @@ impl MaspClient for IndexerMaspClient {
             .send()
             .await
             .map_err(|err| {
-                Error::Other(format!(
+                Error::MaspClient(format!(
                     "Failed to fetch commitment tree at height {height}: {err}"
                 ))
             })?;
         if !response.status().is_success() {
             let err = Self::get_server_error(response).await?;
-            return Err(Error::Other(format!(
+            return Err(Error::MaspClient(format!(
                 "Failed to fetch commitment tree at height {height}: {err}"
             )));
         }
         let payload: Response = response.json().await.map_err(|err| {
-            Error::Other(format!(
+            Error::MaspClient(format!(
                 "Could not deserialize the commitment tree JSON response at \
                  height {height}: {err}"
             ))
@@ -625,7 +655,7 @@ impl MaspClient for IndexerMaspClient {
 
         BorshDeserialize::try_from_slice(&payload.commitment_tree).map_err(
             |err| {
-                Error::Other(format!(
+                Error::MaspClient(format!(
                     "Could not deserialize the commitment tree borsh data at \
                      height {height}: {err}"
                 ))
@@ -664,18 +694,18 @@ impl MaspClient for IndexerMaspClient {
             .send()
             .await
             .map_err(|err| {
-                Error::Other(format!(
+                Error::MaspClient(format!(
                     "Failed to fetch notes map at height {height}: {err}"
                 ))
             })?;
         if !response.status().is_success() {
             let err = Self::get_server_error(response).await?;
-            return Err(Error::Other(format!(
+            return Err(Error::MaspClient(format!(
                 "Failed to fetch notes map at height {height}: {err}"
             )));
         }
         let payload: Response = response.json().await.map_err(|err| {
-            Error::Other(format!(
+            Error::MaspClient(format!(
                 "Could not deserialize the notes map JSON response at height \
                  {height}: {err}"
             ))
@@ -748,19 +778,19 @@ impl MaspClient for IndexerMaspClient {
             .send()
             .await
             .map_err(|err| {
-                Error::Other(format!(
+                Error::MaspClient(format!(
                     "Failed to fetch witness map at height {height}: {err}"
                 ))
             })?;
         if !response.status().is_success() {
             let err = Self::get_server_error(response).await?;
-            return Err(Error::Other(format!(
+            return Err(Error::MaspClient(format!(
                 "Failed to fetch witness map at height {height}: {err}"
             )));
         }
         let payload: WitnessMapResponse =
             response.json().await.map_err(|err| {
-                Error::Other(format!(
+                Error::MaspClient(format!(
                     "Could not deserialize the witness map JSON response at \
                      height {height}: {err}"
                 ))
@@ -771,7 +801,7 @@ impl MaspClient for IndexerMaspClient {
             |mut accum, Witness { index, bytes }| {
                 let witness = BorshDeserialize::try_from_slice(&bytes)
                     .map_err(|err| {
-                        Error::Other(format!(
+                        Error::MaspClient(format!(
                             "Could not deserialize the witness borsh data at \
                              height {height}: {err}"
                         ))
@@ -786,7 +816,7 @@ impl MaspClient for IndexerMaspClient {
         &self,
         _root: &Node,
     ) -> Result<bool, Error> {
-        Err(Error::Other(
+        Err(Error::MaspClient(
             "Commitment anchor checking is not implemented by this client"
                 .to_string(),
         ))
@@ -794,6 +824,31 @@ impl MaspClient for IndexerMaspClient {
 
     fn set_fmd_indices(&mut self, fmd_indices: Option<IndexList>) {
         Arc::get_mut(&mut self.shared).unwrap().fmd_indices = fmd_indices;
+    }
+
+    async fn query_fmd(
+        &self,
+        config: &Config,
+        key_hash: &String,
+    ) -> FetchFmdReport {
+        let mut report = FetchFmdReport::default();
+        if !config.services.contains_key(key_hash) {
+            return report;
+        }
+        let services = config.get_services(key_hash);
+        let mut indices = vec![];
+        for Service { url, enc_key, .. } in services {
+            let Ok(uuid) = get_host_uuid(&url) else {
+                report.failed_urls.push(url);
+                continue;
+            };
+            match query_service(&url, &enc_key, &uuid) {
+                Ok(list) => indices.push(list),
+                Err(e) => report.failed_queries.push(e),
+            }
+        }
+        report.result = Some(FmdIndices::from(indices));
+        report
     }
 }
 

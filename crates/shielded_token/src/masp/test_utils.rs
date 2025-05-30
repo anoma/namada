@@ -5,6 +5,7 @@ use std::sync::Arc;
 use borsh::BorshDeserialize;
 use eyre::eyre;
 use kassandra::{Index, IndexList};
+use kassandra_client::config::Config;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::{
     CommitmentTree, IncrementalWitness, MerklePath,
@@ -29,10 +30,10 @@ use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use super::utils::MaspIndexedTx;
+use super::utils::{FetchFmdReport, MaspIndexedTx};
 use crate::ShieldedWallet;
 use crate::masp::ShieldedUtils;
-use crate::masp::shielded_wallet::ShieldedQueries;
+use crate::masp::shielded_wallet::{FmdIndices, ShieldedQueries};
 use crate::masp::utils::{
     IndexedNoteEntry, MaspClient, MaspClientCapabilities,
 };
@@ -367,6 +368,7 @@ pub struct TestingMaspClient {
     last_height: BlockHeight,
     tx_recv: flume::Receiver<Option<IndexedNoteEntry>>,
     fmd_indices: Option<IndexList>,
+    pub fmd_queries: BTreeMap<String, Vec<IndexList>>,
 }
 
 impl TestingMaspClient {
@@ -381,6 +383,7 @@ impl TestingMaspClient {
                 last_height,
                 tx_recv,
                 fmd_indices: None,
+                fmd_queries: Default::default(),
             },
             sender,
         )
@@ -469,6 +472,26 @@ impl MaspClient for TestingMaspClient {
 
     fn set_fmd_indices(&mut self, fmd_indices: Option<IndexList>) {
         self.fmd_indices = fmd_indices;
+    }
+
+    async fn query_fmd(&self, _: &Config, key_hash: &String) -> FetchFmdReport {
+        let mut report = FetchFmdReport::default();
+
+        match self
+            .fmd_queries
+            .get(key_hash)
+            .cloned()
+            .map(FmdIndices::from)
+        {
+            None => report.failed_queries.push(
+                kassandra_client::error::Error::ServerError(
+                    "Big whoops".to_string(),
+                ),
+            ),
+            Some(list) => report.result = Some(list),
+        }
+
+        report
     }
 }
 

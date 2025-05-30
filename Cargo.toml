@@ -176,7 +176,7 @@ init-once = "0.6"
 itertools = "0.14"
 jubjub = { package = "nam-jubjub", version = "0.10.1-nam.0" }
 kassandra = {package = "kassandra-shared", version = "0.0.3-alpha", features = ["std"]}
-kassandra-client = "0.0.11-alpha"
+kassandra-client = "0.0.14-alpha"
 k256 = { version = "0.13", default-features = false, features = ["ecdsa", "pkcs8", "precomputed-tables", "serde", "std"]}
 kdam = "0.6"
 konst = { version = "0.3", default-features = false }

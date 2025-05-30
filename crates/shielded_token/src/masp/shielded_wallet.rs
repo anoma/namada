@@ -32,6 +32,7 @@ use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::chain::BlockHeight;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::control_flow;
+use namada_core::key::FmdKeyHash;
 use namada_core::masp::{
     AssetData, FlagCiphertext, FmdSecretKey, MaspEpoch, TransferSource,
     TransferTarget, encode_asset_type,
@@ -81,7 +82,7 @@ impl From<Vec<IndexList>> for FmdIndices {
         let acc = if list.is_empty() {
             HashSet::new()
         } else {
-            list.last().unwrap().iter().copied().collect()
+            list.last().unwrap().clone().into_iter().collect()
         };
         Self {
             union: list.iter().fold(HashSet::new(), |mut acc, ix_list| {
@@ -89,11 +90,14 @@ impl From<Vec<IndexList>> for FmdIndices {
                 acc.append(&mut set);
                 acc
             }),
-            intersection: list.iter().fold(acc, |mut acc, ix_list| {
-                let set = ix_list.iter().copied().collect::<HashSet<_>>();
-                acc = acc.intersection(&set).copied().collect();
-                acc
-            }),
+            intersection: list
+                .iter()
+                .fold(acc, |acc, ix_list| {
+                    let ix_set: HashSet<_> = ix_list.iter().copied().collect();
+                    acc.intersection(&ix_set).copied().collect()
+                })
+                .into_iter()
+                .collect(),
             list,
         }
     }
@@ -261,6 +265,42 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
         self.utils.save(self).await
     }
 
+    /// Given a viewing key, look up the Kassandra services it is registered
+    /// with from the config and fetch the latest produced FMD results.
+    pub async fn query_fmd_indices<M, T>(
+        &mut self,
+        client: &M,
+        progress_bar: &mut T,
+        vk: ViewingKey,
+    ) -> Result<(), eyre::Error>
+    where
+        M: MaspClient + Send + Sync,
+        T: ProgressBar,
+    {
+        let config = U::fmd_config_load()
+            .await
+            .wrap_err("Failed to load FMD config file.")?;
+        let fmd_key = FmdSecretKey::from(vk.ivk()).fmd_secret_key();
+        let key_hash = FmdKeyHash::from(fmd_key);
+        let report = client.query_fmd(&config, &key_hash.to_string()).await;
+        if !report.is_ok() {
+            // This does not stop shielded sync from working, but the errors
+            // should be logged back to the user.
+            progress_bar.message(report.to_string())
+        }
+        let mut fmd_indices = report.result;
+        if let Some(sync_data) = self.vk_sync.get_mut(&vk) {
+            if let Some(fmd_indices) = fmd_indices.as_mut() {
+                fmd_indices.retain(|ix| {
+                    ix.height >= sync_data.height.indexed_tx.block_height.0
+                });
+            }
+            sync_data.fmd_indices = fmd_indices;
+        }
+
+        Ok(())
+    }
+
     /// Update the merkle tree of witnesses the first time we
     /// scan new MASP transactions.
     pub(crate) fn update_witness_map(
@@ -316,8 +356,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
         env: impl TaskEnvironment,
         config: ShieldedSyncConfig<M, T, I>,
         last_query_height: Option<BlockHeight>,
-        sks: &[(DatedSpendingKey, Option<FmdIndices>)],
-        fvks: &[(DatedKeypair<ViewingKey>, Option<FmdIndices>)],
+        sks: &[DatedSpendingKey],
+        fvks: &[DatedKeypair<ViewingKey>],
     ) -> Result<(), eyre::Error>
     where
         M: MaspClient + Send + Sync + Unpin + 'static,

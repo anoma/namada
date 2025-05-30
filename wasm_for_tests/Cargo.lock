@@ -2358,9 +2358,9 @@ dependencies = [
 
 [[package]]
 name = "kassandra-client"
-version = "0.0.11-alpha"
+version = "0.0.14-alpha"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e59f26661380a4758cc7c7a0b8887218677ee76be33a279205fb9cee9a4a492"
+checksum = "33eb6f9dde2224c8dffbb1a4331702c4222e3898af920c0a6ceb016eba8d0bb0"
 dependencies = [
  "chacha20poly1305",
  "clap",
