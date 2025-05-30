@@ -368,12 +368,16 @@ impl CliApi {
                                 .get_viewing_keys()
                                 .into_iter()
                                 .map(|(k, v)| {
-                                    DatedViewingKey::new(
-                                        v,
-                                        chain_ctx
-                                            .wallet
-                                            .find_birthday(k)
-                                            .copied(),
+                                    // TODO: Fix
+                                    (
+                                        DatedViewingKey::new(
+                                            v,
+                                            chain_ctx
+                                                .wallet
+                                                .find_birthday(k)
+                                                .copied(),
+                                        ),
+                                        None,
                                     )
                                 }),
                         );
