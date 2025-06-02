@@ -18,6 +18,7 @@ use namada_sdk::{account, token};
 use namada_tx_prelude::transaction::TxSentinel;
 use namada_tx_prelude::{BorshSerializeExt, Ctx};
 use namada_vm::WasmCacheRwAccess;
+use namada_vm::host_env::gas_meter::GasMeter;
 use namada_vm::wasm::run::Error;
 use namada_vm::wasm::{self, TxCache, VpCache};
 use namada_vp_prelude::key::common;
@@ -52,7 +53,7 @@ pub struct TestTxEnv {
     pub state: TestState,
     pub iterators: PrefixIterators<'static, MockDB>,
     pub verifiers: BTreeSet<Address>,
-    pub gas_meter: RefCell<TxGasMeter>,
+    pub gas_meter: RefCell<GasMeter<TxGasMeter>>,
     pub sentinel: RefCell<TxSentinel>,
     pub tx_index: TxIndex,
     pub result_buffer: Option<Vec<u8>>,
@@ -63,8 +64,8 @@ pub struct TestTxEnv {
     pub tx_cache_dir: TempDir,
     pub batched_tx: BatchedTx,
     pub wasmer_store: Rc<RefCell<wasmer::Store>>,
-    pub gas_global: Option<wasmer::Global>,
 }
+
 impl Default for TestTxEnv {
     fn default() -> Self {
         let (vp_wasm_cache, vp_cache_dir) =
@@ -77,18 +78,17 @@ impl Default for TestTxEnv {
         tx.push_default_inner_tx();
         let batched_tx = tx.batch_first_tx();
 
-        let (wasmer_store, gas_global) = {
-            let mut store = wasm::compilation_cache::common::testing::store();
-            let global =
-                wasmer::Global::new_mut(&mut store, wasmer::Value::I64(0));
-
-            (Rc::new(RefCell::new(store)), Some(global))
-        };
+        let wasmer_store = Rc::new(RefCell::new(
+            wasm::compilation_cache::common::testing::store(),
+        ));
 
         Self {
             state,
             iterators: PrefixIterators::default(),
-            gas_meter: RefCell::new(TxGasMeter::new(1_000_000_000_000, 1)),
+            gas_meter: RefCell::new(GasMeter::Native(TxGasMeter::new(
+                1_000_000_000_000,
+                1,
+            ))),
             sentinel: RefCell::new(TxSentinel::default()),
             tx_index: TxIndex::default(),
             verifiers: BTreeSet::default(),
@@ -100,7 +100,6 @@ impl Default for TestTxEnv {
             tx_cache_dir,
             batched_tx,
             wasmer_store,
-            gas_global,
         }
     }
 }
@@ -232,9 +231,17 @@ impl TestTxEnv {
 
     /// Apply the tx changes to the write log.
     pub fn execute_tx(&mut self) -> Result<(), Error> {
-        wasm::run::tx(
+        let gas_meter = RefCell::new(
+            if let GasMeter::Native(meter) = &mut *self.gas_meter.borrow_mut() {
+                std::mem::take(meter)
+            } else {
+                unreachable!()
+            },
+        );
+
+        let res = wasm::run::tx(
             &mut self.state,
-            &self.gas_meter,
+            &gas_meter,
             None,
             &self.tx_index,
             &self.batched_tx.tx,
@@ -243,7 +250,11 @@ impl TestTxEnv {
             &mut self.tx_wasm_cache,
             wasm::run::GasMeterKind::MutGlobal,
         )
-        .and(Ok(()))
+        .and(Ok(()));
+
+        *self.gas_meter.borrow_mut() = GasMeter::Native(gas_meter.take());
+
+        res
     }
 }
 
@@ -363,7 +374,6 @@ mod native_tx_host_env {
                                 tx_cache_dir: _,
                                 batched_tx,
                                 wasmer_store: _,
-                                gas_global,
                             }: &mut TestTxEnv| {
 
                             let mut tx_env = namada_vm::host_env::testing::tx_env(
@@ -379,7 +389,6 @@ mod native_tx_host_env {
                                 yielded_value,
                                 vp_wasm_cache,
                                 tx_wasm_cache,
-                                gas_global,
                             );
 
                             // Call the `host_env` function and unwrap any
@@ -410,7 +419,6 @@ mod native_tx_host_env {
                                 tx_cache_dir: _,
                                 batched_tx,
                                 wasmer_store: _,
-                                gas_global,
                             }: &mut TestTxEnv| {
 
                             let mut tx_env = namada_vm::host_env::testing::tx_env(
@@ -426,7 +434,6 @@ mod native_tx_host_env {
                                 yielded_value,
                                 vp_wasm_cache,
                                 tx_wasm_cache,
-                                gas_global,
                             );
 
                             // Call the `host_env` function and unwrap any
@@ -457,7 +464,6 @@ mod native_tx_host_env {
                                 tx_cache_dir: _,
                                 batched_tx,
                                 wasmer_store: _,
-                                gas_global,
                             }: &mut TestTxEnv| {
 
                             let mut tx_env = namada_vm::host_env::testing::tx_env(
@@ -473,7 +479,6 @@ mod native_tx_host_env {
                                 yielded_value,
                                 vp_wasm_cache,
                                 tx_wasm_cache,
-                                gas_global,
                             );
 
                             // Call the `host_env` function
@@ -779,7 +784,6 @@ mod tests {
             tx_cache_dir: _,
             batched_tx,
             wasmer_store,
-            gas_global,
         } = test_env;
 
         let mut tx_env = host_env::testing::tx_env_with_wasm_memory(
@@ -796,7 +800,6 @@ mod tests {
             wasmer_store.clone(),
             vp_wasm_cache,
             tx_wasm_cache,
-            gas_global,
         );
 
         if setup.write_to_memory {

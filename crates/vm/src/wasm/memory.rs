@@ -406,10 +406,6 @@ impl VmMemory for WasmMemory {
     fn write_string(&mut self, offset: u64, string: String) -> Result<Gas> {
         self.write_bytes(offset, string.as_bytes())
     }
-
-    fn store(&self) -> rc::Weak<RefCell<wasmer::Store>> {
-        self.store.clone()
-    }
 }
 
 /// A custom [`Tunables`] to set a WASM memory limits.

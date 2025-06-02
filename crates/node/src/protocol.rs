@@ -888,7 +888,7 @@ where
 
     tx_gas_meter
         .borrow_mut()
-        .consume(masp_gas_meter.borrow().get_tx_consumed_gas())
+        .consume(masp_gas_meter.borrow().get_consumed_gas())
         .map_err(|e| Error::GasError(e.to_string()))?;
 
     Ok(valid_batched_tx_result)
@@ -1273,7 +1273,7 @@ where
             || (VpsResult::default(), Gas::from(0)),
             |(mut result, mut vps_gas), addr| {
                 let gas_meter =
-                    RefCell::new(VpGasMeter::new_from_tx_meter(tx_gas_meter));
+                    RefCell::new(VpGasMeter::new_from_meter(tx_gas_meter));
                 let tx_accepted = match &addr {
                     Address::Implicit(_) | Address::Established(_) => {
                         let (vp_hash, gas) = state
@@ -1471,7 +1471,7 @@ where
                     ))?;
                 gas_meter
                     .borrow()
-                    .check_vps_limit(vps_gas.clone())
+                    .check_limit(vps_gas.clone())
                     .map_err(|err| Error::GasError(err.to_string()))?;
 
                 Ok((result, vps_gas))
@@ -1503,7 +1503,7 @@ fn merge_vp_results(
         .checked_add(b_gas)
         .ok_or(Error::GasError(gas::Error::GasOverflow.to_string()))?;
     tx_gas_meter
-        .check_vps_limit(vps_gas.clone())
+        .check_limit(vps_gas.clone())
         .map_err(|err| Error::GasError(err.to_string()))?;
 
     Ok((
