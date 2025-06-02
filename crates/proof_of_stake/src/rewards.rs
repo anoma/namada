@@ -1058,3 +1058,611 @@ mod tests {
             .unwrap();
     }
 }
+
+/// Tests for claim_rewards optimizations
+#[allow(clippy::arithmetic_side_effects, clippy::cast_possible_truncation)]
+#[cfg(test)]
+mod claim_optimizations {
+    use std::collections::BTreeMap;
+    use std::str::FromStr;
+
+    use namada_core::key;
+    use namada_state::OptionExt;
+    use namada_state::collections::lazy_map::Collectable;
+    use namada_state::testing::TestState;
+    use prop::collection;
+    use proptest::prelude::*;
+    use storage::{
+        bond_handle, delegator_redelegated_bonds_handle,
+        validator_slashes_handle,
+    };
+
+    use super::*;
+    use crate::slashing::{apply_list_slashes, find_validator_slashes};
+    use crate::test_utils::test_init_genesis;
+    use crate::types::{EagerRedelegatedBondsMap, Slash};
+    use crate::{FoldRedelegatedBondsResult, GenesisValidator, OwnedPosParams};
+
+    proptest! {
+        #[test]
+        fn test_optimized_computer_current_rewards(
+            input in arb_test_optimized_computer_current_rewards()
+        ) {
+            test_optimized_computer_current_rewards_aux(input);
+        }
+    }
+
+    #[derive(Debug)]
+    struct Input {
+        current_epoch: Epoch,
+        last_claim_epoch: Option<Epoch>,
+        validator: Address,
+        source: Address,
+        bonds: Vec<Option<token::Amount>>,
+        validator_slashes: Vec<Vec<Dec>>,
+        redeleg_slashes: Vec<Vec<Dec>>,
+        redelegs: Vec<Vec<(Address, token::Amount)>>,
+    }
+
+    fn arb_test_optimized_computer_current_rewards()
+    -> impl Strategy<Value = Input> {
+        (1..20_u64, arb_bond_id()).prop_flat_map(
+            |(current_epoch, (validator, source))| {
+                (
+                    Just((current_epoch, validator, source)),
+                    arb_claim_epoch(current_epoch),
+                    arb_bonds(current_epoch),
+                    arb_slashes(current_epoch),
+                    arb_slashes(current_epoch),
+                )
+                    .prop_flat_map(
+                        |(
+                            (current_epoch, validator, source),
+                            last_claim_epoch,
+                            bonds,
+                            validator_slashes,
+                            redeleg_slashes,
+                        )| {
+                            (
+                                Just((
+                                    Epoch(current_epoch),
+                                    last_claim_epoch.map(Epoch),
+                                    validator,
+                                    source,
+                                    bonds,
+                                    validator_slashes,
+                                    redeleg_slashes,
+                                )),
+                                arb_redelegs(current_epoch),
+                            )
+                                .prop_map(
+                                    |(
+                                        (
+                                            current_epoch,
+                                            last_claim_epoch,
+                                            validator,
+                                            source,
+                                            bonds,
+                                            validator_slashes,
+                                            redeleg_slashes,
+                                        ),
+                                        redelegs,
+                                    )| {
+                                        Input {
+                                            current_epoch,
+                                            last_claim_epoch,
+                                            validator,
+                                            source,
+                                            bonds,
+                                            validator_slashes,
+                                            redeleg_slashes,
+                                            redelegs,
+                                        }
+                                    },
+                                )
+                        },
+                    )
+            },
+        )
+    }
+
+    fn arb_bond_id() -> impl Strategy<Value = (Address, Address)> {
+        let validator = Just(address::testing::established_address_1());
+        let source = prop_oneof![
+            // Same as the validator - self-bond
+            Just(address::testing::established_address_1()),
+            // A delegator bond
+            Just(address::testing::established_address_2()),
+        ];
+        (validator, source)
+    }
+
+    fn arb_claim_epoch(
+        current_epoch: u64,
+    ) -> impl Strategy<Value = Option<u64>> {
+        if current_epoch == 1 {
+            Just(None).boxed()
+        } else {
+            prop_oneof![Just(None), (1..current_epoch).prop_map(Some)].boxed()
+        }
+    }
+
+    fn arb_bonds(
+        current_epoch: u64,
+    ) -> impl Strategy<Value = Vec<Option<token::Amount>>> {
+        collection::vec(
+            prop_oneof![
+                Just(None),
+                (1_000_000..1_000_000_000_u64)
+                    .prop_map(token::Amount::from_u64)
+                    .prop_map(Some)
+            ],
+            current_epoch as usize,
+        )
+    }
+
+    fn arb_slashes(len: u64) -> impl Strategy<Value = Vec<Vec<Dec>>> {
+        collection::vec(
+            collection::vec(
+                (1..=10_i128)
+                    .prop_map(|mantissa| Dec::new(mantissa, 6).unwrap()),
+                0..3,
+            ),
+            len as usize,
+        )
+    }
+
+    fn arb_redelegs(
+        current_epoch: u64,
+    ) -> impl Strategy<Value = Vec<Vec<(Address, token::Amount)>>> {
+        collection::vec(
+            collection::vec(
+                (
+                    address::testing::arb_established_address(),
+                    1..1_000_000_000_u64,
+                )
+                    .prop_map(|(addr, token)| {
+                        (
+                            Address::Established(addr),
+                            token::Amount::from_u64(token),
+                        )
+                    }),
+                0..3,
+            ),
+            current_epoch as usize,
+        )
+    }
+
+    fn test_optimized_computer_current_rewards_aux(
+        Input {
+            current_epoch,
+            last_claim_epoch,
+            validator,
+            source,
+            bonds,
+            validator_slashes,
+            redeleg_slashes,
+            redelegs,
+        }: Input,
+    ) {
+        // Vars that affect execution path:
+        // `last_reward_claim_epoch`
+        // `bonds` for this `source` and `validator`
+        // `validator_slashes` for this `validator`
+        // `redelegated_bonds` for this `source` and `validator` (only those
+        // with the same `start` epoch as `bonds`) `redelegated_slashes`
+        // for the `redelegated_bonds` src validators
+        //
+        // Vars that don't affect execution path:
+        // `source`
+        // `validator`
+        // `current_epoch`
+        // `validator_rewards_products`
+
+        let mut state = TestState::default();
+
+        let params = OwnedPosParams {
+            unbonding_len: 3,
+            ..Default::default()
+        };
+
+        let consensus_key = key::testing::keypair_1().to_public();
+        let protocol_key = key::testing::keypair_2().to_public();
+        let eth_cold_key = key::testing::keypair_3().to_public();
+        let eth_hot_key = key::testing::keypair_4().to_public();
+        let commission_rate = Dec::new(5, 2).expect("Cannot fail");
+        let max_commission_rate_change = Dec::new(1, 2).expect("Cannot fail");
+
+        test_init_genesis::<
+            _,
+            namada_parameters::Store<_>,
+            namada_governance::Store<_>,
+            namada_trans_token::Store<_>,
+        >(
+            &mut state,
+            params.clone(),
+            [GenesisValidator {
+                address: validator.clone(),
+                tokens: token::Amount::native_whole(1_000),
+                consensus_key,
+                protocol_key: protocol_key.clone(),
+                eth_cold_key: eth_cold_key.clone(),
+                eth_hot_key: eth_hot_key.clone(),
+                commission_rate,
+                max_commission_rate_change,
+                metadata: Default::default(),
+            }]
+            .into_iter(),
+            Epoch(0),
+        )
+        .unwrap();
+
+        let claim_start = last_claim_epoch.unwrap_or_default();
+        let claim_end = current_epoch.prev().unwrap();
+
+        // Populate validator rewards products up to claim end epoch
+        for ep in Epoch::iter_bounds_inclusive(claim_start, claim_end) {
+            validator_rewards_products_handle(&validator)
+                .insert(&mut state, ep, Dec::from_str("0.5").unwrap())
+                .unwrap();
+        }
+
+        // Clamp redelegs to the maximum of what's available in bonds
+        let redelegs = redelegs.into_iter().zip(bonds.iter()).enumerate().map(
+            |(ix, (redelegs, bond))| {
+                // There cannot be any redelegs before pipeline epoch (otherwise
+                // a call to `params.redelegation_start_epoch_from_end will
+                // fail)
+                if (ix as u64) < params.pipeline_len {
+                    return vec![];
+                };
+
+                if let Some(bond) = bond {
+                    let mut left = *bond;
+                    redelegs
+                        .into_iter()
+                        .filter_map(|(addr, amount)| {
+                            if left.is_zero() {
+                                None
+                            } else if amount >= left {
+                                left = token::Amount::zero();
+                                Some((addr, left))
+                            } else {
+                                left -= amount;
+                                Some((addr, amount))
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                } else {
+                    vec![]
+                }
+            },
+        );
+
+        // Populate bonds
+        let bond_handle = bond_handle(&source, &validator);
+        for (ix, bond) in bonds.iter().enumerate() {
+            if let Some(amount) = bond {
+                let epoch = Epoch(ix as u64 + 1);
+                bond_handle
+                    .add::<_, namada_governance::Store<_>>(
+                        &mut state, *amount, epoch, 0,
+                    )
+                    .unwrap();
+            }
+        }
+
+        // Populate redelegs
+        for (ix, redelegs) in redelegs.clone().enumerate() {
+            let epoch = Epoch(ix as u64 + 1);
+            for (src_val, amount) in redelegs {
+                delegator_redelegated_bonds_handle(&source)
+                    .at(&validator)
+                    .at(&epoch)
+                    .at(&src_val)
+                    .insert(
+                        &mut state,
+                        // Start epoch of the src bond
+                        Epoch(0),
+                        amount,
+                    )
+                    .unwrap();
+            }
+        }
+
+        // Populate validator slashes
+        for (ix, slashes) in validator_slashes.into_iter().enumerate() {
+            let epoch = Epoch(ix as u64 + 1);
+            for rate in slashes {
+                validator_slashes_handle(&validator)
+                    .push(
+                        &mut state,
+                        Slash {
+                            epoch,
+                            block_height: 0, // doesn't matter for the test
+                            r#type: crate::types::SlashType::DuplicateVote,
+                            rate,
+                        },
+                    )
+                    .unwrap();
+            }
+        }
+
+        let redeleg_src_vals: Vec<Address> = redelegs
+            .flat_map(|redelegs| {
+                redelegs.into_iter().map(|(addr, _amount)| addr)
+            })
+            .collect();
+
+        // Populate redelegation src validators slashes
+        if !redeleg_src_vals.is_empty() {
+            for (ix, slashes) in redeleg_slashes.into_iter().enumerate() {
+                let epoch = Epoch(ix as u64 + 1);
+                let validator_ix = ix % redeleg_src_vals.len();
+                let validator = redeleg_src_vals.get(validator_ix).unwrap();
+                for rate in slashes {
+                    validator_slashes_handle(validator)
+                        .push(
+                            &mut state,
+                            Slash {
+                                epoch,
+                                block_height: 0, // doesn't matter for the test
+                                r#type: crate::types::SlashType::DuplicateVote,
+                                rate,
+                            },
+                        )
+                        .unwrap();
+                }
+            }
+        }
+
+        // Run original vs optimized fns for comparison
+        let original_res = compute_current_rewards_from_bonds::<
+            _,
+            namada_governance::Store<_>,
+        >(&state, &source, &validator, current_epoch)
+        .unwrap();
+
+        let optimized_res =
+            super::compute_current_rewards_from_bonds::<
+                _,
+                namada_governance::Store<_>,
+            >(&state, &source, &validator, current_epoch)
+            .unwrap();
+
+        assert_eq!(optimized_res, original_res);
+    }
+
+    /// Original implementation
+    fn compute_current_rewards_from_bonds<S, Gov>(
+        storage: &S,
+        source: &Address,
+        validator: &Address,
+        current_epoch: Epoch,
+    ) -> Result<token::Amount>
+    where
+        S: StorageRead,
+        Gov: governance::Read<S>,
+    {
+        if current_epoch == Epoch::default() {
+            // Nothing to claim in the first epoch
+            return Ok(token::Amount::zero());
+        }
+
+        let last_claim_epoch =
+            get_last_reward_claim_epoch(storage, source, validator).unwrap();
+        if let Some(last_epoch) = last_claim_epoch {
+            if last_epoch == current_epoch {
+                // Already claimed in this epoch
+                return Ok(token::Amount::zero());
+            }
+        }
+
+        let mut reward_tokens = token::Amount::zero();
+
+        // Want to claim from `last_claim_epoch` to `current_epoch.prev()` since
+        // rewards are computed at the end of an epoch
+        let (claim_start, claim_end) = (
+            last_claim_epoch.unwrap_or_default(),
+            current_epoch
+                .prev()
+                .expect("Safe because of the check above"),
+        );
+        let bond_amounts = bond_amounts_for_rewards::<S, Gov>(
+            storage,
+            &BondId {
+                source: source.clone(),
+                validator: validator.clone(),
+            },
+            claim_start,
+            claim_end,
+        )
+        .unwrap();
+
+        let rewards_products = validator_rewards_products_handle(validator);
+        for (ep, bond_amount) in bond_amounts {
+            debug_assert!(ep >= claim_start);
+            debug_assert!(ep <= claim_end);
+            let rp = rewards_products
+                .get(storage, &ep)
+                .unwrap()
+                .unwrap_or_default();
+            let reward = bond_amount.mul_floor(rp).unwrap();
+            checked!(reward_tokens += reward).unwrap();
+        }
+
+        Ok(reward_tokens)
+    }
+
+    /// Original implementation
+    fn bond_amounts_for_rewards<S, Gov>(
+        storage: &S,
+        bond_id: &BondId,
+        claim_start: Epoch,
+        claim_end: Epoch,
+    ) -> Result<BTreeMap<Epoch, token::Amount>>
+    where
+        S: StorageRead,
+        Gov: governance::Read<S>,
+    {
+        let params = read_pos_params::<S, Gov>(storage).unwrap();
+        // Outer key is every epoch in which the a bond amount contributed to
+        // stake and the inner key is the start epoch used to calculate
+        // slashes. The inner keys are discarded after applying slashes.
+        let mut amounts: BTreeMap<Epoch, BTreeMap<Epoch, token::Amount>> =
+            BTreeMap::default();
+
+        // Only need to do bonds since rewards are accumulated during
+        // `unbond_tokens`
+        let bonds =
+            bond_handle(&bond_id.source, &bond_id.validator).get_data_handler();
+        for next in bonds.iter(storage).unwrap() {
+            let (start, delta) = next.unwrap();
+
+            for ep in Epoch::iter_bounds_inclusive(claim_start, claim_end) {
+                // A bond that wasn't unbonded is added to all epochs up to
+                // `claim_end`
+                if start <= ep {
+                    let amount = amounts
+                        .entry(ep)
+                        .or_default()
+                        .entry(start)
+                        .or_default();
+                    *amount = checked!(amount + delta).unwrap();
+                }
+            }
+        }
+
+        if !amounts.is_empty() {
+            let slashes =
+                find_validator_slashes(storage, &bond_id.validator).unwrap();
+            let redelegated_bonded =
+                delegator_redelegated_bonds_handle(&bond_id.source)
+                    .at(&bond_id.validator);
+
+            // Apply slashes
+            for (&ep, amounts) in amounts.iter_mut() {
+                for (&start, amount) in amounts.iter_mut() {
+                    let list_slashes = slashes
+                        .iter()
+                        .filter(|slash| {
+                            let processing_epoch = slash.epoch.unchecked_add(
+                                params.slash_processing_epoch_offset(),
+                            );
+                            // Only use slashes that were processed before or at
+                            // the epoch associated
+                            // with the bond amount. This assumes
+                            // that slashes are applied before inflation.
+                            processing_epoch <= ep && start <= slash.epoch
+                        })
+                        .cloned()
+                        .collect::<Vec<_>>();
+
+                    let slash_epoch_filter = |e: Epoch| {
+                        e.unchecked_add(params.slash_processing_epoch_offset())
+                            <= ep
+                    };
+
+                    let redelegated_bonds = redelegated_bonded
+                        .at(&start)
+                        .collect_map(storage)
+                        .unwrap();
+
+                    let result_fold = fold_and_slash_redelegated_bonds(
+                        storage,
+                        &params,
+                        &redelegated_bonds,
+                        start,
+                        &list_slashes,
+                        slash_epoch_filter,
+                    )
+                    .unwrap();
+
+                    let total_not_redelegated =
+                        checked!(amount - result_fold.total_redelegated)
+                            .unwrap();
+
+                    let after_not_redelegated = apply_list_slashes(
+                        &params,
+                        list_slashes.iter(),
+                        total_not_redelegated,
+                    )
+                    .unwrap();
+
+                    *amount = checked!(
+                        after_not_redelegated
+                            + result_fold.total_after_slashing
+                    )
+                    .unwrap();
+                }
+            }
+        }
+
+        amounts
+            .into_iter()
+            // Flatten the inner maps to discard bond start epochs
+            .map(|(ep, amounts)| {
+                Ok((
+                    ep,
+                    token::Amount::sum(amounts.values().copied())
+                        .ok_or_err_msg("token amount overflow")
+                        .unwrap(),
+                ))
+            })
+            .collect()
+    }
+
+    /// Original implementation
+    fn fold_and_slash_redelegated_bonds<S>(
+        storage: &S,
+        params: &OwnedPosParams,
+        redelegated_unbonds: &EagerRedelegatedBondsMap,
+        start_epoch: Epoch,
+        list_slashes: &[Slash],
+        slash_epoch_filter: impl Fn(Epoch) -> bool,
+    ) -> Result<FoldRedelegatedBondsResult>
+    where
+        S: StorageRead,
+    {
+        let mut result = FoldRedelegatedBondsResult::default();
+        for (src_validator, bonds_map) in redelegated_unbonds {
+            for (bond_start, &change) in bonds_map {
+                // Look-up slashes for this validator ...
+                let validator_slashes: Vec<Slash> =
+                    validator_slashes_handle(src_validator)
+                        .iter(storage)
+                        .unwrap()
+                        .collect::<Result<Vec<Slash>>>()
+                        .unwrap();
+                // Merge the two lists of slashes
+                let mut merged: Vec<Slash> = validator_slashes
+                    .into_iter()
+                    .filter(|slash| {
+                        params.in_redelegation_slashing_window(
+                            slash.epoch,
+                            params
+                                .redelegation_start_epoch_from_end(start_epoch),
+                            start_epoch,
+                        ) && *bond_start <= slash.epoch
+                            && slash_epoch_filter(slash.epoch)
+                    })
+                    // ... and add `list_slashes`
+                    .chain(list_slashes.iter().cloned())
+                    .collect();
+
+                // Sort slashes by epoch
+                merged
+                    .sort_by(|s1, s2| s1.epoch.partial_cmp(&s2.epoch).unwrap());
+
+                result.total_redelegated =
+                    checked!(result.total_redelegated + change).unwrap();
+                let list_slashes =
+                    apply_list_slashes(params, merged.iter(), change).unwrap();
+                result.total_after_slashing =
+                    checked!(result.total_after_slashing + list_slashes)
+                        .unwrap();
+            }
+        }
+        Ok(result)
+    }
+}
