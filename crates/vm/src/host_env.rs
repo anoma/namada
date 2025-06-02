@@ -1,6 +1,7 @@
 //! Virtual machine's host environment exposes functions that may be called from
 //! within a virtual machine.
 
+pub mod gas_meter;
 pub mod state;
 
 use std::borrow::Cow;
@@ -21,8 +22,8 @@ use namada_core::internal::{HostEnvResult, KeyVal};
 use namada_core::storage::{Key, TX_INDEX_LENGTH, TxIndex};
 use namada_events::{Event, EventTypeBuilder};
 use namada_gas::{
-    self as gas, Gas, GasMeterKind, GasMetering, MEMORY_ACCESS_GAS_PER_BYTE,
-    TxGasMeter, VpGasMeter,
+    self as gas, Gas, GasMetering, MEMORY_ACCESS_GAS_PER_BYTE, TxGasMeter,
+    VpGasMeter,
 };
 use namada_state::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use namada_state::write_log::{self, WriteLog};
@@ -117,7 +118,7 @@ where
     /// Storage prefix iterators.
     pub iterators: HostRef<RwAccess, PrefixIterators<'static, D>>,
     /// Transaction gas meter. In  `RefCell` to charge gas in read-only fns.
-    pub gas_meter: HostRef<RoAccess, RefCell<TxGasMeter>>,
+    pub gas_meter: HostRef<RoAccess, RefCell<gas_meter::GasMeter<TxGasMeter>>>,
     /// Transaction sentinel. In  `RefCell` to charge gas in read-only fns.
     pub sentinel: HostRef<RoAccess, RefCell<TxSentinel>>,
     /// Hash of the wrapper transaction associated with
@@ -146,11 +147,6 @@ where
     /// To avoid unused parameter without "wasm-runtime" feature
     #[cfg(not(feature = "wasm-runtime"))]
     pub cache_access: std::marker::PhantomData<CA>,
-    /// WASM intructions gas meter kind
-    pub gas_meter_kind: GasMeterKind,
-    /// Global mutable gas variable, only set when gas meter kind is
-    /// `MutGlobal`
-    pub gas_global: HostRef<RoAccess, Option<wasmer::Global>>,
 }
 
 impl<MEM, D, H, CA> TxVmEnv<MEM, D, H, CA>
@@ -173,7 +169,7 @@ where
         in_mem: &InMemory<H>,
         db: &D,
         iterators: &mut PrefixIterators<'static, D>,
-        gas_meter: &RefCell<TxGasMeter>,
+        gas_meter: &RefCell<gas_meter::GasMeter<TxGasMeter>>,
         sentinel: &RefCell<TxSentinel>,
         wrapper_hash: &Hash,
         tx: &Tx,
@@ -184,8 +180,6 @@ where
         yielded_value: &mut Option<Vec<u8>>,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
         #[cfg(feature = "wasm-runtime")] tx_wasm_cache: &mut TxCache<CA>,
-        gas_meter_kind: GasMeterKind,
-        gas_global: &Option<wasmer::Global>,
     ) -> Self {
         let write_log = unsafe { RwHostRef::new(write_log) };
         let in_mem = unsafe { RoHostRef::new(in_mem) };
@@ -204,7 +198,6 @@ where
         let vp_wasm_cache = unsafe { RwHostRef::new(vp_wasm_cache) };
         #[cfg(feature = "wasm-runtime")]
         let tx_wasm_cache = unsafe { RwHostRef::new(tx_wasm_cache) };
-        let gas_global = unsafe { RoHostRef::new(gas_global) };
         let ctx = TxCtx {
             write_log,
             db,
@@ -225,8 +218,6 @@ where
             tx_wasm_cache,
             #[cfg(not(feature = "wasm-runtime"))]
             cache_access: std::marker::PhantomData,
-            gas_meter_kind,
-            gas_global,
         };
 
         Self { memory, ctx }
@@ -278,7 +269,10 @@ where
     /// Use gas meter and sentinel
     pub fn gas_meter_and_sentinel(
         &self,
-    ) -> (&RefCell<TxGasMeter>, &RefCell<TxSentinel>) {
+    ) -> (
+        &RefCell<gas_meter::GasMeter<TxGasMeter>>,
+        &RefCell<TxSentinel>,
+    ) {
         let gas_meter = unsafe { self.gas_meter.get() };
         let sentinel = unsafe { self.sentinel.get() };
         (gas_meter, sentinel)
@@ -312,8 +306,6 @@ where
             tx_wasm_cache: self.tx_wasm_cache,
             #[cfg(not(feature = "wasm-runtime"))]
             cache_access: std::marker::PhantomData,
-            gas_meter_kind: self.gas_meter_kind,
-            gas_global: self.gas_global,
         }
     }
 }
@@ -347,7 +339,7 @@ where
     /// Storage prefix iterators.
     pub iterators: HostRef<RwAccess, PrefixIterators<'static, D>>,
     /// VP gas meter. In  `RefCell` to charge gas in read-only fns.
-    pub gas_meter: HostRef<RoAccess, RefCell<VpGasMeter>>,
+    pub gas_meter: HostRef<RoAccess, RefCell<gas_meter::GasMeter<VpGasMeter>>>,
     /// The transaction code is used for signature verification
     pub tx: HostRef<RoAccess, Tx>,
     /// The commitments inside the transaction
@@ -372,8 +364,6 @@ where
     /// To avoid unused parameter without "wasm-runtime" feature
     #[cfg(not(feature = "wasm-runtime"))]
     pub cache_access: std::marker::PhantomData<CA>,
-    /// WASM intructions gas meter kind
-    pub gas_meter_kind: GasMeterKind,
 }
 
 /// A Validity predicate runner for calls from the [`vp_eval`] function.
@@ -421,7 +411,7 @@ where
         write_log: &WriteLog,
         in_mem: &InMemory<H>,
         db: &D,
-        gas_meter: &RefCell<VpGasMeter>,
+        gas_meter: &RefCell<gas_meter::GasMeter<VpGasMeter>>,
         tx: &Tx,
         cmt: &TxCommitments,
         tx_index: &TxIndex,
@@ -432,7 +422,6 @@ where
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
-        gas_meter_kind: GasMeterKind,
     ) -> Self {
         let ctx = VpCtx::new(
             address,
@@ -451,7 +440,6 @@ where
             eval_runner,
             #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
-            gas_meter_kind,
         );
 
         Self { memory, ctx }
@@ -499,7 +487,7 @@ where
         write_log: &WriteLog,
         in_mem: &InMemory<H>,
         db: &D,
-        gas_meter: &RefCell<VpGasMeter>,
+        gas_meter: &RefCell<gas_meter::GasMeter<VpGasMeter>>,
         tx: &Tx,
         cmt: &TxCommitments,
         tx_index: &TxIndex,
@@ -510,7 +498,6 @@ where
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
-        gas_meter_kind: GasMeterKind,
     ) -> Self {
         let address = unsafe { RoHostRef::new(address) };
         let write_log = unsafe { RoHostRef::new(write_log) };
@@ -547,7 +534,6 @@ where
             vp_wasm_cache,
             #[cfg(not(feature = "wasm-runtime"))]
             cache_access: std::marker::PhantomData,
-            gas_meter_kind,
         }
     }
 
@@ -566,7 +552,7 @@ where
     }
 
     /// Use gas meter
-    pub fn gas_meter(&self) -> &RefCell<VpGasMeter> {
+    pub fn gas_meter(&self) -> &RefCell<gas_meter::GasMeter<VpGasMeter>> {
         let gas_meter = unsafe { self.gas_meter.get() };
         gas_meter
     }
@@ -599,7 +585,6 @@ where
             vp_wasm_cache: self.vp_wasm_cache,
             #[cfg(not(feature = "wasm-runtime"))]
             cache_access: std::marker::PhantomData,
-            gas_meter_kind: self.gas_meter_kind,
         }
     }
 }
@@ -647,8 +632,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len.try_into()?)
@@ -681,8 +664,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len.try_into()?)
@@ -726,8 +707,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len.try_into()?)
@@ -773,8 +752,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let result_buffer = unsafe { env.ctx.result_buffer.get_mut() };
     let value = result_buffer
         .take()
@@ -800,8 +777,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let (prefix, gas) = env
         .memory
         .read_string(prefix_ptr, prefix_len.try_into()?)
@@ -840,8 +815,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     tracing::debug!("tx_iter_next iter_id {}", iter_id,);
 
     let iterators = unsafe { env.ctx.iterators.get_mut() };
@@ -907,8 +880,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len.try_into()?)
@@ -949,8 +920,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len.try_into()?)
@@ -1032,8 +1001,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let (key, gas) = env
         .memory
         .read_string(key_ptr, key_len.try_into()?)
@@ -1064,8 +1031,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let (event, gas) = env
         .memory
         .read_bytes(event_ptr, event_len.try_into()?)
@@ -1101,8 +1066,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let (event_type, gas) = env
         .memory
         .read_string(event_type_ptr, event_type_len.try_into()?)
@@ -1470,8 +1433,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let (addr, gas) = env
         .memory
         .read_string(addr_ptr, addr_len.try_into()?)
@@ -1510,8 +1471,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let (addr, gas) = env
         .memory
         .read_string(addr_ptr, addr_len.try_into()?)
@@ -1561,8 +1520,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let (code_hash, gas) = env
         .memory
         .read_bytes(code_hash_ptr, code_hash_len.try_into()?)
@@ -1613,8 +1570,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let state = env.state();
     let (chain_id, gas) = state.in_mem().get_chain_id();
     consume_tx_gas::<MEM, D, H, CA>(env, gas)?;
@@ -1637,8 +1592,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let state = env.state();
     let (height, gas) = state.in_mem().get_block_height();
     consume_tx_gas::<MEM, D, H, CA>(env, gas)?;
@@ -1657,8 +1610,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     consume_tx_gas::<MEM, D, H, CA>(
         env,
         (TX_INDEX_LENGTH as u64)
@@ -1701,8 +1652,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let state = env.state();
     let (epoch, gas) = state.in_mem().get_current_epoch();
     consume_tx_gas::<MEM, D, H, CA>(env, gas)?;
@@ -1719,8 +1668,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let state = env.state();
     let pred_epochs = state.in_mem().block.pred_epochs.clone();
     let bytes = pred_epochs.serialize_to_vec();
@@ -1749,8 +1696,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     // Gas for getting the native token address from storage
     consume_tx_gas::<MEM, D, H, CA>(
         env,
@@ -1780,8 +1725,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let state = env.state();
     let (header, gas) =
         StateRead::get_block_header(&state, Some(BlockHeight(height)))?;
@@ -2057,8 +2000,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let (str, _gas) = env
         .memory
         .read_string(str_ptr, str_len.try_into()?)
@@ -2079,8 +2020,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let code_hash = Hash::try_from(code_hash)
         .map_err(|e| TxRuntimeError::InvalidVpCodeHash(e.to_string()))?;
 
@@ -2156,8 +2095,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let (hash_list, gas) = env
         .memory
         .read_bytes(hash_list_ptr, hash_list_len.try_into()?)
@@ -2204,8 +2141,6 @@ where
     }
     .into_storage_result();
 
-    tx_sync_gas_into_wasm(env)?;
-
     result
 }
 
@@ -2221,8 +2156,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let (serialized_transaction, gas) = env
         .memory
         .read_bytes(transaction_ptr, transaction_len.try_into()?)
@@ -2258,8 +2191,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    tx_sync_gas_from_wasm(env)?;
-
     let (value_to_yield, gas) = env
         .memory
         .read_bytes(buf_ptr, buf_len.try_into()?)
@@ -2420,76 +2351,7 @@ where
         })
         .into_storage_result();
 
-    tx_sync_gas_into_wasm(env)?;
-
     result
-}
-
-/// Sync gas meter from WASM into host env
-fn tx_sync_gas_from_wasm<MEM, D, H, CA>(
-    env: &mut TxVmEnv<MEM, D, H, CA>,
-) -> Result<()>
-where
-    MEM: VmMemory,
-    D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: 'static + StorageHasher,
-    CA: WasmCacheAccess,
-{
-    if let GasMeterKind::MutGlobal = env.ctx.gas_meter_kind {
-        let store = env
-            .memory
-            .store()
-            .upgrade()
-            .expect("Store must be accessible while the WASM is running");
-        let mut store = store.borrow_mut();
-        let gas_global = unsafe { env.ctx.gas_global.get() };
-        let wasm_gas = gas_global.as_ref().unwrap().get(&mut store);
-        #[allow(clippy::cast_sign_loss)]
-        if let wasmer::Value::I64(available_gas) = wasm_gas {
-            // intentional wrap around the value
-            let available_gas = available_gas as u64;
-            let gas_meter = unsafe { env.ctx.gas_meter.get() };
-            gas_meter.borrow_mut().set_available_gas(available_gas);
-        } else {
-            return Err(Error::new_const("Unexpected WASM gas value type"));
-        }
-    }
-    Ok(())
-}
-
-/// Sync gas meter from host env back into WASM
-fn tx_sync_gas_into_wasm<MEM, D, H, CA>(
-    env: &mut TxVmEnv<MEM, D, H, CA>,
-) -> Result<()>
-where
-    MEM: VmMemory,
-    D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: 'static + StorageHasher,
-    CA: WasmCacheAccess,
-{
-    if let GasMeterKind::MutGlobal = env.ctx.gas_meter_kind {
-        let store = env
-            .memory
-            .store()
-            .upgrade()
-            .expect("Store must be accessible while the WASM is running");
-        let mut store = store.borrow_mut();
-        let gas_meter = unsafe { env.ctx.gas_meter.get() };
-
-        // intentional wrap around the value
-        #[allow(clippy::cast_possible_wrap)]
-        let available_gas =
-            u64::from(gas_meter.borrow().get_available_gas()) as i64;
-
-        let gas_global = unsafe { env.ctx.gas_global.get() };
-
-        gas_global
-            .as_ref()
-            .unwrap()
-            .set(&mut store, wasmer::Value::I64(available_gas))
-            .unwrap();
-    }
-    Ok(())
 }
 
 /// A helper module for testing
@@ -2507,7 +2369,7 @@ pub mod testing {
         state: &mut S,
         iterators: &mut PrefixIterators<'static, <S as StateRead>::D>,
         verifiers: &mut BTreeSet<Address>,
-        gas_meter: &RefCell<TxGasMeter>,
+        gas_meter: &RefCell<gas_meter::GasMeter<TxGasMeter>>,
         sentinel: &RefCell<TxSentinel>,
         tx: &Tx,
         cmt: &TxCommitments,
@@ -2516,7 +2378,6 @@ pub mod testing {
         yielded_value: &mut Option<Vec<u8>>,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
         #[cfg(feature = "wasm-runtime")] tx_wasm_cache: &mut TxCache<CA>,
-        gas_global: &Option<wasmer::Global>,
     ) -> TxVmEnv<NativeMemory, <S as StateRead>::D, <S as StateRead>::H, CA>
     where
         S: State,
@@ -2542,8 +2403,6 @@ pub mod testing {
             vp_wasm_cache,
             #[cfg(feature = "wasm-runtime")]
             tx_wasm_cache,
-            GasMeterKind::MutGlobal,
-            gas_global,
         )
     }
 
@@ -2553,7 +2412,7 @@ pub mod testing {
         state: &mut S,
         iterators: &mut PrefixIterators<'static, <S as StateRead>::D>,
         verifiers: &mut BTreeSet<Address>,
-        gas_meter: &RefCell<TxGasMeter>,
+        gas_meter: &RefCell<gas_meter::GasMeter<TxGasMeter>>,
         sentinel: &RefCell<TxSentinel>,
         tx: &Tx,
         cmt: &TxCommitments,
@@ -2563,7 +2422,6 @@ pub mod testing {
         store: Rc<RefCell<wasmer::Store>>,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
         #[cfg(feature = "wasm-runtime")] tx_wasm_cache: &mut TxCache<CA>,
-        gas_global: &Option<wasmer::Global>,
     ) -> TxVmEnv<WasmMemory, <S as StateRead>::D, <S as StateRead>::H, CA>
     where
         S: State,
@@ -2595,8 +2453,6 @@ pub mod testing {
             vp_wasm_cache,
             #[cfg(feature = "wasm-runtime")]
             tx_wasm_cache,
-            GasMeterKind::MutGlobal,
-            gas_global,
         );
 
         env.memory.init_from(&wasm_memory);
@@ -2609,7 +2465,7 @@ pub mod testing {
         address: &Address,
         state: &S,
         iterators: &mut PrefixIterators<'static, <S as StateRead>::D>,
-        gas_meter: &RefCell<VpGasMeter>,
+        gas_meter: &RefCell<gas_meter::GasMeter<VpGasMeter>>,
         tx: &Tx,
         cmt: &TxCommitments,
         tx_index: &TxIndex,
@@ -2643,7 +2499,6 @@ pub mod testing {
             eval_runner,
             #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
-            GasMeterKind::MutGlobal,
         )
     }
 }

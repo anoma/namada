@@ -15,6 +15,8 @@ use namada_state::{
 use namada_storage as storage;
 use namada_tx::data::TxSentinel;
 
+use crate::host_env::gas_meter::GasMeter;
+
 impl_storage_read!(TxHostEnvState<'_, D, H>);
 impl_storage_read!(VpHostEnvState<'_, D, H>);
 impl_storage_write!(TxHostEnvState<'_, D, H>);
@@ -33,7 +35,7 @@ where
     /// State
     pub in_mem: &'a InMemory<H>,
     /// Tx gas meter
-    pub gas_meter: &'a RefCell<TxGasMeter>,
+    pub gas_meter: &'a RefCell<GasMeter<TxGasMeter>>,
     /// Errors sentinel
     pub sentinel: &'a RefCell<TxSentinel>,
 }
@@ -52,7 +54,7 @@ where
     /// State
     pub in_mem: &'a InMemory<H>,
     /// VP gas meter
-    pub gas_meter: &'a RefCell<VpGasMeter>,
+    pub gas_meter: &'a RefCell<GasMeter<VpGasMeter>>,
 }
 
 impl<D, H> StateRead for TxHostEnvState<'_, D, H>

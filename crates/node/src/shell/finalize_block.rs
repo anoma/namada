@@ -413,7 +413,7 @@ where
                     let gas_scale = tx_data.tx_gas_meter.get_gas_scale();
                     let scaled_gas = tx_data
                         .tx_gas_meter
-                        .get_tx_consumed_gas()
+                        .get_consumed_gas()
                         .get_whole_gas_units(gas_scale);
                     tx_logs
                         .tx_event
@@ -446,7 +446,7 @@ where
                     let gas_scale = tx_data.tx_gas_meter.get_gas_scale();
                     let scaled_gas = tx_data
                         .tx_gas_meter
-                        .get_tx_consumed_gas()
+                        .get_consumed_gas()
                         .get_whole_gas_units(gas_scale);
 
                     tx_logs
@@ -523,7 +523,7 @@ where
         let gas_scale = tx_data.tx_gas_meter.get_gas_scale();
         let scaled_gas = tx_data
             .tx_gas_meter
-            .get_tx_consumed_gas()
+            .get_consumed_gas()
             .get_whole_gas_units(gas_scale);
 
         tx_logs
@@ -806,7 +806,7 @@ where
                 &mut self.state,
             );
             let tx_gas_meter = tx_gas_meter.into_inner();
-            let consumed_gas = tx_gas_meter.get_tx_consumed_gas();
+            let consumed_gas = tx_gas_meter.get_consumed_gas();
 
             // save the gas cost
             self.update_tx_gas(tx_hash, consumed_gas);
@@ -880,7 +880,7 @@ where
                 &mut self.state,
             );
             let tx_gas_meter = tx_gas_meter.into_inner();
-            let consumed_gas = tx_gas_meter.get_tx_consumed_gas();
+            let consumed_gas = tx_gas_meter.get_consumed_gas();
 
             // update the gas cost of the corresponding wrapper
             self.update_tx_gas(tx_hash, consumed_gas);

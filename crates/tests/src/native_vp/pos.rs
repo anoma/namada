@@ -445,8 +445,8 @@ mod tests {
             // Use the tx_env to run PoS VP
             let tx_env = tx_host_env::take();
 
-            let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-                &tx_env.gas_meter.borrow(),
+            let gas_meter = RefCell::new(VpGasMeter::new_from_meter(
+                &*tx_env.gas_meter.borrow(),
             ));
             let vp_env = TestNativeVpEnv::from_tx_env(tx_env, address::POS);
             let ctx = vp_env.ctx(&gas_meter);
@@ -597,7 +597,7 @@ pub mod testing {
     use itertools::Either;
     use namada_sdk::chain::Epoch;
     use namada_sdk::dec::Dec;
-    use namada_sdk::gas::TxGasMeter;
+    use namada_sdk::gas::{GasMetering, TxGasMeter};
     use namada_sdk::key::RefTo;
     use namada_sdk::key::common::PublicKey;
     use namada_sdk::proof_of_stake::ADDRESS as POS_ADDRESS;
@@ -611,6 +611,7 @@ pub mod testing {
     use namada_sdk::token::{Amount, Change};
     use namada_sdk::{address, governance, key, token};
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};
+    use namada_vm::host_env::gas_meter::GasMeter;
     use proptest::prelude::*;
 
     use crate::tx::{self, tx_host_env};
@@ -881,11 +882,13 @@ pub mod testing {
             let current_epoch = tx_host_env::with(|env| {
                 // Reset the gas meter on each change, so that we never run
                 // out in this test
-                let gas_limit = env.gas_meter.borrow().tx_gas_limit.clone();
-                env.gas_meter = RefCell::new(TxGasMeter::new(
-                    gas_limit,
-                    namada_sdk::parameters::get_gas_scale(tx::ctx()).unwrap(),
-                ));
+                let gas_limit = env.gas_meter.borrow().get_gas_limit();
+                env.gas_meter =
+                    RefCell::new(GasMeter::Native(TxGasMeter::new(
+                        gas_limit,
+                        namada_sdk::parameters::get_gas_scale(tx::ctx())
+                            .unwrap(),
+                    )));
                 env.state.in_mem().block.epoch
             });
             println!("Current epoch {}", current_epoch);
