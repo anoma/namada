@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::rc;
 
 use namada_core::hints;
-use namada_gas::{Gas, GasMetering, TxGasMeter};
+use namada_gas::{Gas, GasMetering};
 use namada_state::{DB, DBIter, StorageHasher};
 use wasmer::{Function, FunctionEnv, Imports};
 
@@ -55,20 +55,33 @@ impl WasmGasMeter {
         self.write_wasm_gas(self.initial_gas.clone(), None);
     }
 
-    /// Flush the consumed gas to the provided tx meter.
+    /// Flush the consumed gas to the provided meter.
     #[inline]
-    pub fn flush_to_tx_meter(
+    pub fn flush_to_meter(
         self,
-        meter: &mut TxGasMeter,
+        meter: &mut impl GasMetering,
     ) -> namada_gas::Result<()> {
-        let total_consumption = self.get_tx_consumed_gas();
+        // wasm = limit - variable + initial
 
-        let wasm_consumption = total_consumption
-            .checked_sub(self.initial_gas)
+        let current_tx_gas = self.read_wasm_gas(None);
+
+        if current_tx_gas == u64::MAX.into() {
+            return Err(namada_gas::Error::TransactionGasExceededError(
+                self.tx_gas_limit.get_whole_gas_units(self.gas_scale),
+            ));
+        }
+
+        let consumed_total = self
+            .tx_gas_limit
+            .checked_sub(current_tx_gas)
             .unwrap_or_default();
 
+        let consumed_wasm = consumed_total
+            .checked_add(self.initial_gas)
+            .ok_or(namada_gas::Error::GasOverflow)?;
+
         // only increment meter by the gas consumption in wasm
-        meter.consume(wasm_consumption)
+        meter.consume(consumed_wasm)
     }
 
     /// Return the gas initially available when this meter was first
@@ -165,12 +178,18 @@ impl GasMetering for WasmGasMeter {
         Ok(())
     }
 
-    fn get_tx_consumed_gas(&self) -> Gas {
+    fn get_initial_gas(&self) -> Gas {
+        self.initial_gas.clone()
+    }
+
+    fn get_consumed_gas(&self) -> Gas {
+        // total = limit - variable
+
         let current_tx_gas = self.read_wasm_gas(None);
 
-        self.tx_gas_limit.checked_sub(current_tx_gas).expect(
-            "the tx gas in wasm should not be greater than the gas limit",
-        )
+        self.tx_gas_limit
+            .checked_sub(current_tx_gas)
+            .unwrap_or_default()
     }
 
     fn get_gas_limit(&self) -> Gas {

@@ -29,9 +29,10 @@ use wasmer::{Engine, Module, NativeEngineExt, Store, Target};
 
 use super::TxCache;
 use super::memory::{Limit, WasmMemory};
+use crate::host_env::gas_meter::GasMeter;
 use crate::host_env::{TxVmEnv, VpCtx, VpEvaluator, VpVmEnv};
 use crate::types::VpInput;
-use crate::wasm::host_env::{tx_imports, vp_imports};
+use crate::wasm::host_env::{WasmGasMeter, tx_imports, vp_imports};
 use crate::wasm::{Cache, CacheName, VpCache, memory};
 use crate::{
     HostRef, RwAccess, WasmCacheAccess, WasmValidationError,
@@ -210,19 +211,35 @@ where
     let mut verifiers = BTreeSet::new();
     let mut result_buffer: Option<Vec<u8>> = None;
     let mut yielded_value: Option<Vec<u8>> = None;
-    let mut gas_global: Option<wasmer::Global> = None;
 
     let sentinel = RefCell::new(TxSentinel::default());
     let (write_log, in_mem, db) = state.split_borrow();
     const ZERO_HASH: Hash = Hash::zero();
     let wrapper_hash = wrapper_hash.unwrap_or(&ZERO_HASH);
+
+    let wasm_gas_meter = RefCell::new(GasMeter::new(
+        gas_meter_kind,
+        || {
+            // If gas metering is done through a host function, we
+            // take the provided gas meter, then restore it after
+            // we return from the wasm vm
+            std::mem::take(&mut *gas_meter.borrow_mut())
+        },
+        || {
+            // If gas metering is done through a wasm function, we
+            // must provide a reference to the store, where we will
+            // look-up a mutable global with the gas count
+            WasmGasMeter::uninit(Rc::downgrade(&store))
+        },
+    ));
+
     let mut env = TxVmEnv::new(
         WasmMemory::new(Rc::downgrade(&store)),
         write_log,
         in_mem,
         db,
         &mut iterators,
-        gas_meter,
+        &wasm_gas_meter,
         &sentinel,
         wrapper_hash,
         tx,
@@ -243,26 +260,16 @@ where
             .map_err(|e| Error::InstantiationError(Box::new(e)))?
     };
 
-    if let GasMeterKind::MutGlobal = gas_meter_kind {
-        let mut store = store.borrow_mut();
-        let global = instance
-            .exports
-            .get_global(MUT_GLOBAL_GAS_NAME)
-            .map_err(Error::MissingGasMutGlobal)?;
+    wasm_gas_meter
+        .borrow_mut()
+        .init_from(&*gas_meter.borrow(), || {
+            let global = instance
+                .exports
+                .get_global(MUT_GLOBAL_GAS_NAME)
+                .map_err(Error::MissingGasMutGlobal)?;
 
-        #[allow(clippy::cast_possible_wrap)]
-        // intentional wrap around the value
-        let available_gas =
-            u64::from(gas_meter.borrow().get_available_gas()) as i64;
-        global
-            .set(&mut *store, wasmer::Value::I64(available_gas))
-            .map_err(Error::RuntimeError)?;
-
-        #[allow(unused_assignments)]
-        {
-            gas_global = Some(global.clone());
-        }
-    }
+            Ok(global.clone())
+        })?;
 
     // Fetch guest's main memory
     let guest_memory = instance
@@ -296,22 +303,29 @@ where
                 error,
             })?
     };
-    let ok = apply_tx
-        .call(
-            unsafe { &mut *RefCell::as_ptr(&*store) },
-            tx_data_ptr,
-            tx_data_len,
-        )
-        .map_err(|err| {
-            tracing::debug!("Tx WASM failed with {}", err);
-            match *sentinel.borrow() {
-                TxSentinel::None => Error::RuntimeError(err),
-                TxSentinel::OutOfGas => Error::GasError(err.to_string()),
-                TxSentinel::InvalidCommitment => {
-                    Error::MissingSection(err.to_string())
-                }
+
+    let result = apply_tx.call(
+        unsafe { &mut *RefCell::as_ptr(&*store) },
+        tx_data_ptr,
+        tx_data_len,
+    );
+
+    let wasm_gas_meter = RefCell::into_inner(wasm_gas_meter);
+    wasm_gas_meter
+        .flush_to_meter(gas_meter)
+        .map_err(|err| Error::GasError(err.to_string()))?;
+
+    let ok = result.map_err(|err| {
+        tracing::debug!("Tx WASM failed with {}", err);
+
+        match *sentinel.borrow() {
+            TxSentinel::None => Error::RuntimeError(err),
+            TxSentinel::OutOfGas => Error::GasError(err.to_string()),
+            TxSentinel::InvalidCommitment => {
+                Error::MissingSection(err.to_string())
             }
-        })?;
+        }
+    })?;
 
     // NB: early drop this data to avoid memory errors
     _ = (instance, env);

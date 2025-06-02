@@ -366,14 +366,26 @@ pub trait GasMetering {
     /// will still be updated
     fn consume(&mut self, gas: Gas) -> Result<()>;
 
-    /// Get the gas consumed by the tx
-    fn get_tx_consumed_gas(&self) -> Gas;
+    /// Get the gas consumption used to initialize the meter
+    fn get_initial_gas(&self) -> Gas;
+
+    /// Get the gas consumed thus far
+    fn get_consumed_gas(&self) -> Gas;
 
     /// Get the gas limit
     fn get_gas_limit(&self) -> Gas;
 
     /// Get the protocol gas scale
     fn get_gas_scale(&self) -> u64;
+
+    /// Get the amount of gas still available to the transaction
+    fn get_available_gas(&self) -> Gas {
+        self.get_gas_limit()
+            .checked_sub(self.get_initial_gas())
+            .unwrap_or_default()
+            .checked_sub(self.get_consumed_gas())
+            .unwrap_or_default()
+    }
 
     /// Add the compiling cost proportionate to the code length
     fn add_compiling_gas(&mut self, bytes_len: u64) -> Result<()> {
@@ -405,12 +417,11 @@ pub trait GasMetering {
         )
     }
 
-    /// Check if the vps went out of gas. Starts with the gas consumed by the
-    /// transaction.
-    fn check_vps_limit(&self, vps_gas: Gas) -> Result<()> {
+    /// Check if the meter ran out of gas. Starts with the initial gas.
+    fn check_limit(&self, gas: Gas) -> Result<()> {
         let total = self
-            .get_tx_consumed_gas()
-            .checked_add(vps_gas)
+            .get_initial_gas()
+            .checked_add(gas)
             .ok_or(Error::GasOverflow)?;
         let gas_limit = self.get_gas_limit();
         if total > gas_limit {
@@ -441,17 +452,10 @@ pub trait GasMetering {
                 .into(),
         )
     }
-
-    /// Get the amount of gas still available to the transaction
-    fn get_available_gas(&self) -> Gas {
-        self.get_gas_limit()
-            .checked_sub(self.get_tx_consumed_gas())
-            .unwrap_or_default()
-    }
 }
 
 /// Gas metering in a transaction
-#[derive(Debug)]
+#[derive(Debug, Clone, Default)]
 pub struct TxGasMeter {
     /// Track gas overflow
     gas_overflow: bool,
@@ -500,8 +504,12 @@ impl GasMetering for TxGasMeter {
         Ok(())
     }
 
-    /// Get the entire gas used by the transaction up until this point
-    fn get_tx_consumed_gas(&self) -> Gas {
+    #[inline]
+    fn get_initial_gas(&self) -> Gas {
+        Gas { sub: 0 }
+    }
+
+    fn get_consumed_gas(&self) -> Gas {
         if !self.gas_overflow {
             self.transaction_gas.clone()
         } else {
@@ -580,14 +588,14 @@ impl GasMetering for VpGasMeter {
         Ok(())
     }
 
-    /// Get the gas consumed by the tx alone before the vps were executed
-    fn get_tx_consumed_gas(&self) -> Gas {
-        if !self.gas_overflow {
-            self.initial_gas.clone()
-        } else {
-            hints::cold();
-            u64::MAX.into()
-        }
+    fn get_initial_gas(&self) -> Gas {
+        self.initial_gas.clone()
+    }
+
+    fn get_consumed_gas(&self) -> Gas {
+        self.initial_gas
+            .checked_add(self.get_vp_consumed_gas())
+            .unwrap_or_else(|| u64::MAX.into())
     }
 
     fn get_gas_limit(&self) -> Gas {
@@ -617,7 +625,7 @@ impl VpGasMeter {
             gas_overflow: false,
             gas_scale: gas_meter.get_gas_scale(),
             tx_gas_limit: gas_meter.get_gas_limit(),
-            initial_gas: gas_meter.get_tx_consumed_gas(),
+            initial_gas: gas_meter.get_consumed_gas(),
             current_gas: Gas::default(),
         }
     }
@@ -625,15 +633,6 @@ impl VpGasMeter {
     /// Get the gas consumed by the VP alone
     pub fn get_vp_consumed_gas(&self) -> Gas {
         self.current_gas.clone()
-    }
-
-    /// Get the amount of gas still available to the VP
-    pub fn get_available_gas(&self) -> Gas {
-        self.tx_gas_limit
-            .checked_sub(self.initial_gas.clone())
-            .unwrap_or_default()
-            .checked_sub(self.current_gas.clone())
-            .unwrap_or_default()
     }
 }
 
