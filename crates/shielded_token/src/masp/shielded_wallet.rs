@@ -124,7 +124,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
     /// directory. If the file is missing, an empty wallet is created.
     /// Otherwise, we load the wallet and attempt to migrate it to the
     /// latest version. This function panics if that fails.
-    pub async fn load(&mut self)  {
+    pub async fn load(&mut self) {
         self.utils.clone().load(self, false).await.unwrap()
     }
 
@@ -133,19 +133,19 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
     /// from non-CLI frontends.
     pub async fn load_with_callback<F, X>(&mut self, on_error: F)
     where
-        F: Fn(std::io::Error) -> X,
-        X: std::future::Future<Output=()>
+        F: Fn(&std::io::Error) -> X,
+        X: std::future::Future<Output = ()>,
     {
-        if let Err(e) = self.load().await {
-            on_error(e).await;
-            panic!(e.to_string());
+        if let Err(e) = self.utils.clone().load(self, false).await {
+            on_error(&e).await;
+            panic!("{}", e);
         }
     }
 
     /// Try to load the last saved confirmed shielded context from the given
     /// context directory.If the file is missing, an empty wallet is created.
-     /// Otherwise, we load the wallet and attempt to migrate it to the
-     /// latest version. This function panics if that fails.
+    /// Otherwise, we load the wallet and attempt to migrate it to the
+    /// latest version. This function panics if that fails.
     pub async fn load_confirmed(&mut self) {
         self.utils.clone().load(self, true).await.unwrap()
     }
@@ -1218,7 +1218,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         {
             // Load the current shielded context given
             // the spending key we possess
-            self.load().await.map_err(|e| TransferErr::General(e.to_string()))?;
+            self.load().await;
         }
 
         let Some(MaspTxReorderedData {
