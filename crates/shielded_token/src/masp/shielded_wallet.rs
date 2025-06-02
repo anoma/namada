@@ -124,17 +124,30 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
     /// directory. If the file is missing, an empty wallet is created.
     /// Otherwise, we load the wallet and attempt to migrate it to the
     /// latest version. This function panics if that fails.
-    pub async fn load(&mut self) {
-        self.utils.clone().load(self, false).await.unwrap();
+    pub async fn load(&mut self)  {
+        self.utils.clone().load(self, false).await.unwrap()
+    }
+
+    /// Same as the load function, but is provided an async closure
+    /// as an error handler. This is useful for calling this function
+    /// from non-CLI frontends.
+    pub async fn load_with_callback<F, X>(&mut self, on_error: F)
+    where
+        F: Fn(std::io::Error) -> X,
+        X: std::future::Future<Output=()>
+    {
+        if let Err(e) = self.load().await {
+            on_error(e).await;
+            panic!(e.to_string());
+        }
     }
 
     /// Try to load the last saved confirmed shielded context from the given
-    /// context directory. If this fails, then leave the current context
-    /// unchanged.
-    pub async fn load_confirmed(&mut self) -> std::io::Result<()> {
-        self.utils.clone().load(self, true).await?;
-
-        Ok(())
+    /// context directory.If the file is missing, an empty wallet is created.
+     /// Otherwise, we load the wallet and attempt to migrate it to the
+     /// latest version. This function panics if that fails.
+    pub async fn load_confirmed(&mut self) {
+        self.utils.clone().load(self, true).await.unwrap()
     }
 
     /// Save this shielded context into its associated context directory. If the
@@ -1205,7 +1218,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         {
             // Load the current shielded context given
             // the spending key we possess
-            self.load().await;
+            self.load().await.map_err(|e| TransferErr::General(e.to_string()))?;
         }
 
         let Some(MaspTxReorderedData {
