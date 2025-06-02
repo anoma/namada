@@ -1177,7 +1177,7 @@ mod test {
     use assert_matches::assert_matches;
     use namada_core::address::Address;
     use namada_core::address::testing::{
-        established_address_1, established_address_3, nam,
+        btc, established_address_1, established_address_3, nam
     };
     use namada_core::borsh::BorshSerializeExt;
     use namada_core::chain::testing::get_dummy_header;
@@ -3146,6 +3146,78 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+        );
+
+        assert_matches!(
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
+            Err(_)
+        );
+    }
+
+    #[test]
+    fn test_governance_non_native_transfer() {
+        let mut state = init_storage();
+
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::vp_cache();
+
+        let tx_index = TxIndex::default();
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+            &btc(),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(0),
+            &nam(),
+        );
+        state.commit_block().unwrap();
+
+        let balance_key = balance_key(&btc(), &ADDRESS);
+        let keys_changed = [balance_key].into();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Authorization(Authorization::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            batched_tx.tx,
+            batched_tx.cmt,
+            &tx_index,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache.clone(),
         );
 
         assert_matches!(
