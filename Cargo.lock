@@ -6448,6 +6448,7 @@ dependencies = [
  "namada_gas",
  "namada_parameters",
  "namada_state",
+ "namada_storage",
  "namada_test_utils",
  "namada_token",
  "namada_tx",

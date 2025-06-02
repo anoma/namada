@@ -1,6 +1,8 @@
 //! Virtual machine's host environment exposes functions that may be called from
 //! within a virtual machine.
 
+pub mod state;
+
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -26,7 +28,7 @@ use namada_state::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use namada_state::write_log::{self, WriteLog};
 use namada_state::{
     DB, DBIter, InMemory, OptionExt, ResultExt, State, StateRead,
-    StorageHasher, StorageRead, StorageWrite, TxHostEnvState, VpHostEnvState,
+    StorageHasher, StorageRead, StorageWrite,
 };
 pub use namada_state::{Error, Result};
 use namada_token::MaspTransaction;
@@ -39,6 +41,7 @@ use namada_tx::{BatchedTx, BatchedTxRef, Tx, TxCommitments};
 use namada_vp::vp_host_fns;
 use thiserror::Error;
 
+use self::state::{TxHostEnvState, VpHostEnvState};
 #[cfg(feature = "wasm-runtime")]
 use super::wasm::{TxCache, VpCache};
 use crate::memory::VmMemory;
