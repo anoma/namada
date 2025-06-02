@@ -4,7 +4,9 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use namada_core::booleans::BoolResultUnitExt;
-use namada_core::storage::Key;
+use namada_core::storage::{self, Key};
+use namada_state::StorageRead;
+use namada_systems::trans_token as token;
 use namada_tx::BatchedTxRef;
 use namada_tx::action::{Action, PgfAction};
 use namada_vp_env::{Error, Result, VpEnv};
@@ -33,14 +35,15 @@ impl From<VpError> for Error {
 }
 
 /// Pgf VP
-pub struct PgfVp<'ctx, CTX> {
+pub struct PgfVp<'ctx, CTX, TokenKeys> {
     /// Generic types for DI
-    pub _marker: PhantomData<&'ctx CTX>,
+    pub _marker: PhantomData<(&'ctx CTX, TokenKeys)>,
 }
 
-impl<'ctx, CTX> PgfVp<'ctx, CTX>
+impl<'ctx, CTX, TokenKeys> PgfVp<'ctx, CTX, TokenKeys>
 where
     CTX: VpEnv<'ctx> + namada_tx::action::Read<Err = Error>,
+    TokenKeys: token::Keys,
 {
     /// Run the validity predicate
     pub fn validate_tx(
@@ -114,7 +117,7 @@ where
         }
 
         keys_changed.iter().try_for_each(|key| {
-            let key_type = KeyType::from(key);
+            let key_type = KeyType::from_key::<TokenKeys>(key);
 
             match key_type {
                 KeyType::Stewards(steward_address) => {
@@ -134,11 +137,11 @@ where
                         ));
                     }
 
-                    pgf::storage::get_steward(&ctx.post(), steward_address)?
+                    pgf::storage::get_steward(&ctx.post(), &steward_address)?
                         .map_or_else(
                             // if a steward resigns, check their signature
                             || {
-                                verifiers.contains(steward_address).ok_or_else(
+                                verifiers.contains(&steward_address).ok_or_else(
                                     || {
                                         Error::new_alloc(format!(
                                             "The VP of the steward \
@@ -153,7 +156,7 @@ where
                             // total_stewards_pre == total_stewards_post) check
                             // their signature and if commissions are valid
                             |steward| {
-                                if !verifiers.contains(steward_address) {
+                                if !verifiers.contains(&steward_address) {
                                     return Err(Error::new_alloc(format!(
                                         "The VP of the steward \
                                          {steward_address} should have been \
@@ -176,6 +179,9 @@ where
                 KeyType::PgfInflationRate | KeyType::StewardInflationRate => {
                     Self::is_valid_parameter_change(ctx, batched_tx)
                 }
+                KeyType::Balance(token) => {
+                    Self::is_valid_balance_change(ctx, &token)
+                }
                 KeyType::UnknownPgf => Err(Error::new_alloc(format!(
                     "Unknown PGF state update on key: {key}"
                 ))),
@@ -184,7 +190,7 @@ where
         })
     }
 
-    /// Validate a governance parameter
+    /// Validate a governance parameter change
     pub fn is_valid_parameter_change(
         ctx: &'ctx CTX,
         batched_tx: &BatchedTxRef<'_>,
@@ -207,29 +213,58 @@ where
             },
         )
     }
+
+    /// Validate a pgf balance change
+    pub fn is_valid_balance_change(
+        ctx: &'ctx CTX,
+        token: &Address,
+    ) -> Result<()> {
+        let balance_key = TokenKeys::balance_key(token, &ADDRESS);
+
+        let pre_balance: token::Amount =
+            ctx.pre().read(&balance_key)?.unwrap_or_default();
+
+        let post_balance: token::Amount =
+            ctx.post().read(&balance_key)?.unwrap_or_default();
+
+        if post_balance < pre_balance {
+            Err(Error::new_alloc(
+                "Only governance can debit from PGF accoount".to_string(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
 }
 
-#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug)]
-enum KeyType<'ctx> {
-    Stewards(&'ctx Address),
+enum KeyType {
+    Stewards(Address),
     Fundings,
     PgfInflationRate,
     StewardInflationRate,
     UnknownPgf,
+    Balance(Address),
     Unknown,
 }
 
-impl<'k> From<&'k Key> for KeyType<'k> {
-    fn from(key: &'k Key) -> Self {
+impl KeyType {
+    fn from_key<TokenKeys>(key: &storage::Key) -> Self
+    where
+        TokenKeys: token::Keys,
+    {
         if let Some(addr) = pgf_storage::is_stewards_key(key) {
-            Self::Stewards(addr)
+            Self::Stewards(addr.clone())
         } else if pgf_storage::is_fundings_key(key) {
             KeyType::Fundings
         } else if pgf_storage::is_pgf_inflation_rate_key(key) {
             Self::PgfInflationRate
         } else if pgf_storage::is_steward_inflation_rate_key(key) {
             Self::StewardInflationRate
+        } else if let Some([token, _owner]) =
+            TokenKeys::is_any_token_balance_key(key)
+        {
+            KeyType::Balance(token.clone())
         } else if pgf_storage::is_pgf_key(key) {
             KeyType::UnknownPgf
         } else {
