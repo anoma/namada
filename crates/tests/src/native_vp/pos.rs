@@ -597,7 +597,7 @@ pub mod testing {
     use itertools::Either;
     use namada_sdk::chain::Epoch;
     use namada_sdk::dec::Dec;
-    use namada_sdk::gas::TxGasMeter;
+    use namada_sdk::gas::{GasMetering, TxGasMeter};
     use namada_sdk::key::RefTo;
     use namada_sdk::key::common::PublicKey;
     use namada_sdk::proof_of_stake::ADDRESS as POS_ADDRESS;
@@ -881,7 +881,7 @@ pub mod testing {
             let current_epoch = tx_host_env::with(|env| {
                 // Reset the gas meter on each change, so that we never run
                 // out in this test
-                let gas_limit = env.gas_meter.borrow().tx_gas_limit.clone();
+                let gas_limit = env.gas_meter.borrow().get_gas_limit();
                 env.gas_meter = RefCell::new(TxGasMeter::new(
                     gas_limit,
                     namada_sdk::parameters::get_gas_scale(tx::ctx()).unwrap(),

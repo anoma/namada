@@ -3,12 +3,184 @@
 //! Here, we expose the host functions into wasm's
 //! imports, so they can be called from inside the wasm.
 
+use std::cell::RefCell;
+use std::rc;
+
+use namada_core::hints;
+use namada_gas::{Gas, GasMetering, TxGasMeter};
 use namada_state::{DB, DBIter, StorageHasher};
 use wasmer::{Function, FunctionEnv, Imports};
 
 use crate::host_env::{TxVmEnv, VpEvaluator, VpVmEnv};
 use crate::wasm::memory::WasmMemory;
 use crate::{WasmCacheAccess, host_env};
+
+/// Wasm native gas meter
+#[derive(Debug)]
+pub struct WasmGasMeter {
+    gas_scale: u64,
+    initial_gas: Gas,
+    tx_gas_limit: Gas,
+    wasm_transaction_gas_global: Option<wasmer::Global>,
+    store: rc::Weak<RefCell<wasmer::Store>>,
+}
+
+impl WasmGasMeter {
+    /// Create an uninitialized wasm gas meter.
+    ///
+    /// The meter will only be initialized after a wasm instance
+    /// is built, populating the expected global variable that
+    /// will track gas usage.
+    pub fn uninit(store: rc::Weak<RefCell<wasmer::Store>>) -> Self {
+        Self {
+            gas_scale: 0u64,
+            initial_gas: 0u64.into(),
+            tx_gas_limit: 0u64.into(),
+            wasm_transaction_gas_global: None,
+            store,
+        }
+    }
+
+    /// Initialize the wasm gas meter.
+    pub fn init_from(
+        &mut self,
+        meter: &impl GasMetering,
+        gas_global: wasmer::Global,
+    ) {
+        self.gas_scale = meter.get_gas_scale();
+        self.tx_gas_limit = meter.get_gas_limit();
+        self.initial_gas = meter.get_available_gas();
+        self.wasm_transaction_gas_global = Some(gas_global);
+
+        self.write_wasm_gas(self.initial_gas.clone(), None);
+    }
+
+    /// Flush the consumed gas to the provided tx meter.
+    #[inline]
+    pub fn flush_to_tx_meter(
+        self,
+        meter: &mut TxGasMeter,
+    ) -> namada_gas::Result<()> {
+        let total_consumption = self.get_tx_consumed_gas();
+
+        let wasm_consumption = total_consumption
+            .checked_sub(self.initial_gas)
+            .unwrap_or_default();
+
+        // only increment meter by the gas consumption in wasm
+        meter.consume(wasm_consumption)
+    }
+
+    /// Return the gas initially available when this meter was first
+    /// initialized.
+    #[inline]
+    pub fn initial_gas(&self) -> Gas {
+        self.initial_gas.clone()
+    }
+
+    fn write_wasm_gas(
+        &self,
+        gas: Gas,
+        store: Option<rc::Rc<RefCell<wasmer::Store>>>,
+    ) {
+        let store = store.unwrap_or_else(|| {
+            self.store
+                .upgrade()
+                .expect("store must be accessible while the WASM is running")
+        });
+
+        let value_to_sync: i64 = u64::from(gas)
+            .try_into()
+            .expect("the current tx gas value isn't negative");
+
+        self.wasm_transaction_gas_global
+            .as_ref()
+            .expect("the wasm gas global must be set while running the vm")
+            .set(&mut *store.borrow_mut(), wasmer::Value::I64(value_to_sync))
+            .expect("setting the wasm global gas value shouldn't fail");
+    }
+
+    fn read_wasm_gas(
+        &self,
+        store: Option<rc::Rc<RefCell<wasmer::Store>>>,
+    ) -> Gas {
+        let store = store.unwrap_or_else(|| {
+            self.store
+                .upgrade()
+                .expect("store must be accessible while the WASM is running")
+        });
+
+        let current_tx_gas = if let wasmer::Value::I64(available_gas) = self
+            .wasm_transaction_gas_global
+            .as_ref()
+            .expect("the wasm gas global must be set while running the vm")
+            .get(&mut *store.borrow_mut())
+        {
+            debug_assert!(
+                available_gas >= 0,
+                "the wasm gas value should never be negative"
+            );
+
+            #[allow(clippy::cast_sign_loss)]
+            {
+                namada_gas::Gas::from(
+                    // intentional wrap around the value, since
+                    // correct wasm will never allow reaching
+                    // negative gas values
+                    available_gas as u64,
+                )
+            }
+        } else {
+            unreachable!("unexpected wasm gas value type")
+        };
+
+        debug_assert!(
+            self.tx_gas_limit >= current_tx_gas,
+            "tx gas in wasm mut not be greater than gas limit"
+        );
+
+        current_tx_gas
+    }
+}
+
+impl GasMetering for WasmGasMeter {
+    fn consume(&mut self, gas: Gas) -> namada_gas::Result<()> {
+        let store = self
+            .store
+            .upgrade()
+            .expect("store must be accessible while the WASM is running");
+
+        let current_tx_gas = self
+            .read_wasm_gas(Some(rc::Rc::clone(&store)))
+            .checked_sub(gas)
+            .ok_or_else(|| {
+                hints::cold();
+                namada_gas::Error::TransactionGasExceededError(
+                    self.tx_gas_limit.get_whole_gas_units(self.gas_scale),
+                )
+            })?;
+
+        self.write_wasm_gas(current_tx_gas, Some(store));
+
+        Ok(())
+    }
+
+    fn get_tx_consumed_gas(&self) -> Gas {
+        let current_tx_gas = self.read_wasm_gas(None);
+
+        self.tx_gas_limit.checked_sub(current_tx_gas).expect(
+            "the tx gas in wasm should not be greater than the gas limit",
+        )
+    }
+
+    fn get_gas_limit(&self) -> Gas {
+        self.tx_gas_limit.clone()
+    }
+
+    fn get_gas_scale(&self) -> u64 {
+        self.gas_scale
+    }
+}
 
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// transaction code

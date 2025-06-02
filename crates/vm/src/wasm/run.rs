@@ -233,8 +233,6 @@ where
         &mut yielded_value,
         vp_wasm_cache,
         tx_wasm_cache,
-        gas_meter_kind,
-        &gas_global,
     );
 
     // Instantiate the wasm module
@@ -399,7 +397,6 @@ where
         keys_changed,
         &eval_runner,
         &mut vp_wasm_cache,
-        gas_meter_kind,
     );
 
     let yielded_value_borrow = env.ctx.yielded_value;
@@ -626,7 +623,6 @@ where
             ctx.keys_changed,
             &eval_runner,
             &mut vp_wasm_cache,
-            ctx.gas_meter_kind,
         );
         eval_runner
             .eval_native_result(ctx, vp_code_hash, input_data)
@@ -683,14 +679,14 @@ where
         let verifiers = unsafe { ctx.verifiers.get() };
         let vp_wasm_cache = unsafe { ctx.vp_wasm_cache.get_mut() };
         let gas_meter = unsafe { ctx.gas_meter.get() };
-        let gas_meter_kind = ctx.gas_meter_kind;
         // Compile the wasm module
         let (module, store) = fetch_or_compile(
             vp_wasm_cache,
             &Commitment::Hash(vp_code_hash),
             &ctx.state(),
             gas_meter,
-            gas_meter_kind,
+            // TODO: placeholder
+            GasMeterKind::HostFn,
         )?;
         let store = Rc::new(RefCell::new(store));
 
@@ -720,7 +716,8 @@ where
             yielded_value_borrow,
             |guest_memory| env.memory.init_from(guest_memory),
             available_gas,
-            gas_meter_kind,
+            // TODO: placeholder
+            GasMeterKind::HostFn,
         )
     }
 }

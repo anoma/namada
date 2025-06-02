@@ -1273,7 +1273,7 @@ where
             || (VpsResult::default(), Gas::from(0)),
             |(mut result, mut vps_gas), addr| {
                 let gas_meter =
-                    RefCell::new(VpGasMeter::new_from_tx_meter(tx_gas_meter));
+                    RefCell::new(VpGasMeter::new_from_meter(tx_gas_meter));
                 let tx_accepted = match &addr {
                     Address::Implicit(_) | Address::Established(_) => {
                         let (vp_hash, gas) = state

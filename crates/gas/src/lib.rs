@@ -346,12 +346,34 @@ impl Display for WholeGas {
     }
 }
 
+trait SealedNativeGasMetering {}
+
+/// Marker trait that indicates if a [`GasMetering`] implementation
+/// is native (i.e. not done through wasm).
+#[allow(private_bounds)]
+pub trait NativeGasMetering: GasMetering + SealedNativeGasMetering {}
+
+impl SealedNativeGasMetering for TxGasMeter {}
+impl NativeGasMetering for TxGasMeter {}
+
+impl SealedNativeGasMetering for VpGasMeter {}
+impl NativeGasMetering for VpGasMeter {}
+
 /// Trait to share gas operations for transactions and validity predicates
 pub trait GasMetering {
     /// Add gas cost. It will return error when the
     /// consumed gas exceeds the provided transaction gas limit, but the state
     /// will still be updated
     fn consume(&mut self, gas: Gas) -> Result<()>;
+
+    /// Get the gas consumed by the tx
+    fn get_tx_consumed_gas(&self) -> Gas;
+
+    /// Get the gas limit
+    fn get_gas_limit(&self) -> Gas;
+
+    /// Get the protocol gas scale
+    fn get_gas_scale(&self) -> u64;
 
     /// Add the compiling cost proportionate to the code length
     fn add_compiling_gas(&mut self, bytes_len: u64) -> Result<()> {
@@ -383,15 +405,6 @@ pub trait GasMetering {
         )
     }
 
-    /// Get the gas consumed by the tx
-    fn get_tx_consumed_gas(&self) -> Gas;
-
-    /// Get the gas limit
-    fn get_gas_limit(&self) -> Gas;
-
-    /// Get the protocol gas scale
-    fn get_gas_scale(&self) -> u64;
-
     /// Check if the vps went out of gas. Starts with the gas consumed by the
     /// transaction.
     fn check_vps_limit(&self, vps_gas: Gas) -> Result<()> {
@@ -407,6 +420,33 @@ pub trait GasMetering {
         }
 
         Ok(())
+    }
+
+    /// Add the gas required by a wrapper transaction which is comprised of:
+    ///  - cost of validating the wrapper tx
+    ///  - space that the transaction requires in the block
+    ///  - cost of downloading (as part of the block) the transaction bytes over
+    ///    the network
+    fn add_wrapper_gas(&mut self, tx_bytes: &[u8]) -> Result<()> {
+        self.consume(WRAPPER_TX_VALIDATION_GAS.into())?;
+
+        let bytes_len = tx_bytes.len() as u64;
+        self.consume(
+            bytes_len
+                .checked_mul(
+                    STORAGE_OCCUPATION_GAS_PER_BYTE
+                        + NETWORK_TRANSMISSION_GAS_PER_BYTE,
+                )
+                .ok_or(Error::GasOverflow)?
+                .into(),
+        )
+    }
+
+    /// Get the amount of gas still available to the transaction
+    fn get_available_gas(&self) -> Gas {
+        self.get_gas_limit()
+            .checked_sub(self.get_tx_consumed_gas())
+            .unwrap_or_default()
     }
 }
 
@@ -491,33 +531,6 @@ impl TxGasMeter {
         }
     }
 
-    /// Add the gas required by a wrapper transaction which is comprised of:
-    ///  - cost of validating the wrapper tx
-    ///  - space that the transaction requires in the block
-    ///  - cost of downloading (as part of the block) the transaction bytes over
-    ///    the network
-    pub fn add_wrapper_gas(&mut self, tx_bytes: &[u8]) -> Result<()> {
-        self.consume(WRAPPER_TX_VALIDATION_GAS.into())?;
-
-        let bytes_len = tx_bytes.len() as u64;
-        self.consume(
-            bytes_len
-                .checked_mul(
-                    STORAGE_OCCUPATION_GAS_PER_BYTE
-                        + NETWORK_TRANSMISSION_GAS_PER_BYTE,
-                )
-                .ok_or(Error::GasOverflow)?
-                .into(),
-        )
-    }
-
-    /// Get the amount of gas still available to the transaction
-    pub fn get_available_gas(&self) -> Gas {
-        self.tx_gas_limit
-            .checked_sub(self.transaction_gas.clone())
-            .unwrap_or_default()
-    }
-
     /// Set the amount of gas still available to the transaction.
     ///
     /// WARNING: Utmost care must be taken when using this function! This must
@@ -594,6 +607,17 @@ impl VpGasMeter {
             gas_scale: tx_gas_meter.gas_scale,
             tx_gas_limit: tx_gas_meter.tx_gas_limit.clone(),
             initial_gas: tx_gas_meter.transaction_gas.clone(),
+            current_gas: Gas::default(),
+        }
+    }
+
+    /// Initialize a new VP gas meter from the given generic gas meter
+    pub fn new_from_meter(gas_meter: &impl GasMetering) -> Self {
+        Self {
+            gas_overflow: false,
+            gas_scale: gas_meter.get_gas_scale(),
+            tx_gas_limit: gas_meter.get_gas_limit(),
+            initial_gas: gas_meter.get_tx_consumed_gas(),
             current_gas: Gas::default(),
         }
     }
