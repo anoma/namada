@@ -1,14 +1,23 @@
+//! Host environment state.
+
 use std::cell::RefCell;
 
+use namada_core::address::Address;
+use namada_core::chain::{BlockHeader, BlockHeight, ChainId, Epoch, Epochs};
 use namada_events::{EmitEvents, EventToEmit};
 use namada_gas::{Gas, GasMetering, TxGasMeter, VpGasMeter};
+use namada_state::write_log::{self, WriteLog};
+use namada_state::{
+    DB, DBIter, Error, InMemory, PrefixIter, Result, ResultExt, State,
+    StateError, StateRead, StorageHasher, StorageRead, StorageWrite,
+    impl_storage_read, impl_storage_write, iter_prefix_post,
+};
+use namada_storage as storage;
 use namada_tx::data::TxSentinel;
 
-use crate::in_memory::InMemory;
-use crate::write_log::WriteLog;
-use crate::{
-    DB, DBIter, Error, Result, State, StateError, StateRead, StorageHasher,
-};
+impl_storage_read!(TxHostEnvState<'_, D, H>);
+impl_storage_read!(VpHostEnvState<'_, D, H>);
+impl_storage_write!(TxHostEnvState<'_, D, H>);
 
 /// State with mutable write log and gas metering for tx host env.
 #[derive(Debug)]
