@@ -60,6 +60,26 @@ use crate::masp::{
 #[cfg(any(test, feature = "testing"))]
 use crate::masp::{ENV_VAR_MASP_TEST_SEED, testing};
 
+/// Type alias for the respose we get from
+/// querying conversions
+pub type ConversionData = (
+    Address,
+    Denomination,
+    MaspDigitPos,
+    MaspEpoch,
+    I128Sum,
+    MerklePath<Node>,
+);
+
+/// A conversions cache
+#[derive(Clone, Default, BorshSerialize, BorshDeserialize, Debug)]
+pub struct EpochedConversions {
+    /// A set of cached conversions
+    pub inner: BTreeMap<AssetType, ConversionData>,
+    /// Masp epoch for which these conversions are valid
+    pub epoch: MaspEpoch,
+}
+
 /// Represents the current state of the shielded pool from the perspective of
 /// the chosen viewing keys.
 #[derive(BorshSerialize, BorshDeserialize, Debug)]
@@ -88,6 +108,8 @@ pub struct ShieldedWallet<U: ShieldedUtils> {
     pub spents: HashSet<usize>,
     /// Maps asset types to their decodings
     pub asset_types: HashMap<AssetType, AssetData>,
+    /// A conversions cache
+    pub conversions: EpochedConversions,
     /// Maps note positions to their corresponding viewing keys
     pub vk_map: HashMap<usize, ViewingKey>,
     /// Maps a shielded tx to the index of its first output note.
@@ -112,6 +134,7 @@ impl<U: ShieldedUtils + Default> Default for ShieldedWallet<U> {
             div_map: HashMap::default(),
             witness_map: HashMap::default(),
             spents: HashSet::default(),
+            conversions: Default::default(),
             asset_types: HashMap::default(),
             vk_map: HashMap::default(),
             sync_status: ContextSyncStatus::Confirmed,
@@ -131,14 +154,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
     /// Same as the load function, but is provided an async closure
     /// as an error handler. This is useful for calling this function
     /// from non-CLI frontends.
-    pub async fn load_with_callback<F, X>(&mut self, on_error: F)
+    pub async fn try_load<F, X>(&mut self, on_error: F)
     where
-        F: Fn(&std::io::Error) -> X,
+        F: Fn(std::io::Error) -> X,
         X: std::future::Future<Output = ()>,
     {
         if let Err(e) = self.utils.clone().load(self, false).await {
-            on_error(&e).await;
-            panic!("{}", e);
+            on_error(e).await;
         }
     }
 
@@ -155,7 +177,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
     /// available)
     pub async fn save(&self) -> std::io::Result<()> {
         self.utils
-            .save(VersionedWalletRef::V0(self), self.sync_status)
+            .save(VersionedWalletRef::V1(self), self.sync_status)
             .await
     }
 
@@ -438,6 +460,31 @@ pub trait ShieldedQueries<U: ShieldedUtils + MaybeSend + MaybeSync>:
         MerklePath<Node>,
     )>;
 
+    /// A cached version of [`query_conversion`]. The cache
+    /// gets cleared when the Masp epoch changes.
+    #[allow(async_fn_in_trait)]
+    async fn get_conversion<C: Client + Sync>(
+        client: &C,
+        asset_type: AssetType,
+        cache: &mut EpochedConversions,
+    ) -> Option<(
+        Address,
+        Denomination,
+        MaspDigitPos,
+        MaspEpoch,
+        I128Sum,
+        MerklePath<Node>,
+    )> {
+        match cache.inner.get(&asset_type).cloned() {
+            None => {
+                let res = Self::query_conversion(client, asset_type).await?;
+                cache.inner.insert(asset_type, res.clone());
+                Some(res)
+            }
+            some => some,
+        }
+    }
+
     /// Get the last block height
     #[allow(async_fn_in_trait)]
     async fn query_block<C: Client + Sync>(
@@ -462,6 +509,24 @@ pub trait ShieldedQueries<U: ShieldedUtils + MaybeSend + MaybeSync>:
 pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     ShieldedQueries<U>
 {
+    /// A method that loads the wallet and empties the conversion cache if the
+    /// masp epoch has advanced. This method is only called by functions
+    /// which are relatively fast so the chances of crossing a masp boundary
+    /// are minimal. However, if it happens, the function may produce
+    /// invalid output and need to be run again.
+    #[allow(async_fn_in_trait)]
+    async fn load_with_caching<C: Client + Sync>(
+        &mut self,
+        client: &C,
+    ) -> Result<(), eyre::Error> {
+        self.load().await;
+        let epoch = Self::query_masp_epoch(client).await?;
+        if self.conversions.epoch < epoch {
+            self.conversions.epoch = epoch;
+            self.conversions.inner.clear();
+        }
+        Ok(())
+    }
     /// Use the addresses already stored in the wallet to precompute as many
     /// asset types as possible.
     #[allow(async_fn_in_trait)]
@@ -472,6 +537,10 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     ) -> Result<(), eyre::Error> {
         // To facilitate lookups of human-readable token names
         for token in tokens {
+            // check if token is already in the cache
+            if self.asset_types.values().any(|ass| ass.token == *token) {
+                continue;
+            }
             let Some(denom) = Self::query_denom(client, token).await else {
                 return Err(eyre!("denomination for token {token}"));
             };
@@ -518,7 +587,8 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             _,
             I128Sum,
             MerklePath<Node>,
-        ) = Self::query_conversion(client, asset_type).await?;
+        ) = Self::get_conversion(client, asset_type, &mut self.conversions)
+            .await?;
         let pre_asset_type = AssetData {
             token,
             denom,
@@ -547,7 +617,8 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         };
         // Get the conversion for the given asset type, otherwise fail
         let Some((token, denom, position, ep, conv, path)) =
-            Self::query_conversion(client, asset_type).await
+            Self::get_conversion(client, asset_type, &mut self.conversions)
+                .await
         else {
             return Ok(());
         };
@@ -1218,7 +1289,9 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         {
             // Load the current shielded context given
             // the spending key we possess
-            self.load().await;
+            self.load_with_caching(context.client())
+                .await
+                .map_err(|e| TransferErr::General(e.to_string()))?;
         }
 
         let Some(MaspTxReorderedData {

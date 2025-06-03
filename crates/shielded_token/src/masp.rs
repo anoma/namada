@@ -975,7 +975,7 @@ pub mod fs {
     use std::path::PathBuf;
 
     use super::*;
-    use crate::masp::wallet_migrations::VersionedWallet;
+    use crate::masp::wallet_migrations::{VersionedWallet, v0};
     use crate::validation::{
         CONVERT_NAME, ENV_VAR_MASP_PARAMS_DIR, OUTPUT_NAME, SPEND_NAME,
         get_params_dir,
@@ -1143,11 +1143,13 @@ pub mod fs {
             // Fill the supplied context with the deserialized object
             let wallet =
                 match VersionedWallet::<U>::deserialize(&mut &bytes[..]) {
-                    Ok(w) => w.migrate().map_err(std::io::Error::other)?,
-                    Err(_) => {
-                        ShieldedWallet::<U>::deserialize(&mut &bytes[..])?
-                    }
-                };
+                    Ok(w) => w,
+                    Err(_) => VersionedWallet::V0(
+                        v0::ShieldedWallet::<U>::deserialize(&mut &bytes[..])?,
+                    ),
+                }
+                .migrate()
+                .map_err(std::io::Error::other)?;
             *ctx = ShieldedWallet {
                 utils: ctx.utils.clone(),
                 ..wallet
@@ -1250,7 +1252,7 @@ pub mod fs {
 
             let serialized = {
                 let mut bytes: Vec<u8> = Vec::new();
-                let shielded = ShieldedWallet {
+                let shielded = v0::ShieldedWallet {
                     utils,
                     spents: HashSet::from([42]),
                     ..Default::default()
@@ -1291,7 +1293,7 @@ pub mod fs {
                     ..Default::default()
                 };
                 BorshSerialize::serialize(
-                    &VersionedWalletRef::V0(&shielded),
+                    &VersionedWalletRef::V1(&shielded),
                     &mut bytes,
                 )
                 .expect("Test failed");
