@@ -891,6 +891,12 @@ where
         native_token_address: &Address,
         is_proposal: bool,
     ) -> Result<()> {
+        let balance_key = TokenKeys::balance_key(token, &ADDRESS);
+        let pre_balance: token::Amount =
+            ctx.pre().read(&balance_key)?.unwrap_or_default();
+        let post_balance: token::Amount =
+            Self::force_read(ctx, &balance_key, ReadType::Post)?;
+
         let is_valid_balance = if is_proposal {
             if !native_token_address.eq(token) {
                 return Err(Error::new_alloc(
@@ -913,7 +919,7 @@ where
 
             checked!(post_balance - pre_balance)? >= min_funds_parameter
         } else {
-            false
+            post_balance >= pre_balance
         };
 
         is_valid_balance.ok_or_else(|| {
@@ -3158,7 +3164,7 @@ mod test {
     }
 
     #[test]
-    fn test_governance_non_native_transfer() {
+    fn test_governance_non_native_debit() {
         let mut state = init_storage();
 
         let gas_meter =
@@ -3184,13 +3190,27 @@ mod test {
         initialize_account_balance(
             &mut state,
             &ADDRESS,
-            token::Amount::native_whole(0),
+            token::Amount::native_whole(510),
             &nam(),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(510),
+            &btc(),
         );
         state.commit_block().unwrap();
 
         let balance_key = balance_key(&btc(), &ADDRESS);
-        let keys_changed = [balance_key].into();
+        let keys_changed = [balance_key.clone()].into();
+
+        let _ = state
+            .write_log_mut()
+            .write(
+                &balance_key,
+                token::Amount::native_whole(1).serialize_to_vec(),
+            )
+            .unwrap();
 
         let tx_code = vec![];
         let tx_data = vec![];
@@ -3231,5 +3251,90 @@ mod test {
                 .to_string()
                 .contains("Invalid balance change for governance address")
         );
+    }
+
+    #[test]
+    fn test_governance_non_native_credit() {
+        let mut state = init_storage();
+
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::vp_cache();
+
+        let tx_index = TxIndex::default();
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+            &btc(),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(510),
+            &nam(),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(510),
+            &btc(),
+        );
+        state.commit_block().unwrap();
+
+        let balance_key = balance_key(&btc(), &ADDRESS);
+        let keys_changed = [balance_key.clone()].into();
+
+        let _ = state
+            .write_log_mut()
+            .write(
+                &balance_key,
+                token::Amount::native_whole(1000).serialize_to_vec(),
+            )
+            .unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Authorization(Authorization::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            batched_tx.tx,
+            batched_tx.cmt,
+            &tx_index,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache.clone(),
+        );
+
+        let res = GovernanceVp::validate_tx(
+            &ctx,
+            &batched_tx,
+            &keys_changed,
+            &verifiers,
+        );
+
+        assert!(res.is_ok());
     }
 }
