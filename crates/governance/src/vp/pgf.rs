@@ -218,8 +218,8 @@ where
         _ctx: &'ctx CTX,
         _token: &Address,
     ) -> Result<()> {
-        Err(Error::new_alloc(
-            "Only governance can debit from PGF accoount".to_string(),
+        Err(Error::new_const(
+            "Only governance can debit from PGF accoount",
         ))
     }
 }
@@ -248,7 +248,7 @@ impl KeyType {
             Self::PgfInflationRate
         } else if pgf_storage::is_steward_inflation_rate_key(key) {
             Self::StewardInflationRate
-        } else if let Some([token, _owner]) =
+        } else if let Some([token, &ADDRESS]) =
             TokenKeys::is_any_token_balance_key(key)
         {
             KeyType::Balance(token.clone())
@@ -262,28 +262,25 @@ impl KeyType {
 
 #[cfg(test)]
 mod test {
-    use std::{cell::RefCell, collections::BTreeSet};
+    use std::cell::RefCell;
+    use std::collections::BTreeSet;
 
-    use assert_matches::assert_matches;
-    use namada_core::{
-        address::testing::{btc, nam},
-        borsh::BorshSerializeExt,
-        chain::testing::get_dummy_header,
-        key::{RefTo, testing::keypair_1},
-        token,
-    };
+    use namada_core::address::testing::{btc, nam};
+    use namada_core::borsh::BorshSerializeExt;
+    use namada_core::chain::testing::get_dummy_header;
+    use namada_core::key::RefTo;
+    use namada_core::key::testing::keypair_1;
+    use namada_core::token;
     use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_proof_of_stake::test_utils::get_dummy_genesis_validator;
-    use namada_state::{
-        BlockHeight, Epoch, State, StateRead, TxIndex, testing::TestState,
-    };
+    use namada_state::testing::TestState;
+    use namada_state::{BlockHeight, Epoch, State, StateRead, TxIndex};
     use namada_token::storage_key::balance_key;
-    use namada_tx::{Authorization, Code, Data, Section, Tx, data::TxType};
+    use namada_tx::data::TxType;
+    use namada_tx::{Authorization, Code, Data, Section, Tx};
+    use namada_vm::WasmCacheRwAccess;
     use namada_vm::wasm::run::VpEvalWasm;
-    use namada_vm::{
-        WasmCacheRwAccess,
-        wasm::{self, VpCache},
-    };
+    use namada_vm::wasm::{self, VpCache};
     use namada_vp::{Address, native_vp};
 
     use crate::vp::pgf::ADDRESS;
@@ -396,9 +393,14 @@ mod test {
             vp_wasm_cache.clone(),
         );
 
-        assert_matches!(
-            PgfVp::validate_tx(&ctx, &batched_tx, &keys_changed, &verifiers),
-            Err(_)
+        let res =
+            PgfVp::validate_tx(&ctx, &batched_tx, &keys_changed, &verifiers);
+
+        assert!(res.is_err());
+        assert!(
+            res.unwrap_err()
+                .to_string()
+                .contains("Only governance can debit from PGF accoount")
         );
     }
 }

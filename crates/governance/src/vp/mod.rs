@@ -917,9 +917,7 @@ where
         };
 
         is_valid_balance.ok_or_else(|| {
-            Error::new_alloc(
-                "Invalid balance change for governance address".to_string(),
-            )
+            Error::new_const("Invalid balance change for governance address")
         })
     }
 
@@ -1156,7 +1154,7 @@ impl KeyType {
             KeyType::COUNTER
         } else if gov_storage::is_parameter_key(key) {
             KeyType::PARAMETER
-        } else if let Some([token, _owner]) =
+        } else if let Some([token, &ADDRESS]) =
             TokenKeys::is_any_token_balance_key(key)
         {
             KeyType::BALANCE(token.clone())
@@ -1177,7 +1175,7 @@ mod test {
     use assert_matches::assert_matches;
     use namada_core::address::Address;
     use namada_core::address::testing::{
-        btc, established_address_1, established_address_3, nam
+        btc, established_address_1, established_address_3, nam,
     };
     use namada_core::borsh::BorshSerializeExt;
     use namada_core::chain::testing::get_dummy_header;
@@ -3220,14 +3218,18 @@ mod test {
             vp_wasm_cache.clone(),
         );
 
-        assert_matches!(
-            GovernanceVp::validate_tx(
-                &ctx,
-                &batched_tx,
-                &keys_changed,
-                &verifiers
-            ),
-            Err(_)
+        let res = GovernanceVp::validate_tx(
+            &ctx,
+            &batched_tx,
+            &keys_changed,
+            &verifiers,
+        );
+
+        assert!(res.is_err());
+        assert!(
+            res.unwrap_err()
+                .to_string()
+                .contains("Invalid balance change for governance address")
         );
     }
 }
