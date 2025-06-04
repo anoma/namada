@@ -1,5 +1,30 @@
 # CHANGELOG
 
+<<<<<<< HEAD
+=======
+## v101.1.0
+
+Namada apps v101.1.0 minor release
+
+## v101.0.0
+
+Namada apps v101.0.0 release.
+
+### MISCELLANEOUS
+
+- Updated Namada libraries to lib-v0.149.1
+  ([\#4571](https://github.com/anoma/namada/pull/4571))
+
+## v1.1.5
+
+Namada apps 1.1.5
+
+### MISCELLANEOUS
+
+- Updated Namada libraries to libs-v0.48.3
+  ([\#4563](https://github.com/anoma/namada/pull/4563))
+
+>>>>>>> b5853ac18 (Changelog: Release apps 101.1.0)
 ## v1.1.4
 
 Namada apps v1.1.4 patch release
