@@ -1129,11 +1129,15 @@ pub mod fs {
                     ContextSyncStatus::Speculative => SPECULATIVE_FILE_NAME,
                 }
             };
-            let Ok(mut ctx_file) = File::open(self.context_dir.join(file_name))
-            else {
-                // a missing file means there is nothing to load.
-                return Ok(());
-            };
+            let mut ctx_file =
+                match File::open(self.context_dir.join(file_name)) {
+                    Ok(file) => file,
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                        // a missing file means there is nothing to load.
+                        return Ok(());
+                    }
+                    Err(e) => return Err(e),
+                };
             let mut bytes = Vec::new();
             ctx_file.read_to_end(&mut bytes)?;
             // Fill the supplied context with the deserialized object
