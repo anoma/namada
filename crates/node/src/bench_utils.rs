@@ -804,12 +804,14 @@ impl ShieldedUtils for BenchShieldedUtils {
                 ContextSyncStatus::Speculative => SPECULATIVE_FILE_NAME,
             }
         };
-        let Ok(mut ctx_file) =
-            File::open(self.context_dir.0.path().to_path_buf().join(file_name))
-        else {
-            // a missing file means there is nothing to load.
-            return Ok(());
-        };
+        let mut ctx_file =
+            File::open(self.context_dir.0.path().to_path_buf().join(file_name)).or_else(|err| {
+                if err.kind() == std::io::ErrorKind::NotFound {
+                    Ok(())
+                } else {
+                    Err(err)
+                }
+            })?;
         let mut bytes = Vec::new();
         ctx_file.read_to_end(&mut bytes)?;
         // Fill the supplied context with the deserialized object
