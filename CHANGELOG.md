@@ -67,6 +67,66 @@ Namada v1.0.0 is the first stable release of the Namada apps.
 - updated namada libraries to libs-v0.46.1
   ([\#4123](https://github.com/anoma/namada/pull/4123))
 
+## libs-v0.150.0
+
+Namada libs v0.150.0 release
+
+### BUG FIXES
+
+- Change ABI to `C-unwind` in `vm_env` when running natively.
+  ([\#4580](https://github.com/anoma/namada/pull/4580))
+- Query Osmosis SQS server with ICS-20 trace path hash, rather than the trace
+  path itself. ([\#4582](https://github.com/anoma/namada/pull/4582))
+- Disallow crediting non-native tokens from pgf and governance accounts
+  ([\#4667](https://github.com/anoma/namada/pull/4667))
+
+### IMPROVEMENTS
+
+- Include the address and error messages of rejecting VPs in MASP fee payments.
+  ([\#4541](https://github.com/anoma/namada/pull/4541))
+- Extended migration to allow the rewards for the native token and other Namada
+  addresses to be reset. ([\#4543](https://github.com/anoma/namada/pull/4543))
+- Improved the display of a transaction's result to account
+  for shielded fee payment in a failing atomic batch.
+  ([\#4544](https://github.com/anoma/namada/pull/4544))
+- Delete IBC signer parsing as gov addr dead code.
+  ([\#4594](https://github.com/anoma/namada/pull/4594))
+- Improved the UX for shielded fee payment.
+  ([\#4619](https://github.com/anoma/namada/pull/4619))
+- The `signatures` and `gas-signature` arguments are now avilable only for
+  `custom` transactions. If a gas signature is provided then no gas payer is
+  allowed. ([\#4625](https://github.com/anoma/namada/pull/4625))
+- Compute transaction change to a shielded account only after all shielded
+  inputs from it have been constructed. The intent of this is to reduce wasted
+  change. ([\#4651](https://github.com/anoma/namada/pull/4651))
+- Limit the number of unique transfer targets (sources + targets) to 20, in
+  `tx_transfer`. ([\#4659](https://github.com/anoma/namada/pull/4659))
+- Optinmized the PoS claim rewards tx to use less gas.
+  ([\#4666](https://github.com/anoma/namada/pull/4666))
+
+### MISCELLANEOUS
+
+- Bump Hermes version to v1.13.0
+  ([\#4581](https://github.com/anoma/namada/issues/4581))
+
+### SDK
+
+- The public keys for signing are now enforced to be unique.
+  ([\#4579](https://github.com/anoma/namada/pull/4579))
+
+### TESTING
+
+- Implemented an example hard-fork migration for transaction WASM code.
+  ([\#4540](https://github.com/anoma/namada/pull/4540))
+- Added an example migration that immediately changes epoch durations.
+  ([\#4555](https://github.com/anoma/namada/pull/4555))
+- Added integration tests to cover the new MASP events and masp fee payments in
+  a failing atomic batch. ([\#4566](https://github.com/anoma/namada/pull/4566))
+- Implemented a migration that sets shielded reward parameters.
+  ([\#4589](https://github.com/anoma/namada/pull/4589))
+- Make tricky_masp_txs integration test less flaky by slowing down its epochs.
+  ([\#4631](https://github.com/anoma/namada/pull/4631))
+
 ## libs-v0.149.1
 
 Namada libs 0.149.1 release.
