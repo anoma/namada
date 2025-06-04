@@ -4,7 +4,9 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use namada_core::booleans::BoolResultUnitExt;
-use namada_core::storage::Key;
+use namada_core::storage::{self, Key};
+use namada_state::StorageRead;
+use namada_systems::trans_token as token;
 use namada_tx::BatchedTxRef;
 use namada_tx::action::{Action, PgfAction};
 use namada_vp_env::{Error, Result, VpEnv};
@@ -33,14 +35,15 @@ impl From<VpError> for Error {
 }
 
 /// Pgf VP
-pub struct PgfVp<'ctx, CTX> {
+pub struct PgfVp<'ctx, CTX, TokenKeys> {
     /// Generic types for DI
-    pub _marker: PhantomData<&'ctx CTX>,
+    pub _marker: PhantomData<(&'ctx CTX, TokenKeys)>,
 }
 
-impl<'ctx, CTX> PgfVp<'ctx, CTX>
+impl<'ctx, CTX, TokenKeys> PgfVp<'ctx, CTX, TokenKeys>
 where
     CTX: VpEnv<'ctx> + namada_tx::action::Read<Err = Error>,
+    TokenKeys: token::Keys,
 {
     /// Run the validity predicate
     pub fn validate_tx(
@@ -114,7 +117,7 @@ where
         }
 
         keys_changed.iter().try_for_each(|key| {
-            let key_type = KeyType::from(key);
+            let key_type = KeyType::from_key::<TokenKeys>(key);
 
             match key_type {
                 KeyType::Stewards(steward_address) => {
@@ -134,11 +137,11 @@ where
                         ));
                     }
 
-                    pgf::storage::get_steward(&ctx.post(), steward_address)?
+                    pgf::storage::get_steward(&ctx.post(), &steward_address)?
                         .map_or_else(
                             // if a steward resigns, check their signature
                             || {
-                                verifiers.contains(steward_address).ok_or_else(
+                                verifiers.contains(&steward_address).ok_or_else(
                                     || {
                                         Error::new_alloc(format!(
                                             "The VP of the steward \
@@ -153,7 +156,7 @@ where
                             // total_stewards_pre == total_stewards_post) check
                             // their signature and if commissions are valid
                             |steward| {
-                                if !verifiers.contains(steward_address) {
+                                if !verifiers.contains(&steward_address) {
                                     return Err(Error::new_alloc(format!(
                                         "The VP of the steward \
                                          {steward_address} should have been \
@@ -176,6 +179,9 @@ where
                 KeyType::PgfInflationRate | KeyType::StewardInflationRate => {
                     Self::is_valid_parameter_change(ctx, batched_tx)
                 }
+                KeyType::Balance(token) => {
+                    Self::is_valid_balance_change(ctx, &token)
+                }
                 KeyType::UnknownPgf => Err(Error::new_alloc(format!(
                     "Unknown PGF state update on key: {key}"
                 ))),
@@ -184,7 +190,7 @@ where
         })
     }
 
-    /// Validate a governance parameter
+    /// Validate a governance parameter change
     pub fn is_valid_parameter_change(
         ctx: &'ctx CTX,
         batched_tx: &BatchedTxRef<'_>,
@@ -207,33 +213,299 @@ where
             },
         )
     }
+
+    /// Validate a pgf balance change
+    pub fn is_valid_balance_change(
+        ctx: &'ctx CTX,
+        token: &Address,
+    ) -> Result<()> {
+        let balance_key = TokenKeys::balance_key(token, &ADDRESS);
+
+        let pre_balance: token::Amount =
+            ctx.pre().read(&balance_key)?.unwrap_or_default();
+        let post_balance: token::Amount =
+            ctx.post().read(&balance_key)?.unwrap_or_default();
+
+        let is_valid_balance = post_balance >= pre_balance;
+
+        is_valid_balance.ok_or_else(|| {
+            Error::new_const("Only governance can debit from PGF account")
+        })
+    }
 }
 
-#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug)]
-enum KeyType<'ctx> {
-    Stewards(&'ctx Address),
+enum KeyType {
+    Stewards(Address),
     Fundings,
     PgfInflationRate,
     StewardInflationRate,
     UnknownPgf,
+    Balance(Address),
     Unknown,
 }
 
-impl<'k> From<&'k Key> for KeyType<'k> {
-    fn from(key: &'k Key) -> Self {
+impl KeyType {
+    fn from_key<TokenKeys>(key: &storage::Key) -> Self
+    where
+        TokenKeys: token::Keys,
+    {
         if let Some(addr) = pgf_storage::is_stewards_key(key) {
-            Self::Stewards(addr)
+            Self::Stewards(addr.clone())
         } else if pgf_storage::is_fundings_key(key) {
             KeyType::Fundings
         } else if pgf_storage::is_pgf_inflation_rate_key(key) {
             Self::PgfInflationRate
         } else if pgf_storage::is_steward_inflation_rate_key(key) {
             Self::StewardInflationRate
+        } else if let Some([token, &ADDRESS]) =
+            TokenKeys::is_any_token_balance_key(key)
+        {
+            KeyType::Balance(token.clone())
         } else if pgf_storage::is_pgf_key(key) {
             KeyType::UnknownPgf
         } else {
             KeyType::Unknown
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::cell::RefCell;
+    use std::collections::BTreeSet;
+
+    use namada_core::address::testing::{btc, nam};
+    use namada_core::borsh::BorshSerializeExt;
+    use namada_core::chain::testing::get_dummy_header;
+    use namada_core::key::RefTo;
+    use namada_core::key::testing::keypair_1;
+    use namada_core::token;
+    use namada_gas::{TxGasMeter, VpGasMeter};
+    use namada_proof_of_stake::test_utils::get_dummy_genesis_validator;
+    use namada_state::testing::TestState;
+    use namada_state::{BlockHeight, Epoch, State, StateRead, TxIndex};
+    use namada_token::storage_key::balance_key;
+    use namada_tx::data::TxType;
+    use namada_tx::{Authorization, Code, Data, Section, Tx};
+    use namada_vm::WasmCacheRwAccess;
+    use namada_vm::wasm::run::VpEvalWasm;
+    use namada_vm::wasm::{self, VpCache};
+    use namada_vp::{Address, native_vp};
+
+    use crate::vp::pgf::ADDRESS;
+
+    type CA = WasmCacheRwAccess;
+    type Eval<S> = VpEvalWasm<<S as StateRead>::D, <S as StateRead>::H, CA>;
+    type Ctx<'ctx, S> = native_vp::Ctx<'ctx, S, VpCache<CA>, Eval<S>>;
+    type PgfVp<'ctx, S> =
+        super::PgfVp<'ctx, Ctx<'ctx, S>, namada_token::Store<()>>;
+
+    fn init_storage() -> TestState {
+        let mut state = TestState::default();
+
+        namada_proof_of_stake::test_utils::test_init_genesis::<
+            _,
+            namada_parameters::Store<_>,
+            crate::Store<_>,
+            namada_token::Store<_>,
+        >(
+            &mut state,
+            namada_proof_of_stake::OwnedPosParams::default(),
+            vec![get_dummy_genesis_validator()].into_iter(),
+            Epoch(1),
+        )
+        .unwrap();
+
+        state
+            .in_mem_mut()
+            .set_header(get_dummy_header())
+            .expect("Setting a dummy header shouldn't fail");
+        state.in_mem_mut().begin_block(BlockHeight(1)).unwrap();
+
+        state
+    }
+
+    fn initialize_account_balance<S>(
+        state: &mut S,
+        address: &Address,
+        amount: token::Amount,
+        token: &Address,
+    ) where
+        S: State,
+    {
+        let balance_key = balance_key(token, address);
+        let _ = state
+            .write_log_mut()
+            .write(&balance_key, amount.serialize_to_vec())
+            .expect("write failed");
+        state.write_log_mut().commit_batch_and_current_tx();
+    }
+
+    #[test]
+    fn test_pgf_non_native_debit() {
+        let mut state = init_storage();
+
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::vp_cache();
+
+        let tx_index = TxIndex::default();
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+            &btc(),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(510),
+            &nam(),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(510),
+            &btc(),
+        );
+        state.commit_block().unwrap();
+
+        let balance_key = balance_key(&btc(), &ADDRESS);
+        let keys_changed = [balance_key.clone()].into();
+
+        let _ = state
+            .write_log_mut()
+            .write(
+                &balance_key,
+                token::Amount::native_whole(1).serialize_to_vec(),
+            )
+            .unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Authorization(Authorization::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            batched_tx.tx,
+            batched_tx.cmt,
+            &tx_index,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache.clone(),
+        );
+
+        let res =
+            PgfVp::validate_tx(&ctx, &batched_tx, &keys_changed, &verifiers);
+
+        assert!(res.is_err());
+        assert!(
+            res.unwrap_err()
+                .to_string()
+                .contains("Only governance can debit from PGF account")
+        );
+    }
+
+    #[test]
+    fn test_pgf_non_native_credit() {
+        let mut state = init_storage();
+
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::vp_cache();
+
+        let tx_index = TxIndex::default();
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+            &btc(),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(510),
+            &nam(),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(510),
+            &btc(),
+        );
+        state.commit_block().unwrap();
+
+        let balance_key = balance_key(&btc(), &ADDRESS);
+        let keys_changed = [balance_key.clone()].into();
+
+        let _ = state
+            .write_log_mut()
+            .write(
+                &balance_key,
+                token::Amount::native_whole(10000).serialize_to_vec(),
+            )
+            .unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Authorization(Authorization::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            batched_tx.tx,
+            batched_tx.cmt,
+            &tx_index,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache.clone(),
+        );
+
+        let res =
+            PgfVp::validate_tx(&ctx, &batched_tx, &keys_changed, &verifiers);
+
+        assert!(res.is_ok());
     }
 }
