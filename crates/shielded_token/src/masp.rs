@@ -80,7 +80,7 @@ pub struct ShieldedTransfer {
 #[allow(missing_docs)]
 #[derive(Debug)]
 pub struct MaspFeeData {
-    pub source: Option<PseudoExtendedKey>,
+    pub source: PseudoExtendedKey,
     pub target: Address,
     pub token: Address,
     pub amount: token::DenominatedAmount,
@@ -88,27 +88,10 @@ pub struct MaspFeeData {
 
 /// The data for a single masp transfer
 #[allow(missing_docs)]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct MaspTransferData {
-    pub source: TransferSource,
-    pub target: TransferTarget,
-    pub token: Address,
-    pub amount: token::DenominatedAmount,
-}
-
-/// The data for a masp transfer relative to a given source
-#[derive(Hash, Eq, PartialEq)]
-pub struct MaspSourceTransferData {
-    source: TransferSource,
-    token: Address,
-}
-
-/// The data for a masp transfer relative to a given target
-#[derive(Debug, Hash, Eq, PartialEq)]
-pub struct MaspTargetTransferData {
-    source: Option<TransferSource>,
-    target: TransferTarget,
-    token: Address,
+    pub sources: Vec<(TransferSource, Address, token::DenominatedAmount)>,
+    pub targets: Vec<(TransferTarget, Address, token::DenominatedAmount)>,
 }
 
 /// Data to log the error of a single masp transaction
@@ -159,10 +142,13 @@ impl fmt::Display for MaspDataLog {
     }
 }
 
-#[allow(missing_docs)]
-pub struct MaspTxReorderedData {
-    source_data: HashMap<MaspSourceTransferData, token::Amount>,
-    target_data: HashMap<MaspTargetTransferData, token::Amount>,
+/// Represents the data used to construct a MASP Transfer
+pub struct MaspTxCombinedData {
+    /// Sources of assets going into the transfer
+    source_data: HashMap<TransferSource, ValueSum<Address, token::Amount>>,
+    /// Destinations of assets going out of the transfer
+    target_data: HashMap<TransferTarget, ValueSum<Address, token::Amount>>,
+    /// The denominations of the various tokens used in the transfer
     denoms: HashMap<Address, Denomination>,
 }
 

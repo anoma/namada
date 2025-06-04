@@ -691,10 +691,10 @@ jobs:
       - name: Run e2e tests with device automation
         id: e2e
         run: |
-          cargo +${{ env.NIGHTLY }} test --lib -- \
-            "e2e::ledger_tests::pos_bonds" \
-            "e2e::ledger_tests::masp_txs_and_queries" \
-            --exact --test-threads=1
+          cargo +${{ env.NIGHTLY }} nextest run \
+            -E 'test(=e2e::ledger_tests::pos_bonds)' \
+            -E 'test(=e2e::ledger_tests::masp_txs_and_queries)' \
+            --test-threads 1 --no-fail-fast
         env:
           NAMADA_SPECULOS_PATH: "/root/.local/bin/speculos"
           NAMADA_SPECULOS_APP_ELF: "/ledger-namada/app_s2.elf"

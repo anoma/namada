@@ -3514,7 +3514,6 @@ pub mod args {
     );
     pub const DECRYPT: ArgFlag = flag("decrypt");
     pub const DESCRIPTION_OPT: ArgOpt<String> = arg_opt("description");
-    pub const DISPOSABLE_SIGNING_KEY: ArgFlag = flag("disposable-gas-payer");
     pub const DIVERSIFIER_INDEX: ArgOpt<DiversifierIndex> =
         arg_opt("diversifier-index");
     pub const DESTINATION_VALIDATOR: Arg<WalletAddress> =
@@ -3674,7 +3673,6 @@ pub mod args {
     pub const SENDER: Arg<String> = arg("sender");
     pub const SHIELDED: ArgFlag = flag("shielded");
     pub const SHOW_IBC_TOKENS: ArgFlag = flag("show-ibc-tokens");
-    pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
     pub const SLIPPAGE: ArgOpt<f64> = arg_opt("slippage-percentage");
     pub const SIGNING_KEYS: ArgMulti<WalletPublicKey, GlobStar> =
         arg_multi("signing-keys");
@@ -4627,6 +4625,29 @@ pub mod args {
                 owner: self
                     .owner
                     .map(|owner| ctx.borrow_chain_or_exit().get(&owner)),
+                signatures: self
+                    .signatures
+                    .iter()
+                    .map(|path| {
+                        std::fs::read(path).map_err(|e| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                format!("Error reading signature file: {}", e),
+                            )
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+                wrapper_signature: self
+                    .wrapper_signature
+                    .map(|path| {
+                        std::fs::read(path).map_err(|e| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                format!("Error reading signature file: {}", e),
+                            )
+                        })
+                    })
+                    .transpose()?,
             })
         }
     }
@@ -4638,12 +4659,16 @@ pub mod args {
             let data_path = DATA_PATH_OPT.parse(matches);
             let serialized_tx = TX_PATH_OPT.parse(matches);
             let owner = OWNER_OPT.parse(matches);
+            let signatures = SIGNATURES.parse(matches);
+            let wrapper_signature = WRAPPER_SIGNATURE_OPT.parse(matches);
             Self {
                 tx,
                 code_path,
                 data_path,
                 serialized_tx,
                 owner,
+                signatures,
+                wrapper_signature,
             }
         }
 
@@ -4655,6 +4680,7 @@ pub mod args {
                         .help(wrap!("The path to the transaction's WASM code."))
                         .requires(DATA_PATH_OPT.name)
                         .conflicts_with_all([
+                            SIGNATURES.name,
                             TX_PATH_OPT.name,
                             WRAPPER_SIGNATURE_OPT.name,
                         ]),
@@ -4669,6 +4695,7 @@ pub mod args {
                         ))
                         .requires(CODE_PATH_OPT.name)
                         .conflicts_with_all([
+                            SIGNATURES.name,
                             TX_PATH_OPT.name,
                             WRAPPER_SIGNATURE_OPT.name,
                         ]),
@@ -4690,6 +4717,28 @@ pub mod args {
                     "The optional address corresponding to the signatures or \
                      signing keys."
                 )))
+                .arg(
+                    SIGNATURES
+                        .def()
+                        .help(wrap!(
+                            "List of file paths containing a serialized \
+                             signature to be attached to a transaction. \
+                             Requires to provide a gas payer."
+                        ))
+                        .conflicts_with_all([
+                            CODE_PATH_OPT.name,
+                            DATA_PATH_OPT.name,
+                        ]),
+                )
+                .arg(
+                    WRAPPER_SIGNATURE_OPT
+                        .def()
+                        .help(wrap!(
+                            "The file path containing a serialized signature \
+                             of the entire transaction for gas payment."
+                        ))
+                        .conflicts_with(FEE_PAYER_OPT.name),
+                )
         }
     }
 
@@ -4703,12 +4752,19 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<TxTransparentTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
-            let mut data = vec![];
+            let mut sources = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
-            for transfer_data in self.data {
-                data.push(TxTransparentTransferData {
+            for transfer_data in self.sources {
+                sources.push(TxTransparentSource {
                     source: chain_ctx.get(&transfer_data.source),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
+            let mut targets = vec![];
+            for transfer_data in self.targets {
+                targets.push(TxTransparentTarget {
                     target: chain_ctx.get(&transfer_data.target),
                     token: chain_ctx.get(&transfer_data.token),
                     amount: transfer_data.amount,
@@ -4717,7 +4773,8 @@ pub mod args {
 
             Ok(TxTransparentTransfer::<SdkTypes> {
                 tx,
-                data,
+                sources,
+                targets,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4731,8 +4788,12 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
-            let data = vec![TxTransparentTransferData {
+            let sources = vec![TxTransparentSource {
                 source,
+                token: token.clone(),
+                amount,
+            }];
+            let targets = vec![TxTransparentTarget {
                 target,
                 token,
                 amount,
@@ -4740,7 +4801,8 @@ pub mod args {
 
             Self {
                 tx,
-                data,
+                sources,
+                targets,
                 tx_code_path,
             }
         }
@@ -4769,12 +4831,20 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<TxShieldedTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
-            let mut data = vec![];
+            let mut sources = vec![];
+            let mut targets = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
-            for transfer_data in self.data {
-                data.push(TxShieldedTransferData {
+            for transfer_data in self.sources {
+                sources.push(TxShieldedSource {
                     source: chain_ctx.get_cached(&transfer_data.source),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
+
+            for transfer_data in self.targets {
+                targets.push(TxShieldedTarget {
                     target: chain_ctx.get(&transfer_data.target),
                     token: chain_ctx.get(&transfer_data.token),
                     amount: transfer_data.amount,
@@ -4786,9 +4856,9 @@ pub mod args {
 
             Ok(TxShieldedTransfer::<SdkTypes> {
                 tx,
-                data,
+                sources,
+                targets,
                 gas_spending_key,
-                disposable_signing_key: self.disposable_signing_key,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4802,20 +4872,23 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
-            let data = vec![TxShieldedTransferData {
+            let sources = vec![TxShieldedSource {
                 source,
+                token: token.clone(),
+                amount,
+            }];
+            let targets = vec![TxShieldedTarget {
                 target,
                 token,
                 amount,
             }];
             let gas_spending_key = GAS_SPENDING_KEY.parse(matches);
-            let disposable_gas_payer = DISPOSABLE_SIGNING_KEY.parse(matches);
 
             Self {
                 tx,
-                data,
+                sources,
+                targets,
                 gas_spending_key,
-                disposable_signing_key: disposable_gas_payer,
                 tx_code_path,
             }
         }
@@ -4840,18 +4913,9 @@ pub mod args {
                 )
                 .arg(GAS_SPENDING_KEY.def().help(wrap!(
                     "The optional spending key that will be used for gas \
-                     payment."
+                     payment. When not provided the source spending key will \
+                     be used."
                 )))
-                .arg(
-                    DISPOSABLE_SIGNING_KEY
-                        .def()
-                        .help(wrap!(
-                            "Generates an ephemeral, disposable keypair to \
-                             sign the wrapper transaction."
-                        ))
-                        .requires(GAS_SPENDING_KEY.name)
-                        .conflicts_with(FEE_PAYER_OPT.name),
-                )
         }
     }
 
@@ -4866,9 +4930,18 @@ pub mod args {
             let mut data = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
-            for transfer_data in self.data {
-                data.push(TxShieldingTransferData {
+            for transfer_data in self.sources {
+                data.push(TxTransparentSource {
                     source: chain_ctx.get(&transfer_data.source),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
+
+            let mut targets = vec![];
+            for transfer_data in self.targets {
+                targets.push(TxShieldedTarget {
+                    target: chain_ctx.get(&transfer_data.target),
                     token: chain_ctx.get(&transfer_data.token),
                     amount: transfer_data.amount,
                 });
@@ -4876,8 +4949,8 @@ pub mod args {
 
             Ok(TxShieldingTransfer::<SdkTypes> {
                 tx,
-                data,
-                target: chain_ctx.get(&self.target),
+                sources: data,
+                targets,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4891,16 +4964,21 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
-            let data = vec![TxShieldingTransferData {
+            let data = vec![TxTransparentSource {
                 source,
+                token: token.clone(),
+                amount,
+            }];
+            let targets = vec![TxShieldedTarget {
+                target,
                 token,
                 amount,
             }];
 
             Self {
                 tx,
-                data,
-                target,
+                sources: data,
+                targets,
                 tx_code_path,
             }
         }
@@ -4938,9 +5016,18 @@ pub mod args {
             let mut data = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
-            for transfer_data in self.data {
-                data.push(TxUnshieldingTransferData {
+            for transfer_data in self.targets {
+                data.push(TxTransparentTarget {
                     target: chain_ctx.get(&transfer_data.target),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
+
+            let mut sources = vec![];
+            for transfer_data in self.sources {
+                sources.push(TxShieldedSource {
+                    source: chain_ctx.get_cached(&transfer_data.source),
                     token: chain_ctx.get(&transfer_data.token),
                     amount: transfer_data.amount,
                 });
@@ -4950,10 +5037,9 @@ pub mod args {
 
             Ok(TxUnshieldingTransfer::<SdkTypes> {
                 tx,
-                data,
+                targets: data,
                 gas_spending_key,
-                disposable_signing_key: self.disposable_signing_key,
-                source: chain_ctx.get_cached(&self.source),
+                sources,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4967,20 +5053,23 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
-            let data = vec![TxUnshieldingTransferData {
+            let data = vec![TxTransparentTarget {
                 target,
+                token: token.clone(),
+                amount,
+            }];
+            let sources = vec![TxShieldedSource {
+                source,
                 token,
                 amount,
             }];
             let gas_spending_key = GAS_SPENDING_KEY.parse(matches);
-            let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
 
             Self {
                 tx,
-                source,
-                data,
+                sources,
+                targets: data,
                 gas_spending_key,
-                disposable_signing_key,
                 tx_code_path,
             }
         }
@@ -5005,18 +5094,9 @@ pub mod args {
                 )
                 .arg(GAS_SPENDING_KEY.def().help(wrap!(
                     "The optional spending key that will be used for gas \
-                     payment."
+                     payment. When not provided the source spending key will \
+                     be used."
                 )))
-                .arg(
-                    DISPOSABLE_SIGNING_KEY
-                        .def()
-                        .help(wrap!(
-                            "Generates an ephemeral, disposable keypair to \
-                             sign the wrapper transaction."
-                        ))
-                        .requires(GAS_SPENDING_KEY.name)
-                        .conflicts_with(FEE_PAYER_OPT.name),
-                )
         }
     }
 
@@ -5046,7 +5126,6 @@ pub mod args {
                 ibc_shielding_data: self.ibc_shielding_data,
                 ibc_memo: self.ibc_memo,
                 gas_spending_key,
-                disposable_signing_key: self.disposable_signing_key,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -5073,7 +5152,6 @@ pub mod args {
                 });
             let ibc_memo = IBC_MEMO.parse(matches);
             let gas_spending_key = GAS_SPENDING_KEY.parse(matches);
-            let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             let tx_code_path = PathBuf::from(TX_IBC_WASM);
             Self {
                 tx,
@@ -5089,7 +5167,6 @@ pub mod args {
                 ibc_shielding_data,
                 ibc_memo,
                 gas_spending_key,
-                disposable_signing_key,
                 tx_code_path,
             }
         }
@@ -5137,18 +5214,9 @@ pub mod args {
                 )
                 .arg(GAS_SPENDING_KEY.def().help(wrap!(
                     "The optional spending key that will be used for gas \
-                     payment (if this is a shielded action)."
+                     payment (if this is a shielded action).  When not \
+                     provided the source spending key will be used."
                 )))
-                .arg(
-                    DISPOSABLE_SIGNING_KEY
-                        .def()
-                        .help(wrap!(
-                            "Generates an ephemeral, disposable keypair to \
-                             sign the wrapper transaction."
-                        ))
-                        .requires(GAS_SPENDING_KEY.name)
-                        .conflicts_with(FEE_PAYER_OPT.name),
-                )
         }
     }
 
@@ -7672,29 +7740,6 @@ pub mod args {
                     .iter()
                     .map(|key| ctx.get(key))
                     .collect(),
-                signatures: self
-                    .signatures
-                    .iter()
-                    .map(|path| {
-                        std::fs::read(path).map_err(|e| {
-                            std::io::Error::new(
-                                std::io::ErrorKind::InvalidInput,
-                                format!("Error reading signature file: {}", e),
-                            )
-                        })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?,
-                wrapper_signature: self
-                    .wrapper_signature
-                    .map(|path| {
-                        std::fs::read(path).map_err(|e| {
-                            std::io::Error::new(
-                                std::io::ErrorKind::InvalidInput,
-                                format!("Error reading signature file: {}", e),
-                            )
-                        })
-                    })
-                    .transpose()?,
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
                 expiration: self.expiration,
@@ -7792,37 +7837,21 @@ pub mod args {
             )
             .arg(SIGNING_KEYS.def().help(wrap!(
                 "Sign the transaction with the key for the given public key, \
-                 public key hash or alias from your wallet."
+                 public key hash or alias from your wallet. Do not provide \
+                 this argument if the source of the transaction is a shielded \
+                 address as it isn't needed and it would leak information."
             )))
-            .arg(SIGNATURES.def().help(wrap!(
-                "List of file paths containing a serialized signature to be \
-                 attached to a transaction. Requires to provide a gas payer."
-            )))
-            .arg(
-                WRAPPER_SIGNATURE_OPT
-                    .def()
-                    .help(wrap!(
-                        "The file path containing a serialized signature of \
-                         the entire transaction for gas payment."
-                    ))
-                    .conflicts_with(FEE_PAYER_OPT.name),
-            )
             .arg(OUTPUT_FOLDER_PATH.def().help(wrap!(
                 "The output folder path where the artifact will be stored."
             )))
             .arg(CHAIN_ID_OPT.def().help(wrap!("The chain ID.")))
-            .arg(
-                FEE_PAYER_OPT
-                    .def()
-                    .help(wrap!(
-                        "The implicit address of the gas payer. It defaults \
-                         to the address associated to the first key passed to \
-                         --signing-keys. If the specific transaction supports \
-                         --disposable-signing-key, then this one will \
-                         overwrite this argument."
-                    ))
-                    .conflicts_with(WRAPPER_SIGNATURE_OPT.name),
-            )
+            .arg(FEE_PAYER_OPT.def().help(wrap!(
+                "The implicit address of the gas payer. It defaults to the \
+                 address associated to the first key passed to \
+                 --signing-keys. Do not provide this argument if you intend \
+                 to pay fees via the MASP (recommended for transactions where \
+                 the source is a shielded address)."
+            )))
             .arg(
                 USE_DEVICE
                     .def()
@@ -7864,8 +7893,6 @@ pub mod args {
             let wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
             let expiration = EXPIRATION_OPT.parse(matches);
             let signing_keys = SIGNING_KEYS.parse(matches);
-            let signatures = SIGNATURES.parse(matches);
-            let wrapper_signature = WRAPPER_SIGNATURE_OPT.parse(matches);
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
@@ -7898,8 +7925,6 @@ pub mod args {
                 gas_limit,
                 expiration,
                 signing_keys,
-                signatures,
-                wrapper_signature,
                 tx_reveal_code_path,
                 password,
                 chain_id,

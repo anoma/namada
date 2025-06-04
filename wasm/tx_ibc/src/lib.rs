@@ -16,6 +16,12 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         if let Some(transfers) = data.transparent {
             let (_debited_accounts, tokens) =
                 if let Some(transparent) = transfers.transparent_part() {
+                    token::validate_transfer_in_out(
+                        transparent.sources,
+                        transparent.targets,
+                    )
+                    .map_err(Error::new_alloc)?;
+
                     token::apply_transparent_transfers(ctx, transparent)
                         .wrap_err("Transparent token transfer failed")?
                 } else {

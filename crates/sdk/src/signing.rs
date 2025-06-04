@@ -66,63 +66,35 @@ use crate::wallet::{Wallet, WalletIo};
 use crate::{Namada, args, rpc};
 
 /// A structure holding the signing data to craft a transaction
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct SigningTxData {
     /// The address owning the transaction
     pub owner: Option<Address>,
     /// The public keys associated to an account
-    pub public_keys: Vec<common::PublicKey>,
+    pub public_keys: HashSet<common::PublicKey>,
     /// The threshold associated to an account
     pub threshold: u8,
     /// The public keys to index map associated to an account
     pub account_public_keys_map: Option<AccountPublicKeysMap>,
-    /// The public key of the fee payer
-    pub fee_payer: common::PublicKey,
+    /// The fee payer, either a tuple with the public key to sign the wrapper
+    /// tx and a flag for the generation of a disposable fee payer or a
+    /// serialized signature
+    pub fee_payer: either::Either<(common::PublicKey, bool), Vec<u8>>,
     /// ID of the Transaction needing signing
     pub shielded_hash: Option<MaspTxId>,
+    /// List of serialized signatures to attach to the transaction
+    pub signatures: Vec<Vec<u8>>,
 }
 
-impl PartialEq for SigningTxData {
-    fn eq(&self, other: &Self) -> bool {
-        // Deconstruct the two instances to ensure we don't forget any new field
-        let SigningTxData {
-            owner,
-            public_keys,
-            threshold,
-            account_public_keys_map,
-            fee_payer,
-            shielded_hash,
-        } = self;
-        let SigningTxData {
-            owner: other_owner,
-            public_keys: other_public_keys,
-            threshold: other_threshold,
-            account_public_keys_map: other_account_public_keys_map,
-            fee_payer: other_fee_payer,
-            shielded_hash: other_shielded_hash,
-        } = other;
-
-        if !(owner == other_owner
-            && threshold == other_threshold
-            && account_public_keys_map == other_account_public_keys_map
-            && fee_payer == other_fee_payer
-            && shielded_hash == other_shielded_hash)
-        {
-            return false;
-        }
-
-        // Check equivalence of the public keys ignoring the specific ordering
-        // and duplicates (the PartialEq implementation of IndexSet ignores the
-        // order)
-        let unique_public_keys = HashSet::<
-            &namada_account::common::CommonPublicKey,
-        >::from_iter(public_keys.iter());
-        let unique_other_public_keys =
-            HashSet::<&namada_account::common::CommonPublicKey>::from_iter(
-                other_public_keys.iter(),
-            );
-
-        unique_public_keys == unique_other_public_keys
+impl SigningTxData {
+    /// Returns the fee payer's public key if provided, otherwise returns an
+    /// error.
+    pub fn fee_payer_or_err(&self) -> Result<&common::PublicKey, Error> {
+        self.fee_payer
+            .as_ref()
+            .left()
+            .map(|(fee_payer, _)| fee_payer)
+            .ok_or_else(|| Error::Other("Missing gas payer".to_string()))
     }
 }
 
@@ -199,23 +171,24 @@ pub async fn tx_signers(
     context: &impl Namada,
     args: &args::Tx<SdkTypes>,
     default: Option<Address>,
-) -> Result<Vec<common::PublicKey>, Error> {
+    signatures: &[Vec<u8>],
+) -> Result<HashSet<common::PublicKey>, Error> {
     let signer = if !args.signing_keys.is_empty() {
-        return Ok(args.signing_keys.clone());
-    } else if args.signatures.is_empty() {
+        return Ok(args.signing_keys.clone().into_iter().collect());
+    } else if signatures.is_empty() {
         // Otherwise use the signer determined by the caller
         default
     } else {
         // If explicit signature(s) are provided signing keys are not required
         // anymore
-        return Ok(vec![]);
+        return Ok(Default::default());
     };
 
     // Now actually fetch the signing key and apply it
     match signer {
         // No signature needed if the source is MASP
-        Some(MASP) => Ok(vec![]),
-        Some(signer) => Ok(vec![find_pk(context, &signer).await?]),
+        Some(MASP) => Ok(Default::default()),
+        Some(signer) => Ok([find_pk(context, &signer).await?].into()),
         None => other_err(
             "All transactions must be signed; please either specify the key \
              or the address from which to look up the signing key."
@@ -274,8 +247,8 @@ where
     let mut used_pubkeys = HashSet::new();
 
     // First try to sign the raw header with the supplied signatures
-    if !args.signatures.is_empty() {
-        let signatures = args
+    if !signing_data.signatures.is_empty() {
+        let signatures = signing_data
             .signatures
             .iter()
             .map(|bytes| {
@@ -319,20 +292,23 @@ where
 
     // Then try to sign the raw header using the hardware wallet
     for pubkey in &signing_data.public_keys {
-        if !used_pubkeys.contains(pubkey)
-            && (*pubkey != signing_data.fee_payer
-                || args.wrapper_signature.is_some())
-        {
-            if let Ok(ntx) = sign(
-                tx.clone(),
-                pubkey.clone(),
-                Signable::RawHeader,
-                user_data.clone(),
-            )
-            .await
-            {
-                *tx = ntx;
-                used_pubkeys.insert(pubkey.clone());
+        if !used_pubkeys.contains(pubkey) {
+            match &signing_data.fee_payer {
+                either::Either::Left((fee_payer, _)) if pubkey == fee_payer => {
+                }
+                _ => {
+                    if let Ok(ntx) = sign(
+                        tx.clone(),
+                        pubkey.clone(),
+                        Signable::RawHeader,
+                        user_data.clone(),
+                    )
+                    .await
+                    {
+                        *tx = ntx;
+                        used_pubkeys.insert(pubkey.clone());
+                    }
+                }
             }
         }
     }
@@ -344,33 +320,38 @@ where
     // Then try signing the wrapper header (fee payer). Check if there's a
     // provided wrapper signature, otherwise sign with the software wallet or
     // use the fallback
-    if let Some(sig_bytes) = &args.wrapper_signature {
-        let auth = serde_json::from_slice(sig_bytes)
-            .map_err(|e| Error::Encode(EncodingError::Serde(e.to_string())))?;
-        tx.add_section(Section::Authorization(auth));
-    } else {
-        let key = {
-            // Lock the wallet just long enough to extract a key from it without
-            // interfering with the sign closure call
-            let mut wallet = wallet.write().await;
-            find_key_by_pk(&mut *wallet, args, &signing_data.fee_payer)
-        };
-        match key {
-            Ok(fee_payer_keypair) => {
-                tx.sign_wrapper(fee_payer_keypair);
-            }
-            Err(_) => {
-                *tx = sign(
-                    tx.clone(),
-                    signing_data.fee_payer.clone(),
-                    Signable::FeeRawHeader,
-                    user_data,
-                )
-                .await?;
-                if signing_data.public_keys.contains(&signing_data.fee_payer) {
-                    used_pubkeys.insert(signing_data.fee_payer.clone());
+    match &signing_data.fee_payer {
+        either::Either::Left((fee_payer, _)) => {
+            let key = {
+                // Lock the wallet just long enough to extract a key from it
+                // without interfering with the sign closure
+                // call
+                let mut wallet = wallet.write().await;
+                find_key_by_pk(&mut *wallet, args, fee_payer)
+            };
+            match key {
+                Ok(fee_payer_keypair) => {
+                    tx.sign_wrapper(fee_payer_keypair);
+                }
+                Err(_) => {
+                    *tx = sign(
+                        tx.clone(),
+                        fee_payer.clone(),
+                        Signable::FeeRawHeader,
+                        user_data,
+                    )
+                    .await?;
+                    if signing_data.public_keys.contains(fee_payer) {
+                        used_pubkeys.insert(fee_payer.clone());
+                    }
                 }
             }
+        }
+        either::Either::Right(sig_bytes) => {
+            let auth = serde_json::from_slice(sig_bytes).map_err(|e| {
+                Error::Encode(EncodingError::Serde(e.to_string()))
+            })?;
+            tx.add_section(Section::Authorization(auth));
         }
     }
     // Remove redundant sections now that the signing process is complete.
@@ -395,16 +376,19 @@ where
 
 /// Return the necessary data regarding an account to be able to generate a
 /// signature section
+#[allow(clippy::too_many_arguments)]
 pub async fn aux_signing_data(
     context: &impl Namada,
     args: &args::Tx<SdkTypes>,
     owner: Option<Address>,
     default_signer: Option<Address>,
     extra_public_keys: Vec<common::PublicKey>,
-    disposable_signing_key: bool,
+    is_shielded_source: bool,
+    signatures: Vec<Vec<u8>>,
+    wrapper_signature: Option<Vec<u8>>,
 ) -> Result<SigningTxData, Error> {
     let mut public_keys =
-        tx_signers(context, args, default_signer.clone()).await?;
+        tx_signers(context, args, default_signer.clone(), &signatures).await?;
     public_keys.extend(extra_public_keys.clone());
 
     let (account_public_keys_map, threshold) = match &owner {
@@ -437,16 +421,23 @@ pub async fn aux_signing_data(
         ),
     };
 
-    let fee_payer = if disposable_signing_key {
-        gen_disposable_signing_key(context).await
-    } else {
-        match &args.wrapper_fee_payer {
-            Some(keypair) => keypair.clone(),
-            None => public_keys
-                .first()
-                .ok_or(TxSubmitError::InvalidFeePayer)?
-                .clone(),
-        }
+    let fee_payer = match &wrapper_signature {
+        Some(signature) => either::Right(signature.to_owned()),
+        None => match &args.wrapper_fee_payer {
+            Some(pubkey) => either::Left((pubkey.clone(), false)),
+            None => {
+                if let Some(pubkey) = public_keys.first() {
+                    either::Left((pubkey.to_owned(), false))
+                } else if is_shielded_source {
+                    either::Left((
+                        gen_disposable_signing_key(context).await,
+                        true,
+                    ))
+                } else {
+                    return Err(Error::Tx(TxSubmitError::InvalidFeePayer));
+                }
+            }
+        },
     };
 
     Ok(SigningTxData {
@@ -456,6 +447,7 @@ pub async fn aux_signing_data(
         account_public_keys_map,
         fee_payer,
         shielded_hash: None,
+        signatures,
     })
 }
 
@@ -2272,8 +2264,6 @@ mod test_signing {
             expiration: Default::default(),
             chain_id: None,
             signing_keys: vec![],
-            signatures: vec![],
-            wrapper_signature: None,
             tx_reveal_code_path: Default::default(),
             password: Some(zeroize::Zeroizing::new("bingbong123".to_string())),
             memo: None,
@@ -2455,7 +2445,7 @@ mod test_signing {
     #[tokio::test]
     async fn test_tx_signers_failure() {
         let args = arbitrary_args();
-        tx_signers(&TestNamadaImpl::new(None).0, &args, None)
+        tx_signers(&TestNamadaImpl::new(None).0, &args, None, &[])
             .await
             .expect_err("Test failed");
     }
@@ -2589,11 +2579,12 @@ mod test_signing {
         let mut tx = Tx::new(ChainId::default(), None);
         let signing_data = SigningTxData {
             owner: None,
-            public_keys: vec![public_key.clone()],
+            public_keys: [public_key.clone()].into(),
             threshold: 1,
             account_public_keys_map: Some(Default::default()),
-            fee_payer: public_key_fee.clone(),
+            fee_payer: either::Either::Left((public_key_fee.clone(), false)),
             shielded_hash: None,
+            signatures: vec![],
         };
 
         let Error::Tx(TxSubmitError::MissingSigningKeys(1, 0)) = sign_tx(
@@ -2625,11 +2616,12 @@ mod test_signing {
             Wallet::<TestWalletUtils>::new(TestWalletUtils, Default::default());
         let signing_data = SigningTxData {
             owner: None,
-            public_keys: vec![public_key.clone()],
+            public_keys: [public_key.clone()].into(),
             threshold: 1,
             account_public_keys_map: Some(Default::default()),
-            fee_payer: public_key.clone(),
+            fee_payer: either::Left((public_key.clone(), false)),
             shielded_hash: None,
+            signatures: vec![],
         };
         sign_tx(
             &RwLock::new(wallet),

@@ -20,11 +20,21 @@
 use namada_core::borsh::BorshDeserialize;
 pub use namada_core::internal::{HostEnvResult, KeyVal};
 
+macro_rules! extern_c {
+    ($($defs:tt)*) => {
+        #[cfg(feature = "c_unwind")]
+        extern "C-unwind" { $($defs)* }
+
+        #[cfg(not(feature = "c_unwind"))]
+        extern "C" { $($defs)* }
+    }
+}
+
 /// Transaction environment imports
 pub mod tx {
     // These host functions are implemented in the Namada's [`host_env`]
     // module. The environment provides calls to them via this C interface.
-    extern "C" {
+    extern_c! {
         /// Read variable-length data when we don't know the size up-front,
         /// returns the size of the value (can be 0), or -1 if the key is
         /// not present. If a value is found, it will be placed in the read
@@ -161,7 +171,7 @@ pub mod tx {
 pub mod vp {
     // These host functions are implemented in the Namada's [`host_env`]
     // module. The environment provides calls to them via this C interface.
-    extern "C" {
+    extern_c! {
         /// Read variable-length prior state when we don't know the size
         /// up-front, returns the size of the value (can be 0), or -1 if
         /// the key is not present. If a value is found, it will be placed in
@@ -283,7 +293,10 @@ pub mod vp {
 /// pre-allocated buffer with the obtained size.
 pub fn read_from_buffer(
     read_result: i64,
-    result_buffer: unsafe extern "C" fn(u64),
+    #[cfg(feature = "c_unwind")] result_buffer: unsafe extern "C-unwind" fn(
+        u64,
+    ),
+    #[cfg(not(feature = "c_unwind"))] result_buffer: unsafe extern "C" fn(u64),
 ) -> Option<Vec<u8>> {
     if HostEnvResult::is_fail(read_result) {
         None
@@ -300,7 +313,10 @@ pub fn read_from_buffer(
 /// values in a key-value pair from the host.
 pub fn read_key_val_bytes_from_buffer(
     read_result: i64,
-    result_buffer: unsafe extern "C" fn(u64),
+    #[cfg(feature = "c_unwind")] result_buffer: unsafe extern "C-unwind" fn(
+        u64,
+    ),
+    #[cfg(not(feature = "c_unwind"))] result_buffer: unsafe extern "C" fn(u64),
 ) -> Option<(String, Vec<u8>)> {
     let key_val = read_from_buffer(read_result, result_buffer)
         .and_then(|t| KeyVal::try_from_slice(&t[..]).ok());

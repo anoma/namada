@@ -7,9 +7,8 @@ use std::str::FromStr;
 fn main() {
     println!("cargo:rerun-if-changed=CONSENSUS_VERSION");
     let out_dir = env::var("OUT_DIR").unwrap();
-    let raw_consensus_version =
-        std::fs::read_to_string("../../CONSENSUS_VERSION")
-            .expect("Read CONSENSUS_VERSION file");
+    let raw_consensus_version = std::fs::read_to_string("./CONSENSUS_VERSION")
+        .expect("Read CONSENSUS_VERSION file");
     let consensus_version = u64::from_str(raw_consensus_version.trim())
         .expect("CONSENSUS_VERSION contains a u64");
     let mut consensus_version_rs =

@@ -11,9 +11,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MINOR_VERSION_RELEASE: "0.48.999" # bump on a major release
-  BACKPORT_LIBS_LABEL: "backport-libs-0.48" # also bump on major release
-  MAINT_LIBS_BRANCH: "maint-libs-0.48" # also bump on major release
+  MINOR_VERSION_RELEASE: "0.149.999" # bump on a major release
+  BACKPORT_LIBS_LABEL: "backport-libs-0.149" # also bump on major release
+  MAINT_LIBS_BRANCH: "maint-libs-0.149" # also bump on major release
 
 jobs:
   # Check if a PR has no major breaking changes to be backported to library
@@ -44,6 +44,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ env.MAINT_LIBS_BRANCH }}
+      - name: Copy the current folder to be the baseline for semver-checks
+        run: cp -r "$GITHUB_WORKSPACE" ../baseline
       - name: Backport PR to libs maintenance branch
         run: |
           git config user.email "bing@bong.com"
@@ -65,9 +67,13 @@ jobs:
       - name: Check semver
         id: semver
         continue-on-error: true
-        uses: obi1kenobi/cargo-semver-checks-action@v2
+        # TODO: Temp using fork for baseline args support.
+        # Switch back once is merged and released https://github.com/obi1kenobi/cargo-semver-checks-action/pull/96
+        # uses: obi1kenobi/cargo-semver-checks-action@v2
+        uses: anoma/cargo-semver-checks-action@8ce111a9587c085c03ca615d22a585da0ce31a93
         with:
           exclude: namada_apps, namada_benchmarks, namada_light_sdk, namada_examples, namada_fuzz
+          baseline-root: ../baseline
       - name: Label PR on success
         uses: actions-ecosystem/action-add-labels@v1
         if: >-

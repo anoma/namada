@@ -91,6 +91,7 @@ Compatibility table with Namada:
 
 | Namada binaries | Hermes |
 | ----------- | ----------- |
+| v101.0.0 | [1.13.0](https://github.com/informalsystems/hermes/releases/tag/v1.13.0) |
 | v1.1.1 | [1.11.0](https://github.com/informalsystems/hermes/releases/tag/v1.11.0) |
 | v1.1.0 | [1.10.5-namada-beta18](https://github.com/heliaxdev/hermes/releases/tag/v1.10.5-namada-beta18) |
 | v1.0.0 | [1.10.4-namada-beta17-rc2](https://github.com/heliaxdev/hermes/releases/tag/v1.10.4-namada-beta17-rc2) |

@@ -37,7 +37,7 @@ use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::ibc::{NamadaMemo, NamadaMemoData};
 use crate::rpc::{
     get_registry_from_xcs_osmosis_contract, osmosis_denom_from_namada_denom,
-    query_osmosis_pool_routes,
+    query_ibc_denom, query_osmosis_pool_routes,
 };
 use crate::signing::{SigningTxData, gen_disposable_signing_key};
 use crate::wallet::{DatedSpendingKey, DatedViewingKey};
@@ -176,6 +176,10 @@ pub struct TxCustom<C: NamadaTypes = SdkTypes> {
     pub serialized_tx: Option<C::Data>,
     /// The optional address that correspond to the signatures/signing-keys
     pub owner: Option<C::Address>,
+    /// List of signatures to attach to the transaction
+    pub signatures: Vec<C::Data>,
+    /// Optional path to a serialized wrapper signature
+    pub wrapper_signature: Option<C::Data>,
 }
 
 impl<C: NamadaTypes> TxBuilder<C> for TxCustom<C> {
@@ -257,26 +261,15 @@ impl From<token::DenominatedAmount> for InputAmount {
     }
 }
 
-/// Transparent transfer-specific arguments
-#[derive(Clone, Debug)]
-pub struct TxTransparentTransferData<C: NamadaTypes = SdkTypes> {
-    /// Transfer source address
-    pub source: C::Address,
-    /// Transfer target address
-    pub target: C::Address,
-    /// Transferred token address
-    pub token: C::Address,
-    /// Transferred token amount
-    pub amount: InputAmount,
-}
-
 /// Transparent transfer transaction arguments
 #[derive(Clone, Debug)]
 pub struct TxTransparentTransfer<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// The transfer specific data
-    pub data: Vec<TxTransparentTransferData<C>>,
+    pub sources: Vec<TxTransparentSource<C>>,
+    /// The transfer specific data
+    pub targets: Vec<TxTransparentTarget<C>>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -290,28 +283,6 @@ impl<C: NamadaTypes> TxBuilder<C> for TxTransparentTransfer<C> {
             tx: func(self.tx),
             ..self
         }
-    }
-}
-
-impl<C: NamadaTypes> TxTransparentTransferData<C> {
-    /// Transfer source address
-    pub fn source(self, source: C::Address) -> Self {
-        Self { source, ..self }
-    }
-
-    /// Transfer target address
-    pub fn receiver(self, target: C::Address) -> Self {
-        Self { target, ..self }
-    }
-
-    /// Transferred token address
-    pub fn token(self, token: C::Address) -> Self {
-        Self { token, ..self }
-    }
-
-    /// Transferred token amount
-    pub fn amount(self, amount: InputAmount) -> Self {
-        Self { amount, ..self }
     }
 }
 
@@ -337,9 +308,18 @@ impl TxTransparentTransfer {
 
 /// Shielded transfer-specific arguments
 #[derive(Clone, Debug)]
-pub struct TxShieldedTransferData<C: NamadaTypes = SdkTypes> {
+pub struct TxShieldedSource<C: NamadaTypes = SdkTypes> {
     /// Transfer source spending key
     pub source: C::SpendingKey,
+    /// Transferred token address
+    pub token: C::Address,
+    /// Transferred token amount
+    pub amount: InputAmount,
+}
+
+/// Shielded transfer-specific arguments
+#[derive(Clone, Debug)]
+pub struct TxShieldedTarget<C: NamadaTypes = SdkTypes> {
     /// Transfer target address
     pub target: C::PaymentAddress,
     /// Transferred token address
@@ -354,12 +334,11 @@ pub struct TxShieldedTransfer<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Transfer-specific data
-    pub data: Vec<TxShieldedTransferData<C>>,
+    pub sources: Vec<TxShieldedSource<C>>,
+    /// Transfer-specific data
+    pub targets: Vec<TxShieldedTarget<C>>,
     /// Optional additional keys for gas payment
     pub gas_spending_key: Option<C::SpendingKey>,
-    /// Generate an ephemeral signing key to be used only once to sign the
-    /// wrapper tx
-    pub disposable_signing_key: bool,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -389,7 +368,7 @@ impl TxShieldedTransfer {
 
 /// Shielding transfer-specific arguments
 #[derive(Clone, Debug)]
-pub struct TxShieldingTransferData<C: NamadaTypes = SdkTypes> {
+pub struct TxTransparentSource<C: NamadaTypes = SdkTypes> {
     /// Transfer source spending key
     pub source: C::Address,
     /// Transferred token address
@@ -404,9 +383,9 @@ pub struct TxShieldingTransfer<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Transfer target address
-    pub target: C::PaymentAddress,
+    pub targets: Vec<TxShieldedTarget<C>>,
     /// Transfer-specific data
-    pub data: Vec<TxShieldingTransferData<C>>,
+    pub sources: Vec<TxTransparentSource<C>>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -436,7 +415,7 @@ impl TxShieldingTransfer {
 
 /// Unshielding transfer-specific arguments
 #[derive(Clone, Debug)]
-pub struct TxUnshieldingTransferData<C: NamadaTypes = SdkTypes> {
+pub struct TxTransparentTarget<C: NamadaTypes = SdkTypes> {
     /// Transfer target address
     pub target: C::Address,
     /// Transferred token address
@@ -451,14 +430,11 @@ pub struct TxUnshieldingTransfer<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Transfer source spending key
-    pub source: C::SpendingKey,
+    pub sources: Vec<TxShieldedSource<C>>,
     /// Transfer-specific data
-    pub data: Vec<TxUnshieldingTransferData<C>>,
+    pub targets: Vec<TxTransparentTarget<C>>,
     /// Optional additional keys for gas payment
     pub gas_spending_key: Option<C::SpendingKey>,
-    /// Generate an ephemeral signing key to be used only once to sign the
-    /// wrapper tx
-    pub disposable_signing_key: bool,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -662,6 +638,16 @@ impl TxOsmosisSwap<SdkTypes> {
         )
         .await?;
 
+        let namada_input_denom =
+            query_ibc_denom(ctx, transfer.token.to_string(), None).await;
+
+        let (osmosis_input_denom, _) = osmosis_denom_from_namada_denom(
+            &osmosis_rest_rpc,
+            &registry_xcs_addr,
+            &namada_input_denom,
+        )
+        .await?;
+
         let (osmosis_output_denom, namada_output_addr) =
             osmosis_denom_from_namada_denom(
                 &osmosis_rest_rpc,
@@ -676,8 +662,8 @@ impl TxOsmosisSwap<SdkTypes> {
             query_osmosis_pool_routes(
                 ctx,
                 &transfer.token,
+                &osmosis_input_denom,
                 transfer.amount,
-                transfer.channel_id.clone(),
                 &osmosis_output_denom,
                 OSMOSIS_SQS_SERVER,
             )
@@ -830,9 +816,6 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub ibc_memo: Option<String>,
     /// Optional additional keys for gas payment
     pub gas_spending_key: Option<C::SpendingKey>,
-    /// Generate an ephemeral signing key to be used only once to sign the
-    /// wrapper tx
-    pub disposable_signing_key: bool,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -2675,10 +2658,6 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub chain_id: Option<ChainId>,
     /// Sign the tx with the key for the given alias from your wallet
     pub signing_keys: Vec<C::PublicKey>,
-    /// List of signatures to attach to the transaction
-    pub signatures: Vec<C::Data>,
-    /// Optional path to a serialized wrapper signature
-    pub wrapper_signature: Option<C::Data>,
     /// Path to the TX WASM code file to reveal PK
     pub tx_reveal_code_path: PathBuf,
     /// Password to decrypt key
@@ -2820,10 +2799,6 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
     /// Sign the tx with the key for the given alias from your wallet
     fn signing_keys(self, signing_keys: Vec<C::PublicKey>) -> Self {
         self.tx(|x| Tx { signing_keys, ..x })
-    }
-    /// List of signatures to attach to the transaction
-    fn signatures(self, signatures: Vec<C::Data>) -> Self {
-        self.tx(|x| Tx { signatures, ..x })
     }
     /// Path to the TX WASM code file to reveal PK
     fn tx_reveal_code_path(self, tx_reveal_code_path: PathBuf) -> Self {

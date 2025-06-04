@@ -145,8 +145,6 @@ pub trait Namada: NamadaIo {
             expiration: Default::default(),
             chain_id: None,
             signing_keys: vec![],
-            signatures: vec![],
-            wrapper_signature: None,
             tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
             password: None,
             memo: None,
@@ -159,10 +157,12 @@ pub trait Namada: NamadaIo {
     /// arguments
     fn new_transparent_transfer(
         &self,
-        data: Vec<args::TxTransparentTransferData>,
+        sources: Vec<args::TxTransparentSource>,
+        targets: Vec<args::TxTransparentTarget>,
     ) -> args::TxTransparentTransfer {
         args::TxTransparentTransfer {
-            data,
+            sources,
+            targets,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
         }
@@ -172,15 +172,15 @@ pub trait Namada: NamadaIo {
     /// arguments
     fn new_shielded_transfer(
         &self,
-        data: Vec<args::TxShieldedTransferData>,
+        sources: Vec<args::TxShieldedSource>,
+        targets: Vec<args::TxShieldedTarget>,
         gas_spending_key: Option<PseudoExtendedKey>,
-        disposable_signing_key: bool,
     ) -> args::TxShieldedTransfer {
         args::TxShieldedTransfer {
-            data,
+            sources,
+            targets,
             gas_spending_key,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
-            disposable_signing_key,
             tx: self.tx_builder(),
         }
     }
@@ -189,12 +189,12 @@ pub trait Namada: NamadaIo {
     /// arguments
     fn new_shielding_transfer(
         &self,
-        target: PaymentAddress,
-        data: Vec<args::TxShieldingTransferData>,
+        targets: Vec<args::TxShieldedTarget>,
+        sources: Vec<args::TxTransparentSource>,
     ) -> args::TxShieldingTransfer {
         args::TxShieldingTransfer {
-            data,
-            target,
+            sources,
+            targets,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
         }
@@ -204,16 +204,14 @@ pub trait Namada: NamadaIo {
     /// arguments
     fn new_unshielding_transfer(
         &self,
-        source: PseudoExtendedKey,
-        data: Vec<args::TxUnshieldingTransferData>,
+        sources: Vec<args::TxShieldedSource>,
+        targets: Vec<args::TxTransparentTarget>,
         gas_spending_key: Option<PseudoExtendedKey>,
-        disposable_signing_key: bool,
     ) -> args::TxUnshieldingTransfer {
         args::TxUnshieldingTransfer {
-            source,
-            data,
+            sources,
+            targets,
             gas_spending_key,
-            disposable_signing_key,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
         }
@@ -303,7 +301,6 @@ pub trait Namada: NamadaIo {
         token: Address,
         amount: InputAmount,
         channel_id: ChannelId,
-        disposable_signing_key: bool,
     ) -> args::TxIbcTransfer {
         args::TxIbcTransfer {
             source,
@@ -311,7 +308,6 @@ pub trait Namada: NamadaIo {
             token,
             amount,
             channel_id,
-            disposable_signing_key,
             port_id: PortId::from_str("transfer").unwrap(),
             timeout_height: None,
             timeout_sec_offset: None,
@@ -599,6 +595,8 @@ pub trait Namada: NamadaIo {
             code_path: None,
             data_path: None,
             serialized_tx: None,
+            signatures: vec![],
+            wrapper_signature: None,
         }
     }
 
@@ -724,8 +722,6 @@ where
                 expiration: Default::default(),
                 chain_id: None,
                 signing_keys: vec![],
-                signatures: vec![],
-                wrapper_signature: None,
                 tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
                 password: None,
                 memo: None,

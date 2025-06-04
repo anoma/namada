@@ -85,11 +85,18 @@ pub async fn build_bridge_pool_tx(
             Some(sender_),
             vec![],
             false,
+            vec![],
+            None
         ),
     )?;
+    let fee_payer = signing_data
+        .fee_payer
+        .clone()
+        .left()
+        .ok_or_else(|| Error::Other("Missing gas payer argument".to_string()))?
+        .0;
     let (fee_amount, _) =
-        validate_transparent_fee(context, &tx_args, &signing_data.fee_payer)
-            .await?;
+        validate_transparent_fee(context, &tx_args, &fee_payer).await?;
 
     let chain_id = tx_args
         .chain_id
@@ -106,13 +113,7 @@ pub async fn build_bridge_pool_tx(
     )
     .add_data(transfer);
 
-    prepare_tx(
-        &tx_args,
-        &mut tx,
-        fee_amount,
-        signing_data.fee_payer.clone(),
-    )
-    .await?;
+    prepare_tx(&tx_args, &mut tx, fee_amount, fee_payer).await?;
 
     Ok((tx, signing_data))
 }

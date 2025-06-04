@@ -57,7 +57,7 @@ pub trait TxToSign {
     fn get_pks(
         &self,
         accounts: &[EstablishedAccountTx],
-    ) -> (Vec<common::PublicKey>, u8);
+    ) -> (HashSet<common::PublicKey>, u8);
 
     fn get_owner(&self) -> GenesisAddress;
 }
@@ -95,8 +95,6 @@ fn get_tx_args(use_device: bool) -> TxArgs {
         expiration: Default::default(),
         chain_id: None,
         signing_keys: vec![],
-        signatures: vec![],
-        wrapper_signature: None,
         tx_reveal_code_path: Default::default(),
         password: None,
         memo: None,
@@ -658,7 +656,7 @@ impl TxToSign for ValidatorAccountTx<SignedPk> {
     fn get_pks(
         &self,
         established_accounts: &[EstablishedAccountTx],
-    ) -> (Vec<PublicKey>, u8) {
+    ) -> (HashSet<PublicKey>, u8) {
         established_accounts
             .iter()
             .find_map(|account| {
@@ -668,7 +666,7 @@ impl TxToSign for ValidatorAccountTx<SignedPk> {
                             .public_keys
                             .iter()
                             .map(|pk| pk.raw.clone())
-                            .collect::<Vec<_>>(),
+                            .collect::<HashSet<_>>(),
                         account.threshold,
                     ))
                 } else {
@@ -771,8 +769,9 @@ impl<T> Signed<T> {
             account_public_keys_map: Some(pks.iter().cloned().collect()),
             public_keys: pks.clone(),
             threshold,
-            fee_payer: genesis_fee_payer_pk(),
+            fee_payer: Either::Left((genesis_fee_payer_pk(), false)),
             shielded_hash: None,
+            signatures: vec![],
         };
 
         let mut tx = self.data.tx_to_sign();
@@ -924,9 +923,9 @@ where
     fn get_pks(
         &self,
         established_accounts: &[EstablishedAccountTx],
-    ) -> (Vec<PublicKey>, u8) {
+    ) -> (HashSet<PublicKey>, u8) {
         match &self.source {
-            GenesisAddress::PublicKey(pk) => (vec![pk.raw.clone()], 1),
+            GenesisAddress::PublicKey(pk) => ([pk.raw.clone()].into(), 1),
             GenesisAddress::EstablishedAddress(owner) => established_accounts
                 .iter()
                 .find_map(|account| {
@@ -936,7 +935,7 @@ where
                                 .public_keys
                                 .iter()
                                 .map(|pk| pk.raw.clone())
-                                .collect::<Vec<_>>(),
+                                .collect::<HashSet<_>>(),
                             account.threshold,
                         ))
                     } else {

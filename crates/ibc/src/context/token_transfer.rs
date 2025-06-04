@@ -27,7 +27,6 @@ where
     pub(crate) inner: Rc<RefCell<C>>,
     pub(crate) verifiers: Rc<RefCell<BTreeSet<Address>>>,
     is_shielded: bool,
-    parse_addr_as_governance: bool,
 }
 
 impl<C> TokenTransferContext<C>
@@ -43,23 +42,12 @@ where
             inner,
             verifiers,
             is_shielded: false,
-            parse_addr_as_governance: false,
         }
     }
 
     /// Insert a verifier address whose VP will verify the tx.
     pub(crate) fn insert_verifier(&mut self, addr: &Address) {
         self.verifiers.borrow_mut().insert(addr.clone());
-    }
-
-    /// Enable parsing ibc signers as the governance address
-    pub fn enable_parse_addr_as_governance(&mut self) {
-        self.parse_addr_as_governance = true;
-    }
-
-    /// Disable parsing ibc signers as the governance address
-    pub fn disable_parse_addr_as_governance(&mut self) {
-        self.parse_addr_as_governance = false;
     }
 
     /// Set to enable a shielded transfer
@@ -198,15 +186,11 @@ where
         &self,
         signer: &Signer,
     ) -> Result<Self::AccountId, HostError> {
-        if self.parse_addr_as_governance {
-            Ok(namada_core::address::GOV)
-        } else {
-            Address::try_from(signer).map_err(|e| HostError::Other {
-                description: format!(
-                    "Decoding the signer failed: {signer}, error {e}"
-                ),
-            })
-        }
+        Address::try_from(signer).map_err(|e| HostError::Other {
+            description: format!(
+                "Decoding the signer failed: {signer}, error {e}"
+            ),
+        })
     }
 
     fn get_port(&self) -> Result<PortId, HostError> {

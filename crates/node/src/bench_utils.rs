@@ -1248,10 +1248,16 @@ impl BenchShieldedCtx {
             native_token,
         );
         let masp_transfer_data = MaspTransferData {
-            source: source.clone(),
-            target: target.clone(),
-            token: address::testing::nam(),
-            amount: denominated_amount,
+            sources: vec![(
+                source.clone(),
+                address::testing::nam(),
+                denominated_amount,
+            )],
+            targets: vec![(
+                target.clone(),
+                address::testing::nam(),
+                denominated_amount,
+            )],
         };
         let shielded = async_runtime
             .block_on(async {
@@ -1261,7 +1267,7 @@ impl BenchShieldedCtx {
                 shielded_ctx
                     .gen_shielded_transfer(
                         &namada,
-                        vec![masp_transfer_data],
+                        masp_transfer_data,
                         None,
                         expiration,
                         &mut RngBuildParams::new(OsRng),

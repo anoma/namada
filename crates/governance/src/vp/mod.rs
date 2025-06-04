@@ -134,9 +134,9 @@ where
 
         for key in keys_changed.iter() {
             let proposal_id = gov_storage::get_proposal_id(key);
-            let key_type = KeyType::from_key::<TokenKeys>(key, &native_token);
+            let key_type = KeyType::from_key::<TokenKeys>(key);
 
-            let result = match (key_type, proposal_id) {
+            let result = match (key_type.clone(), proposal_id) {
                 (KeyType::VOTE, Some(proposal_id)) => {
                     Self::is_valid_vote_key(ctx, proposal_id, key, verifiers)
                 }
@@ -171,9 +171,12 @@ where
                 (KeyType::PARAMETER, _) => {
                     Self::is_valid_parameter(ctx, tx_data)
                 }
-                (KeyType::BALANCE, _) => {
-                    Self::is_valid_balance(ctx, &native_token)
-                }
+                (KeyType::BALANCE(token), _) => Self::is_valid_balance(
+                    ctx,
+                    &token,
+                    &native_token,
+                    set_count > 0,
+                ),
                 (KeyType::UNKNOWN_GOVERNANCE, _) => Err(Error::new_alloc(
                     format!("Unkown governance key change: {key}"),
                 )),
@@ -185,7 +188,8 @@ where
 
             result.inspect_err(|err| {
                 tracing::info!(
-                    "Key {key_type:?} rejected with error: {err:#?}."
+                    "Key {:?} rejected with error: {err:#?}.",
+                    key_type
                 )
             })?;
         }
@@ -883,32 +887,42 @@ where
     /// Validate a balance key
     fn is_valid_balance(
         ctx: &'ctx CTX,
+        token: &Address,
         native_token_address: &Address,
+        is_proposal: bool,
     ) -> Result<()> {
-        let balance_key =
-            TokenKeys::balance_key(native_token_address, &ADDRESS);
-        let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
-
-        let pre_balance: Option<token::Amount> =
-            ctx.pre().read(&balance_key)?;
-
-        let min_funds_parameter: token::Amount =
-            Self::force_read(ctx, &min_funds_parameter_key, ReadType::Pre)?;
+        let balance_key = TokenKeys::balance_key(token, &ADDRESS);
+        let pre_balance: token::Amount =
+            ctx.pre().read(&balance_key)?.unwrap_or_default();
         let post_balance: token::Amount =
             Self::force_read(ctx, &balance_key, ReadType::Post)?;
 
-        let balance_is_valid = if let Some(pre_balance) = pre_balance {
-            post_balance > pre_balance
-                && checked!(post_balance - pre_balance)? >= min_funds_parameter
+        let is_valid_balance = if is_proposal {
+            if !native_token_address.eq(token) {
+                return Err(Error::new_const(
+                    "Governance deposit must be paid in native token",
+                ));
+            }
+
+            let balance_key = TokenKeys::balance_key(token, &ADDRESS);
+            let min_funds_parameter_key =
+                gov_storage::get_min_proposal_fund_key();
+
+            let pre_balance: token::Amount =
+                ctx.pre().read(&balance_key)?.unwrap_or_default();
+
+            let min_funds_parameter: token::Amount =
+                Self::force_read(ctx, &min_funds_parameter_key, ReadType::Pre)?;
+            let post_balance: token::Amount =
+                Self::force_read(ctx, &balance_key, ReadType::Post)?;
+
+            checked!(post_balance - pre_balance)? >= min_funds_parameter
         } else {
-            post_balance >= min_funds_parameter
+            post_balance >= pre_balance
         };
 
-        balance_is_valid.ok_or_else(|| {
-            Error::new_alloc(format!(
-                "Invalid balance {} has been written to storage",
-                post_balance.native_denominated()
-            ))
+        is_valid_balance.ok_or_else(|| {
+            Error::new_const("Invalid balance change for governance address")
         })
     }
 
@@ -1082,7 +1096,7 @@ where
 }
 
 #[allow(clippy::upper_case_acronyms)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 enum KeyType {
     #[allow(non_camel_case_types)]
     COUNTER,
@@ -1105,7 +1119,7 @@ enum KeyType {
     #[allow(non_camel_case_types)]
     FUNDS,
     #[allow(non_camel_case_types)]
-    BALANCE,
+    BALANCE(Address),
     #[allow(non_camel_case_types)]
     AUTHOR,
     #[allow(non_camel_case_types)]
@@ -1117,7 +1131,7 @@ enum KeyType {
 }
 
 impl KeyType {
-    fn from_key<TokenKeys>(key: &storage::Key, native_token: &Address) -> Self
+    fn from_key<TokenKeys>(key: &storage::Key) -> Self
     where
         TokenKeys: token::Keys,
     {
@@ -1145,8 +1159,10 @@ impl KeyType {
             KeyType::COUNTER
         } else if gov_storage::is_parameter_key(key) {
             KeyType::PARAMETER
-        } else if TokenKeys::is_balance_key(native_token, key).is_some() {
-            KeyType::BALANCE
+        } else if let Some([token, &ADDRESS]) =
+            TokenKeys::is_any_token_balance_key(key)
+        {
+            KeyType::BALANCE(token.clone())
         } else if gov_storage::is_governance_key(key) {
             KeyType::UNKNOWN_GOVERNANCE
         } else {
@@ -1164,7 +1180,7 @@ mod test {
     use assert_matches::assert_matches;
     use namada_core::address::Address;
     use namada_core::address::testing::{
-        established_address_1, established_address_3, nam,
+        btc, established_address_1, established_address_3, nam,
     };
     use namada_core::borsh::BorshSerializeExt;
     use namada_core::chain::testing::get_dummy_header;
@@ -1297,10 +1313,11 @@ mod test {
         state: &mut S,
         address: &Address,
         amount: token::Amount,
+        token: &Address,
     ) where
         S: State,
     {
-        let balance_key = balance_key(&nam(), address);
+        let balance_key = balance_key(token, address);
         let _ = state
             .write_log_mut()
             .write(&balance_key, amount.serialize_to_vec())
@@ -1501,11 +1518,13 @@ mod test {
             &mut state,
             &signer_address.clone(),
             token::Amount::native_whole(510),
+            &nam(),
         );
         initialize_account_balance(
             &mut state,
             &ADDRESS,
             token::Amount::native_whole(0),
+            &nam(),
         );
         state.commit_block().unwrap();
 
@@ -1603,11 +1622,13 @@ mod test {
             &mut state,
             &signer_address.clone(),
             token::Amount::native_whole(500),
+            &nam(),
         );
         initialize_account_balance(
             &mut state,
             &ADDRESS,
             token::Amount::native_whole(0),
+            &nam(),
         );
         state.commit_block().unwrap();
 
@@ -1706,11 +1727,13 @@ mod test {
             &mut state,
             &signer_address.clone(),
             token::Amount::native_whole(510),
+            &nam(),
         );
         initialize_account_balance(
             &mut state,
             &ADDRESS,
             token::Amount::native_whole(0),
+            &nam(),
         );
         state.commit_block().unwrap();
 
@@ -1809,11 +1832,13 @@ mod test {
             &mut state,
             &signer_address.clone(),
             token::Amount::native_whole(510),
+            &nam(),
         );
         initialize_account_balance(
             &mut state,
             &ADDRESS,
             token::Amount::native_whole(0),
+            &nam(),
         );
         state.commit_block().unwrap();
 
@@ -1893,11 +1918,13 @@ mod test {
             &mut state,
             &signer_address.clone(),
             token::Amount::native_whole(510),
+            &nam(),
         );
         initialize_account_balance(
             &mut state,
             &ADDRESS,
             token::Amount::native_whole(0),
+            &nam(),
         );
         state.commit_block().unwrap();
 
@@ -1977,11 +2004,13 @@ mod test {
             &mut state,
             &signer_address.clone(),
             token::Amount::native_whole(510),
+            &nam(),
         );
         initialize_account_balance(
             &mut state,
             &ADDRESS,
             token::Amount::native_whole(0),
+            &nam(),
         );
         state.commit_block().unwrap();
 
@@ -2079,11 +2108,13 @@ mod test {
             &mut state,
             &signer_address.clone(),
             token::Amount::native_whole(510),
+            &nam(),
         );
         initialize_account_balance(
             &mut state,
             &ADDRESS,
             token::Amount::native_whole(0),
+            &nam(),
         );
         state.commit_block().unwrap();
 
@@ -2181,11 +2212,13 @@ mod test {
             &mut state,
             &signer_address.clone(),
             token::Amount::native_whole(510),
+            &nam(),
         );
         initialize_account_balance(
             &mut state,
             &ADDRESS,
             token::Amount::native_whole(0),
+            &nam(),
         );
         state.commit_block().unwrap();
 
@@ -2265,11 +2298,13 @@ mod test {
             &mut state,
             &signer_address.clone(),
             token::Amount::native_whole(510),
+            &nam(),
         );
         initialize_account_balance(
             &mut state,
             &ADDRESS,
             token::Amount::native_whole(0),
+            &nam(),
         );
         state.commit_block().unwrap();
 
@@ -2403,11 +2438,13 @@ mod test {
             &mut state,
             &signer_address.clone(),
             token::Amount::native_whole(510),
+            &nam(),
         );
         initialize_account_balance(
             &mut state,
             &ADDRESS,
             token::Amount::native_whole(0),
+            &nam(),
         );
         state.commit_block().unwrap();
 
@@ -2541,11 +2578,13 @@ mod test {
             &mut state,
             &signer_address.clone(),
             token::Amount::native_whole(510),
+            &nam(),
         );
         initialize_account_balance(
             &mut state,
             &ADDRESS,
             token::Amount::native_whole(0),
+            &nam(),
         );
         state.commit_block().unwrap();
 
@@ -2679,11 +2718,13 @@ mod test {
             &mut state,
             &signer_address.clone(),
             token::Amount::native_whole(510),
+            &nam(),
         );
         initialize_account_balance(
             &mut state,
             &ADDRESS,
             token::Amount::native_whole(0),
+            &nam(),
         );
         state.commit_block().unwrap();
 
@@ -2746,6 +2787,7 @@ mod test {
             &mut state,
             &delegator_address,
             token::Amount::native_whole(1000000),
+            &nam(),
         );
 
         bond_tokens::<_, crate::Store<_>, token::Store<_>>(
@@ -2833,11 +2875,13 @@ mod test {
             &mut state,
             &signer_address.clone(),
             token::Amount::native_whole(510),
+            &nam(),
         );
         initialize_account_balance(
             &mut state,
             &ADDRESS,
             token::Amount::native_whole(0),
+            &nam(),
         );
         state.commit_block().unwrap();
 
@@ -2900,6 +2944,7 @@ mod test {
             &mut state,
             &delegator_address,
             token::Amount::native_whole(1000000),
+            &nam(),
         );
 
         bond_tokens::<_, crate::Store<_>, token::Store<_>>(
@@ -2987,11 +3032,13 @@ mod test {
             &mut state,
             &signer_address.clone(),
             token::Amount::native_whole(510),
+            &nam(),
         );
         initialize_account_balance(
             &mut state,
             &ADDRESS,
             token::Amount::native_whole(0),
+            &nam(),
         );
         state.commit_block().unwrap();
 
@@ -3054,6 +3101,7 @@ mod test {
             &mut state,
             &delegator_address,
             token::Amount::native_whole(1000000),
+            &nam(),
         );
 
         bond_tokens::<_, crate::Store<_>, token::Store<_>>(
@@ -3112,5 +3160,355 @@ mod test {
             ),
             Err(_)
         );
+    }
+
+    #[test]
+    fn test_governance_non_native_debit() {
+        let mut state = init_storage();
+
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::vp_cache();
+
+        let tx_index = TxIndex::default();
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+            &btc(),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(510),
+            &nam(),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(510),
+            &btc(),
+        );
+        state.commit_block().unwrap();
+
+        let balance_key = balance_key(&btc(), &ADDRESS);
+        let keys_changed = [balance_key.clone()].into();
+
+        let _ = state
+            .write_log_mut()
+            .write(
+                &balance_key,
+                token::Amount::native_whole(1).serialize_to_vec(),
+            )
+            .unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Authorization(Authorization::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            batched_tx.tx,
+            batched_tx.cmt,
+            &tx_index,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache.clone(),
+        );
+
+        let res = GovernanceVp::validate_tx(
+            &ctx,
+            &batched_tx,
+            &keys_changed,
+            &verifiers,
+        );
+
+        assert!(res.is_err());
+        assert!(
+            res.unwrap_err()
+                .to_string()
+                .contains("Invalid balance change for governance address")
+        );
+    }
+
+    #[test]
+    fn test_governance_non_native_credit() {
+        let mut state = init_storage();
+
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::vp_cache();
+
+        let tx_index = TxIndex::default();
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+            &btc(),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(510),
+            &nam(),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(510),
+            &btc(),
+        );
+        state.commit_block().unwrap();
+
+        let balance_key = balance_key(&btc(), &ADDRESS);
+        let keys_changed = [balance_key.clone()].into();
+
+        let _ = state
+            .write_log_mut()
+            .write(
+                &balance_key,
+                token::Amount::native_whole(1000).serialize_to_vec(),
+            )
+            .unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Authorization(Authorization::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            batched_tx.tx,
+            batched_tx.cmt,
+            &tx_index,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache.clone(),
+        );
+
+        let res = GovernanceVp::validate_tx(
+            &ctx,
+            &batched_tx,
+            &keys_changed,
+            &verifiers,
+        );
+
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_governance_native_debit() {
+        let mut state = init_storage();
+
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::vp_cache();
+
+        let tx_index = TxIndex::default();
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+            &nam(),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(510),
+            &nam(),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(510),
+            &btc(),
+        );
+        state.commit_block().unwrap();
+
+        let balance_key = balance_key(&nam(), &ADDRESS);
+        let keys_changed = [balance_key.clone()].into();
+
+        let _ = state
+            .write_log_mut()
+            .write(
+                &balance_key,
+                token::Amount::native_whole(1).serialize_to_vec(),
+            )
+            .unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Authorization(Authorization::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            batched_tx.tx,
+            batched_tx.cmt,
+            &tx_index,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache.clone(),
+        );
+
+        let res = GovernanceVp::validate_tx(
+            &ctx,
+            &batched_tx,
+            &keys_changed,
+            &verifiers,
+        );
+
+        assert!(res.is_err());
+        assert!(
+            res.unwrap_err()
+                .to_string()
+                .contains("Invalid balance change for governance address")
+        );
+    }
+
+    #[test]
+    fn test_governance_native_credit() {
+        let mut state = init_storage();
+
+        let gas_meter =
+            RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                u64::MAX,
+                namada_parameters::get_gas_scale(&state).unwrap(),
+            )));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::vp_cache();
+
+        let tx_index = TxIndex::default();
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+            &nam(),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(510),
+            &nam(),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(510),
+            &btc(),
+        );
+        state.commit_block().unwrap();
+
+        let balance_key = balance_key(&nam(), &ADDRESS);
+        let keys_changed = [balance_key.clone()].into();
+
+        let _ = state
+            .write_log_mut()
+            .write(
+                &balance_key,
+                token::Amount::native_whole(10000).serialize_to_vec(),
+            )
+            .unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Authorization(Authorization::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            batched_tx.tx,
+            batched_tx.cmt,
+            &tx_index,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache.clone(),
+        );
+
+        let res = GovernanceVp::validate_tx(
+            &ctx,
+            &batched_tx,
+            &keys_changed,
+            &verifiers,
+        );
+
+        assert!(res.is_ok());
     }
 }

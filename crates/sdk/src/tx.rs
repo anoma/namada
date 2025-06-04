@@ -75,10 +75,7 @@ pub use namada_tx::{Authorization, *};
 use num_traits::Zero;
 use rand_core::{OsRng, RngCore};
 
-use crate::args::{
-    SdkTypes, TxShieldedTransferData, TxShieldingTransferData,
-    TxTransparentTransferData, TxUnshieldingTransferData,
-};
+use crate::args::{SdkTypes, TxTransparentSource, TxTransparentTarget};
 use crate::borsh::BorshSerializeExt;
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, Result, TxSubmitError};
@@ -336,11 +333,13 @@ pub async fn build_reveal_pk(
         Some(public_key.into()),
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
-        validate_transparent_fee(context, args, &signing_data.fee_payer)
-            .await?;
+        validate_transparent_fee(context, args, fee_payer).await?;
 
     build(
         context,
@@ -349,7 +348,7 @@ pub async fn build_reveal_pk(
         public_key,
         do_nothing,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -480,14 +479,36 @@ pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
         false
     };
     let batch_results = resp.batch_result();
-    if !batch_results.is_empty() {
+    // If the batch contains at least one transaction
+    if let Some((first_inner_hash, first_result)) = batch_results.first() {
         if !wrapper_successful {
-            display_line!(
-                context.io(),
-                "Since the batch in its entirety failed, none of the \
-                 transactions listed below have been committed. Their results \
-                 are provided for completeness.",
+            // Check if fees were paid via the shielded pool, in this case the
+            // first transaction of the batch was committed regardless of the
+            // batch failure (even for atomic batches)
+            let masp_fee_payment = matches!(
+                first_result,
+                InnerTxResult::Success(res)
+                    if res.events.iter().any(|event| {
+                        event.kind() == &namada_tx::event::masp_types::FEE_PAYMENT
+                    })
             );
+            if masp_fee_payment {
+                display_line!(
+                    context.io(),
+                    "The first transaction of the batch ({}) was applied to \
+                     pay the fees via the MASP. Since the batch failed, none \
+                     of the remaining transactions listed below have been \
+                     committed. Their results are provided for completeness.",
+                    first_inner_hash
+                );
+            } else {
+                display_line!(
+                    context.io(),
+                    "Since the batch in its entirety failed, none of the \
+                     transactions listed below have been committed. Their \
+                     results are provided for completeness.",
+                );
+            }
         }
         display_line!(context.io(), "Batch results:");
     }
@@ -681,12 +702,14 @@ pub async fn build_change_consensus_key(
         None,
         vec![consensus_key.clone()],
         false,
+        vec![],
+        None,
     )
     .await?;
 
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _updated_balance) =
-        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
-            .await?;
+        validate_transparent_fee(context, tx_args, fee_payer).await?;
 
     build(
         context,
@@ -695,7 +718,7 @@ pub async fn build_change_consensus_key(
         data,
         do_nothing,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -719,11 +742,13 @@ pub async fn build_validator_commission_change(
         default_signer,
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
-        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
-            .await?;
+        validate_transparent_fee(context, tx_args, fee_payer).await?;
 
     let epoch = rpc::query_epoch(context.client()).await?;
 
@@ -832,7 +857,7 @@ pub async fn build_validator_commission_change(
         data,
         do_nothing,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -862,11 +887,13 @@ pub async fn build_validator_metadata_change(
         default_signer,
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
-        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
-            .await?;
+        validate_transparent_fee(context, tx_args, fee_payer).await?;
 
     let epoch = rpc::query_epoch(context.client()).await?;
 
@@ -1064,7 +1091,7 @@ pub async fn build_validator_metadata_change(
         data,
         do_nothing,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1088,11 +1115,13 @@ pub async fn build_update_steward_commission(
         default_signer,
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
-        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
-            .await?;
+        validate_transparent_fee(context, tx_args, fee_payer).await?;
 
     if !rpc::is_steward(context.client(), steward).await {
         edisplay_line!(
@@ -1134,7 +1163,7 @@ pub async fn build_update_steward_commission(
         data,
         do_nothing,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1157,11 +1186,13 @@ pub async fn build_resign_steward(
         default_signer,
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
-        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
-            .await?;
+        validate_transparent_fee(context, tx_args, fee_payer).await?;
 
     if !rpc::is_steward(context.client(), steward).await {
         edisplay_line!(
@@ -1183,7 +1214,7 @@ pub async fn build_resign_steward(
         steward.clone(),
         do_nothing,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1206,11 +1237,13 @@ pub async fn build_unjail_validator(
         default_signer,
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
-        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
-            .await?;
+        validate_transparent_fee(context, tx_args, fee_payer).await?;
 
     if !rpc::is_validator(context.client(), validator).await? {
         edisplay_line!(
@@ -1288,7 +1321,7 @@ pub async fn build_unjail_validator(
         validator.clone(),
         do_nothing,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1311,11 +1344,13 @@ pub async fn build_deactivate_validator(
         default_signer,
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
-        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
-            .await?;
+        validate_transparent_fee(context, tx_args, fee_payer).await?;
 
     // Check if the validator address is actually a validator
     if !rpc::is_validator(context.client(), validator).await? {
@@ -1364,7 +1399,7 @@ pub async fn build_deactivate_validator(
         validator.clone(),
         do_nothing,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1387,11 +1422,13 @@ pub async fn build_reactivate_validator(
         default_signer,
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
-        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
-            .await?;
+        validate_transparent_fee(context, tx_args, fee_payer).await?;
 
     // Check if the validator address is actually a validator
     if !rpc::is_validator(context.client(), validator).await? {
@@ -1439,7 +1476,7 @@ pub async fn build_reactivate_validator(
         validator.clone(),
         do_nothing,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1615,11 +1652,13 @@ pub async fn build_redelegation(
         default_signer,
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
-        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
-            .await?;
+        validate_transparent_fee(context, tx_args, fee_payer).await?;
 
     let data = pos::Redelegation {
         src_validator,
@@ -1635,7 +1674,7 @@ pub async fn build_redelegation(
         data,
         do_nothing,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1660,11 +1699,13 @@ pub async fn build_withdraw(
         default_signer,
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
-        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
-            .await?;
+        validate_transparent_fee(context, tx_args, fee_payer).await?;
 
     let epoch = rpc::query_epoch(context.client()).await?;
 
@@ -1723,7 +1764,7 @@ pub async fn build_withdraw(
         data,
         do_nothing,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1748,11 +1789,13 @@ pub async fn build_claim_rewards(
         default_signer,
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
-        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
-            .await?;
+        validate_transparent_fee(context, tx_args, fee_payer).await?;
 
     // Check that the validator address is actually a validator
     let validator =
@@ -1776,7 +1819,7 @@ pub async fn build_claim_rewards(
         data,
         do_nothing,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -1853,11 +1896,13 @@ pub async fn build_unbond(
         default_signer,
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
-        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
-            .await?;
+        validate_transparent_fee(context, tx_args, fee_payer).await?;
 
     // Check the source's current bond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
@@ -1916,7 +1961,7 @@ pub async fn build_unbond(
         data,
         do_nothing,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await?;
     Ok((tx, signing_data, latest_withdrawal_pre))
@@ -2089,11 +2134,13 @@ pub async fn build_bond(
         default_signer,
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, updated_balance) =
-        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
-            .await?;
+        validate_transparent_fee(context, tx_args, fee_payer).await?;
 
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
@@ -2129,7 +2176,7 @@ pub async fn build_bond(
         data,
         do_nothing,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -2155,10 +2202,13 @@ pub async fn build_default_proposal(
         default_signer,
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _updated_balance) =
-        validate_transparent_fee(context, tx, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx, fee_payer).await?;
 
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
         .map_err(|e| TxSubmitError::InvalidProposal(e.to_string()))?;
@@ -2190,7 +2240,7 @@ pub async fn build_default_proposal(
         init_proposal_data,
         push_data,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -2216,10 +2266,13 @@ pub async fn build_vote_proposal(
         default_signer.clone(),
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
-        validate_transparent_fee(context, tx, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx, fee_payer).await?;
 
     let proposal_vote = ProposalVote::try_from(vote.clone())
         .map_err(|_| TxSubmitError::InvalidProposalVote)?;
@@ -2345,7 +2398,7 @@ pub async fn build_vote_proposal(
         data,
         do_nothing,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -2518,13 +2571,21 @@ pub async fn build_become_validator(
     all_pks.push(eth_hot_key.clone().unwrap());
     all_pks.push(protocol_key.clone().unwrap().clone());
 
-    let signing_data =
-        signing::aux_signing_data(context, tx_args, None, None, all_pks, false)
-            .await?;
+    let signing_data = signing::aux_signing_data(
+        context,
+        tx_args,
+        None,
+        None,
+        all_pks,
+        false,
+        vec![],
+        None,
+    )
+    .await?;
 
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _updated_balance) =
-        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
-            .await?;
+        validate_transparent_fee(context, tx_args, fee_payer).await?;
 
     build(
         context,
@@ -2533,7 +2594,7 @@ pub async fn build_become_validator(
         data,
         do_nothing,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -2559,10 +2620,13 @@ pub async fn build_pgf_funding_proposal(
         default_signer,
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _updated_balance) =
-        validate_transparent_fee(context, tx, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx, fee_payer).await?;
 
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
         .map_err(|e| TxSubmitError::InvalidProposal(e.to_string()))?;
@@ -2580,7 +2644,7 @@ pub async fn build_pgf_funding_proposal(
         init_proposal_data,
         add_section,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -2606,10 +2670,13 @@ pub async fn build_pgf_stewards_proposal(
         default_signer,
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _updated_balance) =
-        validate_transparent_fee(context, tx, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx, fee_payer).await?;
 
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
         .map_err(|e| TxSubmitError::InvalidProposal(e.to_string()))?;
@@ -2628,7 +2695,7 @@ pub async fn build_pgf_stewards_proposal(
         init_proposal_data,
         add_section,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -2658,16 +2725,19 @@ pub async fn build_ibc_transfer(
         Some(source.clone()),
         Some(source.clone()),
         vec![],
-        args.disposable_signing_key,
+        args.source.spending_key().is_some(),
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_per_gas_unit, updated_balance) =
         if let TransferSource::ExtendedKey(_) = args.source {
             // MASP fee payment
             (validate_fee(context, &args.tx).await?, None)
         } else {
             // Transparent fee payment
-            validate_transparent_fee(context, &args.tx, &signing_data.fee_payer)
+            validate_transparent_fee(context, &args.tx, fee_payer)
                 .await
                 .map(|(fee_amount, updated_balance)| {
                     (fee_amount, Some(updated_balance))
@@ -2711,13 +2781,19 @@ pub async fn build_ibc_transfer(
         query_wasm_code_hash(context, args.tx_code_path.to_str().unwrap())
             .await
             .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
-    let masp_transfer_data = vec![MaspTransferData {
-        source: args.source.clone(),
+    let masp_transfer_data = MaspTransferData {
+        sources: vec![(
+            args.source.clone(),
+            args.token.clone(),
+            validated_amount,
+        )],
         // The token will be escrowed to IBC address
-        target: TransferTarget::Ibc(args.receiver.clone()),
-        token: args.token.clone(),
-        amount: validated_amount,
-    }];
+        targets: vec![(
+            TransferTarget::Ibc(args.receiver.clone()),
+            args.token.clone(),
+            validated_amount,
+        )],
+    };
 
     let mut transfer = token::Transfer::default();
 
@@ -2726,8 +2802,9 @@ pub async fn build_ibc_transfer(
         context,
         &args.tx,
         fee_per_gas_unit,
-        &signing_data.fee_payer,
-        args.gas_spending_key,
+        // If no custom gas spending key is provided default to the source
+        fee_payer,
+        args.gas_spending_key.or(args.source.spending_key()),
     )
     .await?;
     if let Some(fee_data) = &masp_fee_data {
@@ -2896,14 +2973,8 @@ pub async fn build_ibc_transfer(
         Some(args.tx_code_path.to_string_lossy().into_owned()),
     )
     .add_serialized_data(data);
-
-    prepare_tx(
-        &args.tx,
-        &mut tx,
-        fee_per_gas_unit,
-        signing_data.fee_payer.clone(),
-    )
-    .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?.to_owned();
+    prepare_tx(&args.tx, &mut tx, fee_per_gas_unit, fee_payer).await?;
 
     Ok((tx, signing_data, shielded_tx_epoch))
 }
@@ -3049,9 +3120,9 @@ pub async fn build_transparent_transfer<N: Namada>(
 
     // Evaluate signer and fees
     let (signing_data, fee_amount, updated_balance) = {
-        let source = if args.data.len() == 1 {
+        let source = if args.sources.len() == 1 {
             // If only one transfer take its source as the signer
-            args.data
+            args.sources
                 .first()
                 .map(|transfer_data| transfer_data.source.clone())
         } else {
@@ -3067,34 +3138,31 @@ pub async fn build_transparent_transfer<N: Namada>(
             source,
             vec![],
             false,
+            vec![],
+            None,
         )
         .await?;
 
         // Transparent fee payment
-        let (fee_amount, updated_balance) = validate_transparent_fee(
-            context,
-            &args.tx,
-            &signing_data.fee_payer,
-        )
-        .await
-        .map(|(fee_amount, updated_balance)| {
-            (fee_amount, Some(updated_balance))
-        })?;
+        let fee_payer = signing_data.fee_payer_or_err()?;
+        let (fee_amount, updated_balance) =
+            validate_transparent_fee(context, &args.tx, fee_payer)
+                .await
+                .map(|(fee_amount, updated_balance)| {
+                    (fee_amount, Some(updated_balance))
+                })?;
 
         (signing_data, fee_amount, updated_balance)
     };
 
-    for TxTransparentTransferData {
+    for TxTransparentSource {
         source,
-        target,
         token,
         amount,
-    } in &args.data
+    } in &args.sources
     {
         // Check that the source address exists on chain
         source_exists_or_err(source.clone(), args.tx.force, context).await?;
-        // Check that the target address exists on chain
-        target_exists_or_err(target.clone(), args.tx.force, context).await?;
 
         // Validate the amount given
         let validated_amount =
@@ -3124,15 +3192,31 @@ pub async fn build_transparent_transfer<N: Namada>(
 
         // Construct the corresponding transparent Transfer object
         transfers = transfers
-            .transfer(
-                source.to_owned(),
-                target.to_owned(),
-                token.to_owned(),
-                validated_amount,
-            )
+            .debit(source.to_owned(), token.to_owned(), validated_amount)
             .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
     }
 
+    for TxTransparentTarget {
+        target,
+        token,
+        amount,
+    } in &args.targets
+    {
+        // Check that the target address exists on chain
+        target_exists_or_err(target.clone(), args.tx.force, context).await?;
+
+        // Validate the amount given
+        let validated_amount =
+            validate_amount(context, amount.to_owned(), token, args.tx.force)
+                .await?;
+
+        // Construct the corresponding transparent Transfer object
+        transfers = transfers
+            .credit(target.to_owned(), token.to_owned(), validated_amount)
+            .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
+    }
+
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let tx = build(
         context,
         &args.tx,
@@ -3140,7 +3224,7 @@ pub async fn build_transparent_transfer<N: Namada>(
         transfers,
         do_nothing,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await?;
     Ok((tx, signing_data))
@@ -3158,44 +3242,65 @@ pub async fn build_shielded_transfer<N: Namada>(
         Some(MASP),
         Some(MASP),
         vec![],
-        args.disposable_signing_key,
+        true,
+        vec![],
+        None,
     )
     .await?;
 
     // Shielded fee payment
     let fee_per_gas_unit = validate_fee(context, &args.tx).await?;
 
-    let mut transfer_data = vec![];
-    for TxShieldedTransferData {
+    let mut transfer_data = MaspTransferData::default();
+    for args::TxShieldedSource {
         source,
-        target,
         token,
         amount,
-    } in &args.data
+    } in &args.sources
     {
         // Validate the amount given
         let validated_amount =
             validate_amount(context, amount.to_owned(), token, args.tx.force)
                 .await?;
 
-        transfer_data.push(MaspTransferData {
-            source: TransferSource::ExtendedKey(source.to_owned()),
-            target: TransferTarget::PaymentAddress(target.to_owned()),
-            token: token.to_owned(),
-            amount: validated_amount,
-        });
+        transfer_data.sources.push((
+            TransferSource::ExtendedKey(source.to_owned()),
+            token.to_owned(),
+            validated_amount,
+        ));
+    }
+    for args::TxShieldedTarget {
+        target,
+        token,
+        amount,
+    } in &args.targets
+    {
+        // Validate the amount given
+        let validated_amount =
+            validate_amount(context, amount.to_owned(), token, args.tx.force)
+                .await?;
+
+        transfer_data.targets.push((
+            TransferTarget::PaymentAddress(target.to_owned()),
+            token.to_owned(),
+            validated_amount,
+        ));
     }
 
     // Construct the tx data with a placeholder shielded section hash
     let mut data = token::Transfer::default();
 
+    let fee_payer = signing_data.fee_payer_or_err()?;
     // Add masp fee payment if necessary
     let masp_fee_data = get_masp_fee_payment_amount(
         context,
         &args.tx,
         fee_per_gas_unit,
-        &signing_data.fee_payer,
-        args.gas_spending_key,
+        fee_payer,
+        // If no custom gas spending key is provided default to the first
+        // source
+        args.gas_spending_key
+            .or(args.sources.first().map(|data| data.source)),
     )
     .await?;
     if let Some(fee_data) = &masp_fee_data {
@@ -3219,6 +3324,7 @@ pub async fn build_shielded_transfer<N: Namada>(
     .await?
     .expect("Shielded transfer must have shielded parts");
 
+    let fee_payer = signing_data.fee_payer_or_err()?.to_owned();
     let add_shielded_parts = |tx: &mut Tx, data: &mut token::Transfer| {
         // Add the MASP Transaction and its Builder to facilitate validation
         let (
@@ -3256,7 +3362,7 @@ pub async fn build_shielded_transfer<N: Namada>(
         data,
         add_shielded_parts,
         fee_per_gas_unit,
-        &signing_data.fee_payer,
+        &fee_payer,
     )
     .await?;
     Ok((tx, signing_data))
@@ -3284,7 +3390,11 @@ async fn get_masp_fee_payment_amount<N: Namada>(
 
     Ok(match total_fee.checked_sub(balance) {
         Some(diff) if !diff.is_zero() => Some(MaspFeeData {
-            source: gas_spending_key,
+            source: gas_spending_key.ok_or(Error::Other(
+                "MASP fee payment is required for this transaction but a \
+                 spending key was not provided"
+                    .to_string(),
+            ))?,
             target: fee_payer_address,
             token: args.fee_token.clone(),
             amount: DenominatedAmount::new(diff, fee_amount.denom()),
@@ -3299,9 +3409,9 @@ pub async fn build_shielding_transfer<N: Namada>(
     args: &mut args::TxShieldingTransfer,
     bparams: &mut impl BuildParams,
 ) -> Result<(Tx, SigningTxData, MaspEpoch)> {
-    let source = if args.data.len() == 1 {
+    let source = if args.sources.len() == 1 {
         // If only one transfer take its source as the signer
-        args.data
+        args.sources
             .first()
             .map(|transfer_data| transfer_data.source.clone())
     } else {
@@ -3316,24 +3426,27 @@ pub async fn build_shielding_transfer<N: Namada>(
         source,
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
 
     // Transparent fee payment
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, updated_balance) =
-        validate_transparent_fee(context, &args.tx, &signing_data.fee_payer)
+        validate_transparent_fee(context, &args.tx, fee_payer)
             .await
             .map(|(fee_amount, updated_balance)| {
                 (fee_amount, Some(updated_balance))
             })?;
 
-    let mut transfer_data = vec![];
+    let mut transfer_data = MaspTransferData::default();
     let mut data = token::Transfer::default();
-    for TxShieldingTransferData {
+    for TxTransparentSource {
         source,
         token,
         amount,
-    } in &args.data
+    } in &args.sources
     {
         // Validate the amount given
         let validated_amount =
@@ -3361,20 +3474,35 @@ pub async fn build_shielding_transfer<N: Namada>(
             .await?;
         }
 
-        transfer_data.push(MaspTransferData {
-            source: TransferSource::Address(source.to_owned()),
-            target: TransferTarget::PaymentAddress(args.target),
-            token: token.to_owned(),
-            amount: validated_amount,
-        });
+        transfer_data.sources.push((
+            TransferSource::Address(source.to_owned()),
+            token.to_owned(),
+            validated_amount,
+        ));
 
         data = data
-            .transfer(
-                source.to_owned(),
-                MASP,
-                token.to_owned(),
-                validated_amount,
-            )
+            .debit(source.to_owned(), token.to_owned(), validated_amount)
+            .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
+    }
+
+    for args::TxShieldedTarget {
+        target,
+        token,
+        amount,
+    } in &args.targets
+    {
+        // Validate the amount given
+        let validated_amount =
+            validate_amount(context, amount.to_owned(), token, args.tx.force)
+                .await?;
+        transfer_data.targets.push((
+            TransferTarget::PaymentAddress(target.to_owned()),
+            token.to_owned(),
+            validated_amount,
+        ));
+
+        data = data
+            .credit(MASP, token.to_owned(), validated_amount)
             .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
     }
 
@@ -3389,6 +3517,7 @@ pub async fn build_shielding_transfer<N: Namada>(
     .expect("Shielding transfer must have shielded parts");
     let shielded_tx_epoch = shielded_parts.0.epoch;
 
+    let fee_payer = signing_data.fee_payer_or_err()?.to_owned();
     let add_shielded_parts = |tx: &mut Tx, data: &mut token::Transfer| {
         // Add the MASP Transaction and its Builder to facilitate validation
         let (
@@ -3426,7 +3555,7 @@ pub async fn build_shielding_transfer<N: Namada>(
         data,
         add_shielded_parts,
         fee_amount,
-        &signing_data.fee_payer,
+        &fee_payer,
     )
     .await?;
     Ok((tx, signing_data, shielded_tx_epoch))
@@ -3444,50 +3573,70 @@ pub async fn build_unshielding_transfer<N: Namada>(
         Some(MASP),
         Some(MASP),
         vec![],
-        args.disposable_signing_key,
+        true,
+        vec![],
+        None,
     )
     .await?;
 
     // Shielded fee payment
     let fee_per_gas_unit = validate_fee(context, &args.tx).await?;
 
-    let mut transfer_data = vec![];
+    let mut transfer_data = MaspTransferData::default();
     let mut data = token::Transfer::default();
-    for TxUnshieldingTransferData {
+    for TxTransparentTarget {
         target,
         token,
         amount,
-    } in &args.data
+    } in &args.targets
     {
         // Validate the amount given
         let validated_amount =
             validate_amount(context, amount.to_owned(), token, args.tx.force)
                 .await?;
 
-        transfer_data.push(MaspTransferData {
-            source: TransferSource::ExtendedKey(args.source),
-            target: TransferTarget::Address(target.to_owned()),
-            token: token.to_owned(),
-            amount: validated_amount,
-        });
+        transfer_data.targets.push((
+            TransferTarget::Address(target.to_owned()),
+            token.to_owned(),
+            validated_amount,
+        ));
 
         data = data
-            .transfer(
-                MASP,
-                target.to_owned(),
-                token.to_owned(),
-                validated_amount,
-            )
+            .credit(target.to_owned(), token.to_owned(), validated_amount)
+            .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
+    }
+    for args::TxShieldedSource {
+        source,
+        token,
+        amount,
+    } in &args.sources
+    {
+        // Validate the amount given
+        let validated_amount =
+            validate_amount(context, amount.to_owned(), token, args.tx.force)
+                .await?;
+
+        transfer_data.sources.push((
+            TransferSource::ExtendedKey(source.to_owned()),
+            token.to_owned(),
+            validated_amount,
+        ));
+
+        data = data
+            .debit(MASP, token.to_owned(), validated_amount)
             .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
     }
 
     // Add masp fee payment if necessary
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let masp_fee_data = get_masp_fee_payment_amount(
         context,
         &args.tx,
         fee_per_gas_unit,
-        &signing_data.fee_payer,
-        args.gas_spending_key,
+        fee_payer,
+        // If no custom gas spending key is provided default to the source
+        args.gas_spending_key
+            .or(args.sources.first().map(|x| x.source)),
     )
     .await?;
     if let Some(fee_data) = &masp_fee_data {
@@ -3512,6 +3661,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
     .await?
     .expect("Shielding transfer must have shielded parts");
 
+    let fee_payer = signing_data.fee_payer_or_err()?.to_owned();
     let add_shielded_parts = |tx: &mut Tx, data: &mut token::Transfer| {
         // Add the MASP Transaction and its Builder to facilitate validation
         let (
@@ -3549,7 +3699,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         data,
         add_shielded_parts,
         fee_per_gas_unit,
-        &signing_data.fee_payer,
+        &fee_payer,
     )
     .await?;
     Ok((tx, signing_data))
@@ -3558,7 +3708,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
 // Construct the shielded part of the transaction, if any
 async fn construct_shielded_parts<N: Namada>(
     context: &N,
-    data: Vec<MaspTransferData>,
+    data: MaspTransferData,
     fee_data: Option<MaspFeeData>,
     expiration: Option<DateTimeUtc>,
     bparams: &mut impl BuildParams,
@@ -3610,12 +3760,20 @@ pub async fn build_init_account(
         threshold,
     }: &args::TxInitAccount,
 ) -> Result<(Tx, SigningTxData)> {
-    let signing_data =
-        signing::aux_signing_data(context, tx_args, None, None, vec![], false)
-            .await?;
+    let signing_data = signing::aux_signing_data(
+        context,
+        tx_args,
+        None,
+        None,
+        vec![],
+        false,
+        vec![],
+        None,
+    )
+    .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
-        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
-            .await?;
+        validate_transparent_fee(context, tx_args, fee_payer).await?;
 
     let vp_code_hash = query_wasm_code_hash_buf(context, vp_code_path).await?;
 
@@ -3674,7 +3832,7 @@ pub async fn build_init_account(
         data,
         add_code_hash,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -3700,11 +3858,13 @@ pub async fn build_update_account(
         default_signer,
         vec![],
         false,
+        vec![],
+        None,
     )
     .await?;
+    let fee_payer = signing_data.fee_payer_or_err()?;
     let (fee_amount, _) =
-        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
-            .await?;
+        validate_transparent_fee(context, tx_args, fee_payer).await?;
 
     let account = if let Some(account) =
         rpc::get_account_info(context.client(), addr).await?
@@ -3801,7 +3961,7 @@ pub async fn build_update_account(
         data,
         add_code_hash,
         fee_amount,
-        &signing_data.fee_payer,
+        fee_payer,
     )
     .await
     .map(|tx| (tx, signing_data))
@@ -3816,6 +3976,8 @@ pub async fn build_custom(
         data_path,
         serialized_tx,
         owner,
+        signatures,
+        wrapper_signature,
     }: &args::TxCustom,
 ) -> Result<(Tx, Option<SigningTxData>)> {
     let mut tx = if let Some(serialized_tx) = serialized_tx {
@@ -3851,16 +4013,14 @@ pub async fn build_custom(
     //    2. The user also provided the offline signatures for the inner
     //       transaction(s)
     // The workflow is the following:
-    //    1. If no signatures were provide we generate a SigningTxData to sign
+    //    1. If no signatures were provided we generate a SigningTxData to sign
     //       the tx
     //    2. If only the inner sigs were provided we generate a SigningTxData
     //       that will attach them and then sign the wrapper online
     //    3. If the wrapper signature was provided then we also expect the inner
     //       signature(s) to have been provided, in this case we attach all the
     //       signatures here and return no SigningTxData
-    let signing_data = if let Some(wrapper_signature) =
-        &tx_args.wrapper_signature
-    {
+    let signing_data = if let Some(wrapper_signature) = &wrapper_signature {
         if tx.header.wrapper().is_none() {
             return Err(Error::Other(
                 "A wrapper signature was provided but the transaction is not \
@@ -3870,7 +4030,7 @@ pub async fn build_custom(
         }
         // Attach the provided signatures to the tx without the need to produce
         // any more signatures
-        let signatures = tx_args.signatures.iter().try_fold(
+        let signatures = signatures.iter().try_fold(
             vec![],
             |mut acc, bytes| -> Result<Vec<_>> {
                 let sig = SignatureIndex::try_from_json_bytes(bytes).map_err(
@@ -3898,15 +4058,19 @@ pub async fn build_custom(
             default_signer,
             vec![],
             false,
+            signatures.to_owned(),
+            None,
         )
         .await?;
-        prepare_tx(
-            tx_args,
-            &mut tx,
-            fee_amount,
-            signing_data.fee_payer.clone(),
-        )
-        .await?;
+        let (fee_payer, _) = signing_data
+            .fee_payer
+            .as_ref()
+            .left()
+            .ok_or_else(|| {
+                Error::Other("Missing gas payer argument".to_string())
+            })?
+            .to_owned();
+        prepare_tx(tx_args, &mut tx, fee_amount, fee_payer).await?;
         Some(signing_data)
     };
 
@@ -3959,17 +4123,19 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
         .await;
 
     let masp_transfer_data = MaspTransferData {
-        source: TransferSource::Address(source.clone()),
-        target: args.target,
-        token: token.clone(),
-        amount: validated_amount,
+        sources: vec![(
+            TransferSource::Address(source.clone()),
+            token.clone(),
+            validated_amount,
+        )],
+        targets: vec![(args.target, token.clone(), validated_amount)],
     };
     let shielded_transfer = {
         let mut shielded = context.shielded_mut().await;
         shielded
             .gen_shielded_transfer(
                 context,
-                vec![masp_transfer_data],
+                masp_transfer_data,
                 // Fees are paid from the transparent balance of the relayer
                 None,
                 args.expiration.to_datetime(),

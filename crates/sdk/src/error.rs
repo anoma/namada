@@ -265,10 +265,7 @@ pub enum TxSubmitError {
     #[error("Proposal end epoch is not in the storage.")]
     EpochNotInStorage,
     /// Couldn't understand who the fee payer is
-    #[error(
-        "Either --signing-keys, --gas-payer or --disposable-gas-payer must be \
-         available."
-    )]
+    #[error("Either --signing-keys or --gas-payer must be available.")]
     InvalidFeePayer,
     /// Account threshold is not set
     #[error("Account threshold must be set.")]
