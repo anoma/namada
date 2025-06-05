@@ -1,8 +1,15 @@
 # CHANGELOG
 
-## v101.1.0
+## v101.1.1
 
-Namada apps v101.1.0 minor release
+Namada apps v101.1.1
+
+### MISCELLANEOUS
+
+- Updated Namada libraries to lib-v0.150.0
+  ([\#4680](https://github.com/anoma/namada/pull/4680))
+
+## v101.1.0
 
 ### MISCELLANEOUS
 
@@ -75,6 +82,15 @@ Namada v1.0.0 is the first stable release of the Namada apps.
 
 - updated namada libraries to libs-v0.46.1
   ([\#4123](https://github.com/anoma/namada/pull/4123))
+
+## libs-v0.150.1
+
+Namada libs v0.150.1 release
+
+### BUG FIXES
+
+- Fixed the gov VP gas cost to match v101.0.0
+  ([\#4684](https://github.com/anoma/namada/pull/4684))
 
 ## libs-v0.150.0
 
