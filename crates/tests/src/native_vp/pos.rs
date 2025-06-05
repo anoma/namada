@@ -611,6 +611,7 @@ pub mod testing {
     use namada_sdk::token::{Amount, Change};
     use namada_sdk::{address, governance, key, token};
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};
+    use namada_vm::host_env::gas_meter::GasMeter;
     use proptest::prelude::*;
 
     use crate::tx::{self, tx_host_env};
@@ -882,10 +883,12 @@ pub mod testing {
                 // Reset the gas meter on each change, so that we never run
                 // out in this test
                 let gas_limit = env.gas_meter.borrow().get_gas_limit();
-                env.gas_meter = RefCell::new(TxGasMeter::new(
-                    gas_limit,
-                    namada_sdk::parameters::get_gas_scale(tx::ctx()).unwrap(),
-                ));
+                env.gas_meter =
+                    RefCell::new(GasMeter::Native(TxGasMeter::new(
+                        gas_limit,
+                        namada_sdk::parameters::get_gas_scale(tx::ctx())
+                            .unwrap(),
+                    )));
                 env.state.in_mem().block.epoch
             });
             println!("Current epoch {}", current_epoch);
