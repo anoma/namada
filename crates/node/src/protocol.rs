@@ -888,7 +888,7 @@ where
 
     tx_gas_meter
         .borrow_mut()
-        .consume(masp_gas_meter.borrow().get_tx_consumed_gas())
+        .consume(masp_gas_meter.borrow().get_consumed_gas())
         .map_err(|e| Error::GasError(e.to_string()))?;
 
     Ok(valid_batched_tx_result)
