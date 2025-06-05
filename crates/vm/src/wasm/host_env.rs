@@ -148,7 +148,7 @@ impl WasmGasMeter {
         debug_assert!(
             self.tx_gas_limit >= current_tx_gas
                 || current_tx_gas == u64::MAX.into(),
-            "tx gas in wasm of {} mut not be greater than gas limit of {}",
+            "tx gas in wasm of {:?} mut not be greater than gas limit of {:?}",
             current_tx_gas,
             self.tx_gas_limit,
         );
