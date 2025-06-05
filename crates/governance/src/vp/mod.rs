@@ -896,6 +896,9 @@ where
             ctx.pre().read(&balance_key)?.unwrap_or_default();
         let post_balance: token::Amount =
             Self::force_read(ctx, &balance_key, ReadType::Post)?;
+        let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
+        let min_funds_parameter: token::Amount =
+            Self::force_read(ctx, &min_funds_parameter_key, ReadType::Pre)?;
 
         let is_valid_balance = if is_proposal {
             if !native_token_address.eq(token) {
@@ -903,19 +906,6 @@ where
                     "Governance deposit must be paid in native token",
                 ));
             }
-
-            let balance_key = TokenKeys::balance_key(token, &ADDRESS);
-            let min_funds_parameter_key =
-                gov_storage::get_min_proposal_fund_key();
-
-            let pre_balance: token::Amount =
-                ctx.pre().read(&balance_key)?.unwrap_or_default();
-
-            let min_funds_parameter: token::Amount =
-                Self::force_read(ctx, &min_funds_parameter_key, ReadType::Pre)?;
-            let post_balance: token::Amount =
-                Self::force_read(ctx, &balance_key, ReadType::Post)?;
-
             checked!(post_balance - pre_balance)? >= min_funds_parameter
         } else {
             post_balance >= pre_balance
