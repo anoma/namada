@@ -61,7 +61,9 @@ impl WasmGasMeter {
         self,
         meter: &mut impl GasMetering,
     ) -> namada_gas::Result<()> {
-        // wasm = limit - variable + initial
+        // initial  := limit - <sigchecks>
+        // variable := initial - wasm
+        //      wasm = initial - variable
 
         let current_tx_gas = self.read_wasm_gas(None);
 
@@ -71,13 +73,9 @@ impl WasmGasMeter {
             ));
         }
 
-        let consumed_total = self
-            .tx_gas_limit
+        let consumed_wasm = self
+            .initial_gas
             .checked_sub(current_tx_gas)
-            .unwrap_or_default();
-
-        let consumed_wasm = consumed_total
-            .checked_add(self.initial_gas)
             .ok_or(namada_gas::Error::GasOverflow)?;
 
         // only increment meter by the gas consumption in wasm
@@ -130,16 +128,16 @@ impl WasmGasMeter {
             .get(&mut *store.borrow_mut())
         {
             debug_assert!(
-                available_gas >= 0,
-                "the wasm gas value should never be negative"
+                available_gas >= 0 || available_gas == -1,
+                "the wasm gas value should never be negative, unless we ran \
+                 out of gas and we set a sentinel of -1, but the wasm gas \
+                 read was {available_gas}"
             );
 
             #[allow(clippy::cast_sign_loss)]
             {
                 namada_gas::Gas::from(
-                    // intentional wrap around the value, since
-                    // correct wasm will never allow reaching
-                    // negative gas values
+                    // intentional wrap around the value
                     available_gas as u64,
                 )
             }
@@ -148,8 +146,11 @@ impl WasmGasMeter {
         };
 
         debug_assert!(
-            self.tx_gas_limit >= current_tx_gas,
-            "tx gas in wasm mut not be greater than gas limit"
+            self.tx_gas_limit >= current_tx_gas
+                || current_tx_gas == u64::MAX.into(),
+            "tx gas in wasm of {} mut not be greater than gas limit of {}",
+            current_tx_gas,
+            self.tx_gas_limit,
         );
 
         current_tx_gas
