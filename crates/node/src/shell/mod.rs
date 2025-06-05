@@ -42,7 +42,7 @@ use namada_sdk::eth_bridge::protocol::validation::validator_set_update::validate
 use namada_sdk::eth_bridge::{EthBridgeQueries, EthereumOracleConfig};
 use namada_sdk::ethereum_events::EthereumEvent;
 use namada_sdk::events::log::EventLog;
-use namada_sdk::gas::{Gas, TxGasMeter};
+use namada_sdk::gas::{Gas, GasMetering, TxGasMeter};
 use namada_sdk::hash::Hash;
 use namada_sdk::key::*;
 use namada_sdk::migrations::ScheduledMigration;

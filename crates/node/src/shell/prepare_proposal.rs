@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 
 use namada_sdk::address::Address;
-use namada_sdk::gas::TxGasMeter;
+use namada_sdk::gas::{GasMetering, TxGasMeter};
 use namada_sdk::key::tm_raw_hash_to_string;
 use namada_sdk::parameters::get_gas_scale;
 use namada_sdk::proof_of_stake::storage::find_validator_by_raw_hash;
