@@ -106,6 +106,7 @@ where
         &mut state,
         &mut vp_wasm_cache,
         &mut tx_wasm_cache,
+        protocol::GasMeterKind::MutGlobal,
     )
     .map_err(|err| err.error)
     .into_storage_result()?;

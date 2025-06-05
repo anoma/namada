@@ -30,6 +30,16 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// Choose the gas mmeter used for WASM instructions
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum GasMeterKind {
+    /// Gas accounting using a host env function. Suitable for unstructed code.
+    HostFn,
+    /// Global mutable variable accounted inside WASM. This should only be used
+    /// for trusted WASM code as a malicious code might modify the gas meter
+    MutGlobal,
+}
+
 #[allow(missing_docs)]
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum Error {
@@ -507,6 +517,26 @@ impl TxGasMeter {
             .checked_sub(self.transaction_gas.clone())
             .unwrap_or_default()
     }
+
+    /// Set the amount of gas still available to the transaction.
+    ///
+    /// WARNING: Utmost care must be taken when using this function! This must
+    /// never increase the amount available.
+    pub fn set_available_gas(&mut self, gas: impl Into<Gas>) {
+        let gas: Gas = gas.into();
+        let used_gas = self
+            .tx_gas_limit
+            .checked_sub(gas)
+            .unwrap_or_else(|| self.tx_gas_limit.clone());
+        debug_assert!(
+            used_gas > self.transaction_gas,
+            "Used gas must not decrease from {:?}, but trying to set it to \
+             {:?}",
+            self.transaction_gas,
+            used_gas
+        );
+        self.transaction_gas = used_gas;
+    }
 }
 
 impl GasMetering for VpGasMeter {
@@ -571,6 +601,15 @@ impl VpGasMeter {
     /// Get the gas consumed by the VP alone
     pub fn get_vp_consumed_gas(&self) -> Gas {
         self.current_gas.clone()
+    }
+
+    /// Get the amount of gas still available to the VP
+    pub fn get_available_gas(&self) -> Gas {
+        self.tx_gas_limit
+            .checked_sub(self.initial_gas.clone())
+            .unwrap_or_default()
+            .checked_sub(self.current_gas.clone())
+            .unwrap_or_default()
     }
 }
 

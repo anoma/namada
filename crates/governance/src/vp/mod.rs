@@ -1188,7 +1188,7 @@ mod test {
     use namada_core::key::testing::keypair_1;
     use namada_core::parameters::Parameters;
     use namada_core::time::DateTimeUtc;
-    use namada_gas::{TxGasMeter, VpGasMeter};
+    use namada_gas::{GasMeterKind, TxGasMeter, VpGasMeter};
     use namada_proof_of_stake::bond_tokens;
     use namada_proof_of_stake::test_utils::get_dummy_genesis_validator;
     use namada_state::mockdb::MockDB;
@@ -1295,6 +1295,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
 
         // this should return true because state has been stored
@@ -1563,6 +1564,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
 
         // this should return true because state has been stored
@@ -1667,6 +1669,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
 
         let result = GovernanceVp::validate_tx(
@@ -1772,6 +1775,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
 
         let result = GovernanceVp::validate_tx(
@@ -1877,6 +1881,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
 
         // this should return true because state has been stored
@@ -1963,6 +1968,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
 
         // this should return true because state has been stored
@@ -2049,6 +2055,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
 
         // this should return true because state has been stored
@@ -2153,6 +2160,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
 
         // this should return true because state has been stored
@@ -2257,6 +2265,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
 
         // this should return true because state has been stored
@@ -2343,6 +2352,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache.clone(),
+            GasMeterKind::MutGlobal,
         );
 
         // this should return true because state has been stored
@@ -2398,6 +2408,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
 
         assert_matches!(
@@ -2483,6 +2494,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache.clone(),
+            GasMeterKind::MutGlobal,
         );
 
         // this should return true because state has been stored
@@ -2538,6 +2550,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
 
         assert_matches!(
@@ -2623,6 +2636,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache.clone(),
+            GasMeterKind::MutGlobal,
         );
 
         // this should return true because state has been stored
@@ -2678,6 +2692,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
 
         assert_matches!(
@@ -2763,6 +2778,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache.clone(),
+            GasMeterKind::MutGlobal,
         );
 
         assert_matches!(
@@ -2835,6 +2851,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
 
         assert_matches!(
@@ -2920,6 +2937,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache.clone(),
+            GasMeterKind::MutGlobal,
         );
 
         assert_matches!(
@@ -2992,6 +3010,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
 
         assert_matches!(
@@ -3077,6 +3096,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache.clone(),
+            GasMeterKind::MutGlobal,
         );
 
         assert_matches!(
@@ -3149,6 +3169,7 @@ mod test {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
 
         assert_matches!(

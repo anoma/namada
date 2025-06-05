@@ -1,5 +1,7 @@
 //! Wasm runners
 
+pub use namada_gas::GasMeterKind;
+
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::error::Error as _;
@@ -39,6 +41,7 @@ use crate::{
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
 const VP_ENTRYPOINT: &str = "_validate_tx";
+const MUT_GLOBAL_GAS_NAME: &str = "_namada_gas";
 const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 
 /// The error type returned by transactions.
@@ -145,6 +148,7 @@ pub fn tx<S, CA>(
     cmt: &TxCommitments,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
+    gas_meter_kind: GasMeterKind,
 ) -> Result<BTreeSet<Address>>
 where
     S: StateRead + State + StorageRead,
@@ -191,8 +195,13 @@ where
         }
     }
 
-    let (module, store) =
-        fetch_or_compile(tx_wasm_cache, &tx_code.code, state, gas_meter)?;
+    let (module, store) = fetch_or_compile(
+        tx_wasm_cache,
+        &tx_code.code,
+        state,
+        gas_meter,
+        gas_meter_kind,
+    )?;
     let store = Rc::new(RefCell::new(store));
 
     let mut iterators: PrefixIterators<'_, <S as StateRead>::D> =
@@ -205,6 +214,7 @@ where
     let (write_log, in_mem, db) = state.split_borrow();
     const ZERO_HASH: Hash = Hash::zero();
     let wrapper_hash = wrapper_hash.unwrap_or(&ZERO_HASH);
+    let mut gas_global = RefCell::new(None);
     let mut env = TxVmEnv::new(
         WasmMemory::new(Rc::downgrade(&store)),
         write_log,
@@ -222,6 +232,8 @@ where
         &mut yielded_value,
         vp_wasm_cache,
         tx_wasm_cache,
+        gas_meter_kind,
+        &mut gas_global,
     );
 
     // Instantiate the wasm module
@@ -231,6 +243,22 @@ where
         wasmer::Instance::new(&mut *store, &module, &imports)
             .map_err(|e| Error::InstantiationError(Box::new(e)))?
     };
+
+    if let GasMeterKind::MutGlobal = gas_meter_kind {
+        let mut store = store.borrow_mut();
+        let global = instance.exports.get_global(MUT_GLOBAL_GAS_NAME).unwrap();
+
+        #[allow(clippy::cast_poss_globalble_wrap)]
+        // intentional wrap around the value
+        let available_gas =
+            u64::from(gas_meter.borrow().get_available_gas()) as i64;
+        global
+            .set(&mut *store, wasmer::Value::I64(available_gas))
+            .unwrap();
+
+        let mut gas_global = gas_global.borrow_mut();
+        *gas_global = Some(global.clone());
+    }
 
     // Fetch guest's main memory
     let guest_memory = instance
@@ -321,6 +349,7 @@ pub fn vp<S, CA>(
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
     mut vp_wasm_cache: VpCache<CA>,
+    gas_meter_kind: GasMeterKind,
 ) -> Result<()>
 where
     S: StateRead,
@@ -332,6 +361,7 @@ where
         &Commitment::Hash(vp_code_hash),
         state,
         gas_meter,
+        gas_meter_kind,
     )?;
     let store = Rc::new(RefCell::new(store));
 
@@ -363,6 +393,7 @@ where
         keys_changed,
         &eval_runner,
         &mut vp_wasm_cache,
+        gas_meter_kind,
     );
 
     let yielded_value_borrow = env.ctx.yielded_value;
@@ -372,6 +403,9 @@ where
         vp_imports(&mut *store, env.clone())
     };
 
+    #[allow(clippy::cast_possible_wrap)] // intentional wrap around the value
+    let available_gas =
+        u64::from(gas_meter.borrow().get_available_gas()) as i64;
     run_vp(
         store,
         module,
@@ -383,6 +417,8 @@ where
         verifiers,
         yielded_value_borrow,
         |guest_memory| env.memory.init_from(guest_memory),
+        available_gas,
+        gas_meter_kind,
     )
 }
 
@@ -398,6 +434,8 @@ fn run_vp<F>(
     verifiers: &BTreeSet<Address>,
     yielded_value: HostRef<RwAccess, Option<Vec<u8>>>,
     mut init_memory_callback: F,
+    available_gas: i64,
+    gas_meter_kind: GasMeterKind,
 ) -> Result<()>
 where
     F: FnMut(&wasmer::Memory),
@@ -415,6 +453,16 @@ where
         wasmer::Instance::new(&mut *store, &module, &vp_imports)
             .map_err(|e| Error::InstantiationError(Box::new(e)))?
     };
+
+    if let GasMeterKind::MutGlobal = gas_meter_kind {
+        let mut store = store.borrow_mut();
+        instance
+            .exports
+            .get_global(MUT_GLOBAL_GAS_NAME)
+            .unwrap()
+            .set(&mut *store, wasmer::Value::I64(available_gas))
+            .unwrap();
+    }
 
     // Fetch guest's main memory
     let guest_memory = instance
@@ -572,6 +620,7 @@ where
             ctx.keys_changed,
             &eval_runner,
             &mut vp_wasm_cache,
+            ctx.gas_meter_kind,
         );
         eval_runner
             .eval_native_result(ctx, vp_code_hash, input_data)
@@ -628,13 +677,14 @@ where
         let verifiers = unsafe { ctx.verifiers.get() };
         let vp_wasm_cache = unsafe { ctx.vp_wasm_cache.get_mut() };
         let gas_meter = unsafe { ctx.gas_meter.get() };
-
+        let gas_meter_kind = ctx.gas_meter_kind;
         // Compile the wasm module
         let (module, store) = fetch_or_compile(
             vp_wasm_cache,
             &Commitment::Hash(vp_code_hash),
             &ctx.state(),
             gas_meter,
+            gas_meter_kind,
         )?;
         let store = Rc::new(RefCell::new(store));
 
@@ -648,6 +698,10 @@ where
             vp_imports(&mut *store, env.clone())
         };
 
+        #[allow(clippy::cast_possible_wrap)]
+        // intentional wrap around the value
+        let available_gas =
+            u64::from(gas_meter.borrow().get_available_gas()) as i64;
         run_vp(
             store,
             module,
@@ -659,6 +713,8 @@ where
             verifiers,
             yielded_value_borrow,
             |guest_memory| env.memory.init_from(guest_memory),
+            available_gas,
+            gas_meter_kind,
         )
     }
 }
@@ -680,17 +736,30 @@ pub fn untrusted_wasm_store(limit: Limit<BaseTunables>) -> wasmer::Store {
 }
 
 /// Inject gas counter and stack-height limiter into the given wasm code
-pub fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {
+pub fn prepare_wasm_code<T: AsRef<[u8]>>(
+    code: T,
+    gas_meter_kind: GasMeterKind,
+) -> Result<Vec<u8>> {
     let module: elements::Module = elements::deserialize_buffer(code.as_ref())
         .map_err(Error::DeserializationError)?;
-    let module = wasm_instrument::gas_metering::inject(
-        module,
-        wasm_instrument::gas_metering::host_function::Injector::new(
-            "env", "gas",
-        ),
-        &GasRules,
-    )
-    .map_err(|_original_module| Error::GasMeterInjection)?;
+    let module = match gas_meter_kind {
+        GasMeterKind::HostFn => wasm_instrument::gas_metering::inject(
+            module,
+            wasm_instrument::gas_metering::host_function::Injector::new(
+                "env", "gas",
+            ),
+            &GasRules,
+        )
+        .map_err(|_original_module| Error::GasMeterInjection)?,
+        GasMeterKind::MutGlobal => wasm_instrument::gas_metering::inject(
+            module,
+            wasm_instrument::gas_metering::mutable_global::Injector::new(
+                MUT_GLOBAL_GAS_NAME,
+            ),
+            &GasRules,
+        )
+        .map_err(|_original_module| Error::GasMeterInjection)?,
+    };
     let module =
         wasm_instrument::inject_stack_limiter(module, WASM_STACK_LIMIT)
             .map_err(|_original_module| Error::StackLimiterInjection)?;
@@ -704,6 +773,7 @@ fn fetch_or_compile<S, CN, CA>(
     code_or_hash: &Commitment,
     state: &S,
     gas_meter: &RefCell<impl GasMetering>,
+    gas_meter_kind: GasMeterKind,
 ) -> Result<(Module, Store)>
 where
     S: StateRead,
@@ -738,7 +808,9 @@ where
                 .add_compiling_gas(tx_len)
                 .map_err(|e| Error::GasError(e.to_string()))?;
 
-            let (module, store) = match wasm_cache.fetch(code_hash)? {
+            let (module, store) = match wasm_cache
+                .fetch(code_hash, gas_meter_kind)?
+            {
                 Some((module, store)) => (module, store),
                 None => {
                     let key = Key::wasm_code(code_hash);
@@ -755,7 +827,7 @@ where
                             ))
                         })?;
 
-                    match wasm_cache.compile_or_fetch(code)? {
+                    match wasm_cache.compile_or_fetch(code, gas_meter_kind)? {
                         Some((module, store)) => (module, store),
                         None => return Err(Error::NoCompiledWasmCode),
                     }
@@ -779,7 +851,7 @@ where
                 .borrow_mut()
                 .add_compiling_gas(tx_len)
                 .map_err(|e| Error::GasError(e.to_string()))?;
-            match wasm_cache.compile_or_fetch(code)? {
+            match wasm_cache.compile_or_fetch(code, gas_meter_kind)? {
                 Some((module, store)) => Ok((module, store)),
                 None => Err(Error::NoCompiledWasmCode),
             }
@@ -1203,6 +1275,7 @@ mod tests {
             batched_tx.cmt,
             &mut vp_cache,
             &mut tx_cache,
+            GasMeterKind::MutGlobal,
         );
         assert!(result.is_ok(), "Expected success, got {:?}", result);
 
@@ -1222,6 +1295,7 @@ mod tests {
             batched_tx.cmt,
             &mut vp_cache,
             &mut tx_cache,
+            GasMeterKind::MutGlobal,
         )
         .expect_err("Expected to run out of memory");
 
@@ -1294,6 +1368,7 @@ mod tests {
                 &keys_changed,
                 &verifiers,
                 vp_cache.clone(),
+                GasMeterKind::MutGlobal,
             )
             .is_ok()
         );
@@ -1326,6 +1401,7 @@ mod tests {
                 &keys_changed,
                 &verifiers,
                 vp_cache,
+                GasMeterKind::MutGlobal,
             )
             .is_err()
         );
@@ -1376,6 +1452,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_cache.clone(),
+            GasMeterKind::MutGlobal,
         );
         assert!(result.is_ok(), "Expected success, got {:?}", result);
 
@@ -1395,6 +1472,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_cache,
+            GasMeterKind::MutGlobal,
         )
         .expect_err("Expected to run out of memory");
 
@@ -1445,6 +1523,7 @@ mod tests {
             batched_tx.cmt,
             &mut vp_cache,
             &mut tx_cache,
+            GasMeterKind::MutGlobal,
         );
         // Depending on platform, we get a different error from the running out
         // of memory
@@ -1510,6 +1589,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_cache,
+            GasMeterKind::MutGlobal,
         );
         // Depending on platform, we get a different error from the running out
         // of memory
@@ -1582,6 +1662,7 @@ mod tests {
             batched_tx.cmt,
             &mut vp_cache,
             &mut tx_cache,
+            GasMeterKind::MutGlobal,
         )
         .expect_err("Expected to run out of memory");
 
@@ -1639,6 +1720,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_cache,
+            GasMeterKind::MutGlobal,
         )
         .expect_err("Expected to run out of memory");
 
@@ -1716,6 +1798,7 @@ mod tests {
                 &keys_changed,
                 &verifiers,
                 vp_cache,
+                GasMeterKind::MutGlobal,
             )
             .is_err()
         );
@@ -1826,6 +1909,7 @@ mod tests {
             batched_tx.cmt,
             &mut vp_cache,
             &mut tx_cache,
+            GasMeterKind::MutGlobal,
         );
 
         assert!(matches!(result.unwrap_err(), Error::GasError(_)));
@@ -1867,6 +1951,7 @@ mod tests {
             batched_tx.cmt,
             &mut vp_cache,
             &mut tx_cache,
+            GasMeterKind::MutGlobal,
         );
 
         assert!(matches!(result.unwrap_err(), Error::GasError(_)));
@@ -1910,6 +1995,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_cache.clone(),
+            GasMeterKind::MutGlobal,
         );
 
         assert!(matches!(result.unwrap_err(), Error::GasError(_)));
@@ -1954,6 +2040,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_cache.clone(),
+            GasMeterKind::MutGlobal,
         );
 
         assert!(matches!(result.unwrap_err(), Error::GasError(_)));
@@ -2129,6 +2216,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_cache.clone(),
+            GasMeterKind::MutGlobal,
         )
     }
 
@@ -2175,6 +2263,7 @@ mod tests {
             batched_tx.cmt,
             vp_cache,
             tx_cache,
+            GasMeterKind::MutGlobal,
         )
     }
 
