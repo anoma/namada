@@ -1149,7 +1149,7 @@ impl KeyType {
             KeyType::COUNTER
         } else if gov_storage::is_parameter_key(key) {
             KeyType::PARAMETER
-        } else if let Some([token, &ADDRESS]) =
+        } else if let Some([token, _]) =
             TokenKeys::is_any_token_balance_key(key)
         {
             KeyType::BALANCE(token.clone())
