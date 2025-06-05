@@ -223,7 +223,7 @@ where
             // If gas metering is done through a host function, we
             // take the provided gas meter, then restore it after
             // we return from the wasm vm
-            std::mem::take(&mut *gas_meter.borrow_mut())
+            TxGasMeter::default()
         },
         || {
             // If gas metering is done through a wasm function, we
@@ -260,16 +260,17 @@ where
             .map_err(|e| Error::InstantiationError(Box::new(e)))?
     };
 
-    wasm_gas_meter
-        .borrow_mut()
-        .init_from(&*gas_meter.borrow(), || {
+    wasm_gas_meter.borrow_mut().init_from(
+        &mut *gas_meter.borrow_mut(),
+        || {
             let global = instance
                 .exports
                 .get_global(MUT_GLOBAL_GAS_NAME)
                 .map_err(Error::MissingGasMutGlobal)?;
 
             Ok(global.clone())
-        })?;
+        },
+    )?;
 
     // Fetch guest's main memory
     let guest_memory = instance
@@ -312,7 +313,7 @@ where
 
     let wasm_gas_meter = RefCell::into_inner(wasm_gas_meter);
     wasm_gas_meter
-        .flush_to_meter(gas_meter)
+        .flush_to_meter(&mut *gas_meter.borrow_mut())
         .map_err(|err| Error::GasError(err.to_string()))?;
 
     let ok = result.map_err(|err| {

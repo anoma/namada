@@ -1,10 +1,6 @@
 //! Gas meter used in the vm.
 
-use std::cell::RefCell;
-
-use namada_gas::{
-    Gas, GasMeterKind, GasMetering, NativeGasMetering, TxGasMeter,
-};
+use namada_gas::{Gas, GasMeterKind, GasMetering, TxGasMeter};
 
 #[cfg(feature = "wasm-runtime")]
 use crate::wasm::host_env::WasmGasMeter;
@@ -67,16 +63,16 @@ impl<N> GasMeter<N> {
     /// Initialize the gas meter.
     pub fn init_from<G, E>(
         &mut self,
-        native_meter: &N,
+        native_meter: &mut N,
         global: G,
     ) -> Result<(), E>
     where
-        N: NativeGasMetering + Clone,
+        N: GasMetering + Default,
         G: FnOnce() -> Result<wasmer::Global, E>,
     {
         match self {
             Self::Native(meter) => {
-                meter.clone_from(native_meter);
+                *meter = std::mem::take(native_meter);
                 Ok(())
             }
             Self::Wasm(meter) => {
@@ -89,26 +85,21 @@ impl<N> GasMeter<N> {
 
     /// Flush the consumed gas to the provided meter.
     #[inline]
-    pub fn flush_to_meter(
-        self,
-        native_meter: &RefCell<N>,
-    ) -> namada_gas::Result<()>
+    pub fn flush_to_meter(self, native_meter: &mut N) -> namada_gas::Result<()>
     where
-        N: NativeGasMetering + Clone,
+        N: GasMetering,
     {
         match self {
             Self::Native(meter) => {
-                *native_meter.borrow_mut() = meter;
+                *native_meter = meter;
                 Ok(())
             }
-            Self::Wasm(meter) => {
-                meter.flush_to_meter(&mut *native_meter.borrow_mut())
-            }
+            Self::Wasm(meter) => meter.flush_to_meter(native_meter),
         }
     }
 }
 
-impl<N: NativeGasMetering> GasMetering for GasMeter<N> {
+impl<N: GasMetering> GasMetering for GasMeter<N> {
     fn consume(&mut self, gas: Gas) -> namada_gas::Result<()> {
         match self {
             Self::Native(meter) => meter.consume(gas),

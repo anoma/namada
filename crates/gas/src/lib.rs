@@ -346,19 +346,6 @@ impl Display for WholeGas {
     }
 }
 
-trait SealedNativeGasMetering {}
-
-/// Marker trait that indicates if a [`GasMetering`] implementation
-/// is native (i.e. not done through wasm).
-#[allow(private_bounds)]
-pub trait NativeGasMetering: GasMetering + SealedNativeGasMetering {}
-
-impl SealedNativeGasMetering for TxGasMeter {}
-impl NativeGasMetering for TxGasMeter {}
-
-impl SealedNativeGasMetering for VpGasMeter {}
-impl NativeGasMetering for VpGasMeter {}
-
 /// Trait to share gas operations for transactions and validity predicates
 pub trait GasMetering {
     /// Add gas cost. It will return error when the
