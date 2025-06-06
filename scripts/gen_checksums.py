@@ -10,7 +10,7 @@ CHECKSUM_FILE_PATH = "{}/checksums.json".format(WASM_FOLDER)
 
 
 checksums = {}
-for wasm in sorted(glob.glob("{}/*.wasm".format(WASM_FOLDER))):
+for wasm in sorted(glob.glob("{}/*.opt.wasm".format(WASM_FOLDER))):
     basename = os.path.basename(wasm)
     file_name = os.path.splitext(basename)[0] if wasm.count(
         ".") == 1 else os.path.splitext(basename)[0].split('.')[0]

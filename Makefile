@@ -336,13 +336,13 @@ debug-wasm-scripts:
 
 # Build the validity predicate and transactions wasm for tests
 build-wasm-tests-scripts:
-	rm $(wasms_for_tests)/*.wasm || true
+	rm -f $(wasms_for_tests)/*.wasm
 	make -C $(wasms_for_tests)
 	make opt-wasm-tests
 
 # Debug build the validity predicate and transactions wasm for tests
 debug-wasm-tests-scripts:
-	rm $(wasms_for_tests)/*.wasm || true
+	rm -f $(wasms_for_tests)/*.wasm
 	make -C $(wasms_for_tests) debug
 	make opt-wasm-tests
 
@@ -358,7 +358,7 @@ opt-wasm:
 		for file in wasm/*.wasm; do \
 			if [ -f "$$file" ]; then \
 				echo "Processing $$file..."; \
-				wasm-opt -Oz -o $${file} $${file}; \
+				wasm-opt -Oz -o $${file%.wasm}.opt.wasm $${file}; \
 			fi; \
 		done; \
 	fi

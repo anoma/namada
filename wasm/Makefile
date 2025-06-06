@@ -5,11 +5,11 @@ nightly := $(shell cat ../rust-nightly-version)
 
 # Build all wasms in release mode
 all:
-	RUSTFLAGS='-C link-arg=-s' $(cargo) build --release --target wasm32-unknown-unknown --target-dir 'target'
+	RUSTFLAGS='-C link-arg=-s -C llvm-args=-unroll-threshold=0' $(cargo) build --release --target wasm32-unknown-unknown --target-dir 'target'
 	cp target/wasm32-unknown-unknown/release/*.wasm .
 
 debug:
-	RUSTFLAGS='-C link-arg=-s' $(cargo) build --target wasm32-unknown-unknown --target-dir 'target'
+	RUSTFLAGS='-C link-arg=-s -C llvm-args=-unroll-threshold=0' $(cargo) build --target wasm32-unknown-unknown --target-dir 'target'
 	cp target/wasm32-unknown-unknown/debug/*.wasm .
 
 check:
