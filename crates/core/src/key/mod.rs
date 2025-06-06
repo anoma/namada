@@ -2,6 +2,7 @@
 
 pub mod common;
 pub mod ed25519;
+#[cfg(feature = "secp_keys")]
 pub mod secp256k1;
 
 use std::fmt::{Debug, Display};
@@ -97,6 +98,7 @@ pub enum SchemeType {
     /// Type identifier for Ed25519 scheme
     Ed25519,
     /// Type identifier for Secp256k1 scheme
+    #[cfg(feature = "secp_keys")]
     Secp256k1,
     /// Type identifier for Common
     Common,
@@ -108,6 +110,7 @@ impl FromStr for SchemeType {
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         match input.to_lowercase().as_str() {
             "ed25519" => Ok(Self::Ed25519),
+            #[cfg(feature = "secp_keys")]
             "secp256k1" => Ok(Self::Secp256k1),
             "common" => Ok(Self::Common),
             _ => Err(()),
@@ -381,6 +384,7 @@ impl PublicKeyTmRawHash for common::PublicKey {
 pub fn tm_consensus_key_raw_hash(pk: &common::PublicKey) -> String {
     let pkh = match pk {
         common::PublicKey::Ed25519(pk) => PublicKeyHash::from(pk),
+        #[cfg(feature = "secp_keys")]
         common::PublicKey::Secp256k1(pk) => PublicKeyHash::from(pk),
     };
     pkh.to_string()
@@ -498,11 +502,22 @@ pub mod testing {
         arb_keypair::<S>().prop_map(|x| x.ref_to())
     }
 
+    #[cfg(feature = "secp_keys")]
     prop_compose! {
         /// Generate an arbitrary common key
         pub fn arb_common_pk()(pk in prop_oneof![
             arb_pk::<ed25519::SigScheme>().prop_map(common::PublicKey::Ed25519),
             arb_pk::<secp256k1::SigScheme>().prop_map(common::PublicKey::Secp256k1),
+        ]) -> common::PublicKey {
+            pk
+        }
+    }
+
+    #[cfg(not(feature = "secp_keys"))]
+    prop_compose! {
+        /// Generate an arbitrary common key
+        pub fn arb_common_pk()(pk in prop_oneof![
+            arb_pk::<ed25519::SigScheme>().prop_map(common::PublicKey::Ed25519),
         ]) -> common::PublicKey {
             pk
         }
@@ -537,6 +552,7 @@ pub mod testing {
     }
 
     /// An Ethereum keypair for tests
+    #[cfg(feature = "secp_keys")]
     pub fn keypair_3() -> <common::SigScheme as SigScheme>::SecretKey {
         let bytes = [
             0xf3, 0x78, 0x78, 0x80, 0xba, 0x85, 0x0b, 0xa4, 0xc5, 0x74, 0x50,
@@ -550,6 +566,7 @@ pub mod testing {
     }
 
     /// An Ethereum keypair for tests
+    #[cfg(feature = "secp_keys")]
     pub fn keypair_4() -> <common::SigScheme as SigScheme>::SecretKey {
         let bytes = [
             0x68, 0xab, 0xce, 0x64, 0x54, 0x07, 0x7e, 0xf5, 0x1a, 0xb4, 0x31,
@@ -577,6 +594,7 @@ pub mod testing {
     }
 
     /// Generate an arbitrary `secp256k1` [`common::SecretKey`].
+    #[cfg(feature = "secp_keys")]
     pub fn arb_common_secp256k1_keypair()
     -> impl Strategy<Value = common::SecretKey> {
         arb_keypair::<secp256k1::SigScheme>()
@@ -643,7 +661,7 @@ macro_rules! sigscheme_test {
 
 #[cfg(test)]
 sigscheme_test! {ed25519_test, ed25519::SigScheme}
-#[cfg(test)]
+#[cfg(all(test, feature = "secp_keys"))]
 sigscheme_test! {secp256k1_test, secp256k1::SigScheme}
 
 #[cfg(test)]
@@ -667,6 +685,7 @@ mod more_tests {
     }
 
     #[test]
+    #[cfg(feature = "secp_keys")]
     fn zeroize_keypair_secp256k1() {
         use rand::thread_rng;
 

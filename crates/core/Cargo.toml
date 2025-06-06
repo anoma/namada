@@ -31,6 +31,7 @@ arbitrary = [
   "masp_primitives/arbitrary",
 ]
 task_env = ["tokio"]
+secp_keys = ["k256"]
 
 [dependencies]
 namada_macros.workspace = true
@@ -51,7 +52,7 @@ ics23.workspace = true
 impl-num-traits.workspace = true
 usize-set.workspace = true
 indexmap.workspace = true
-k256.workspace = true
+k256 = { workspace = true, optional = true }
 lazy_static = { workspace = true, optional = true }
 linkme = { workspace = true, optional = true }
 masp_primitives.workspace = true

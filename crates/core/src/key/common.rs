@@ -11,14 +11,17 @@ use namada_migrations::*;
 use rand::{CryptoRng, RngCore};
 use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "secp_keys")]
 use thiserror::Error;
 
+#[cfg(feature = "secp_keys")]
+use super::secp256k1;
 use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
     SchemeType, SigScheme as SigSchemeTrait, VerifySigError, ed25519,
-    secp256k1,
 };
 use crate::borsh::BorshSerializeExt;
+#[cfg(feature = "secp_keys")]
 use crate::ethereum_events::EthAddress;
 use crate::key::{SignableBytes, StorageHasher};
 use crate::{impl_display_and_from_str_via_format, string_encoding};
@@ -42,6 +45,7 @@ pub enum CommonPublicKey {
     /// Encapsulate Ed25519 public keys
     Ed25519(ed25519::PublicKey),
     /// Encapsulate Secp256k1 public keys
+    #[cfg(feature = "secp_keys")]
     Secp256k1(secp256k1::PublicKey),
 }
 
@@ -109,14 +113,17 @@ impl super::PublicKey for PublicKey {
                 )
                 .map_err(ParsePublicKeyError::InvalidEncoding)?,
             ))
-        } else if PK::TYPE == secp256k1::PublicKey::TYPE {
-            Ok(Self::Secp256k1(
-                secp256k1::PublicKey::try_from_slice(
-                    pk.serialize_to_vec().as_slice(),
-                )
-                .map_err(ParsePublicKeyError::InvalidEncoding)?,
-            ))
         } else {
+            #[cfg(feature = "secp_keys")]
+            if PK::TYPE == secp256k1::PublicKey::TYPE {
+                return Ok(Self::Secp256k1(
+                    secp256k1::PublicKey::try_from_slice(
+                        pk.serialize_to_vec().as_slice(),
+                    )
+                    .map_err(ParsePublicKeyError::InvalidEncoding)?,
+                ));
+            }
+
             Err(ParsePublicKeyError::MismatchedScheme)
         }
     }
@@ -152,6 +159,7 @@ impl From<PublicKey> for crate::tendermint::PublicKey {
             PublicKey::Ed25519(ed25519::PublicKey(pk)) => {
                 TmPK::from_raw_ed25519(pk.as_bytes()).unwrap()
             }
+            #[cfg(feature = "secp_keys")]
             PublicKey::Secp256k1(secp256k1::PublicKey(pk)) => {
                 TmPK::from_raw_secp256k1(&pk.to_sec1_bytes()).unwrap()
             }
@@ -161,11 +169,13 @@ impl From<PublicKey> for crate::tendermint::PublicKey {
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
+#[cfg(feature = "secp_keys")]
 pub enum EthAddressConvError {
     #[error("Eth key cannot be ed25519, only secp256k1")]
     CannotBeEd25519,
 }
 
+#[cfg(feature = "secp_keys")]
 impl TryFrom<&PublicKey> for EthAddress {
     type Error = EthAddressConvError;
 
@@ -191,6 +201,7 @@ pub enum SecretKey {
     /// Encapsulate Ed25519 secret keys
     Ed25519(ed25519::SecretKey),
     /// Encapsulate Secp256k1 secret keys
+    #[cfg(feature = "secp_keys")]
     Secp256k1(secp256k1::SecretKey),
 }
 
@@ -261,14 +272,17 @@ impl super::SecretKey for SecretKey {
                 )
                 .map_err(ParseSecretKeyError::InvalidEncoding)?,
             ))
-        } else if SK::TYPE == secp256k1::SecretKey::TYPE {
-            Ok(Self::Secp256k1(
-                secp256k1::SecretKey::try_from_slice(
-                    sk.serialize_to_vec().as_ref(),
-                )
-                .map_err(ParseSecretKeyError::InvalidEncoding)?,
-            ))
         } else {
+            #[cfg(feature = "secp_keys")]
+            if SK::TYPE == secp256k1::SecretKey::TYPE {
+                return Ok(Self::Secp256k1(
+                    secp256k1::SecretKey::try_from_slice(
+                        sk.serialize_to_vec().as_ref(),
+                    )
+                    .map_err(ParseSecretKeyError::InvalidEncoding)?,
+                ));
+            }
+
             Err(ParseSecretKeyError::MismatchedScheme)
         }
     }
@@ -320,6 +334,7 @@ pub enum CommonSignature {
     /// Encapsulate Ed25519 signatures
     Ed25519(ed25519::Signature),
     /// Encapsulate Secp256k1 signatures
+    #[cfg(feature = "secp_keys")]
     Secp256k1(secp256k1::Signature),
 }
 
@@ -398,6 +413,7 @@ impl From<ed25519::Signature> for Signature {
     }
 }
 
+#[cfg(feature = "secp_keys")]
 impl From<secp256k1::Signature> for Signature {
     fn from(sig: secp256k1::Signature) -> Self {
         Signature::Secp256k1(sig)
@@ -420,14 +436,17 @@ impl super::Signature for Signature {
                 )
                 .map_err(ParseSignatureError::InvalidEncoding)?,
             ))
-        } else if SIG::TYPE == secp256k1::Signature::TYPE {
-            Ok(Self::Secp256k1(
-                secp256k1::Signature::try_from_slice(
-                    sig.serialize_to_vec().as_slice(),
-                )
-                .map_err(ParseSignatureError::InvalidEncoding)?,
-            ))
         } else {
+            #[cfg(feature = "secp_keys")]
+            if SIG::TYPE == secp256k1::Signature::TYPE {
+                return Ok(Self::Secp256k1(
+                    secp256k1::Signature::try_from_slice(
+                        sig.serialize_to_vec().as_slice(),
+                    )
+                    .map_err(ParseSignatureError::InvalidEncoding)?,
+                ));
+            }
+
             Err(ParseSignatureError::MismatchedScheme)
         }
     }
@@ -488,6 +507,7 @@ impl super::SigScheme for SigScheme {
             SecretKey::Ed25519(kp) => Signature::Ed25519(
                 ed25519::SigScheme::sign_with_hasher::<H>(kp, data),
             ),
+            #[cfg(feature = "secp_keys")]
             SecretKey::Secp256k1(kp) => Signature::Secp256k1(
                 secp256k1::SigScheme::sign_with_hasher::<H>(kp, data),
             ),
@@ -508,6 +528,7 @@ impl super::SigScheme for SigScheme {
                     pk, data, sig,
                 )
             }
+            #[cfg(feature = "secp_keys")]
             (PublicKey::Secp256k1(pk), Signature::Secp256k1(sig)) => {
                 secp256k1::SigScheme::verify_signature_with_hasher::<H>(
                     pk, data, sig,

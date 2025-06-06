@@ -14,8 +14,9 @@ version.workspace = true
 rust-version.workspace = true
 
 [features]
-default = []
+default = ["secp_keys"]
 testing = ["namada_core/testing", "namada_token/testing"]
+secp_keys = ["namada_core/secp_keys"]
 
 [dependencies]
 namada_account.workspace = true
