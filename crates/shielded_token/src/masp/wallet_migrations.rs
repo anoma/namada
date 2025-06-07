@@ -57,6 +57,7 @@ pub mod v0 {
     };
 
     #[derive(BorshSerialize, BorshDeserialize, Debug)]
+    #[allow(missing_docs)]
     pub struct ShieldedWallet<U: ShieldedUtils> {
         /// Location where this shielded context is saved
         #[borsh(skip)]

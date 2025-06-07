@@ -460,7 +460,7 @@ pub trait ShieldedQueries<U: ShieldedUtils + MaybeSend + MaybeSync>:
         MerklePath<Node>,
     )>;
 
-    /// A cached version of [`query_conversion`]. The cache
+    /// A cached version of `query_conversion`. The cache
     /// gets cleared when the Masp epoch changes.
     #[allow(async_fn_in_trait)]
     async fn get_conversion<C: Client + Sync>(
