@@ -292,13 +292,13 @@ where
         signing_stake: total_signing_stake,
         total_stake: total_consensus_stake,
     };
-    let coeffs = rewards_calculator
+    /*let coeffs = rewards_calculator
         .get_reward_coeffs()
         .map_err(InflationError::Rewards)
         .into_storage_result()?;
     tracing::debug!(
         "PoS rewards coefficients {coeffs:?}, inputs: {rewards_calculator:?}."
-    );
+    );*/
 
     // tracing::debug!(
     //     "TOTAL SIGNING STAKE (LOGGING BLOCK REWARDS) = {}",
@@ -334,20 +334,20 @@ where
 
         // Proposer reward
         if address == *proposer_address {
-            checked!(rewards_frac += coeffs.proposer_coeff)?;
+            //checked!(rewards_frac += coeffs.proposer_coeff)?;
         }
 
         // Signer reward
         if signer_set.contains(&address) {
             let signing_frac =
                 checked!(stake_unscaled / signing_stake_unscaled)?;
-            checked!(rewards_frac += (coeffs.signer_coeff * signing_frac))?;
+            //checked!(rewards_frac += (coeffs.signer_coeff * signing_frac))?;
         }
         // Consensus validator reward
-        checked!(
+        /*checked!(
             rewards_frac += (coeffs.active_val_coeff
                 * (stake_unscaled / consensus_stake_unscaled))
-        )?;
+        )?;*/
 
         // To be added to the rewards accumulator
         values.insert(address, rewards_frac);
