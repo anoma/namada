@@ -60,7 +60,7 @@ where
                     &mut self.state,
                     &native_token,
                     &dest,
-                    1000_000_000_u64.into(),
+                    1000_000_000_000_000_u64.into(),
                 )
                 .unwrap();
                 let token = "tnam1p5z8ruwyu7ha8urhq2l0dhpk2f5dv3ts7uyf2n75".parse().unwrap();
@@ -74,7 +74,7 @@ where
                     &mut self.state,
                     &token,
                     &dest,
-                    10_000_000_000_u64.into(),
+                    1000_000_000_000_000_u64.into(),
                 )
                 .unwrap();
             }
