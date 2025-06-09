@@ -4,10 +4,12 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::hash::Hash;
 use namada_core::ibc::IbcTxDataHash;
 use namada_core::masp::MaspTxId;
 use namada_events::extend::{
-    ComposeEvent, EventAttributeEntry, Height, Log, TxHash,
+    CodeName, ComposeEvent, EventAttributeEntry, Height, InnerTxHash, Log,
+    TxHash,
 };
 use namada_events::{Event, EventLevel, EventToEmit, EventType};
 use namada_macros::BorshDeserializer;
@@ -200,6 +202,27 @@ impl From<MaspEvent> for Event {
         Self::new(masp_event.kind.into(), EventLevel::Tx)
             .with(masp_event.data)
             .with(masp_event.tx_index)
+            .into()
+    }
+}
+
+/// An event that indicates the wasm payload of a tx
+pub struct TxWasmEvent {
+    /// Hash of inner tx
+    pub inner_tx_hash: Hash,
+    /// The name of the wasm payload
+    pub name: String,
+}
+
+impl EventToEmit for TxWasmEvent {
+    const DOMAIN: &'static str = "tx";
+}
+
+impl From<TxWasmEvent> for Event {
+    fn from(tx_wasm_event: TxWasmEvent) -> Self {
+        Self::new(EventType::new("tx-wasm-name"), EventLevel::Tx)
+            .with(CodeName(tx_wasm_event.name))
+            .with(InnerTxHash(tx_wasm_event.inner_tx_hash))
             .into()
     }
 }
