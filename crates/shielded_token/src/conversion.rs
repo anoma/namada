@@ -503,19 +503,20 @@ where
     let reward_uint = Uint::from(reward);
     let base_native_precision_uint = Uint::from(base_native_precision);
     let current_native_precision_uint = Uint::from(current_native_precision);
-    let real_reward = checked!(
-        (reward_uint * base_native_precision_uint)
-            / current_native_precision_uint
-    )?
-    .try_into()
-    .unwrap_or_else(|_| {
-        tracing::warn!(
-            "MASP reward for {} assumed to be 0 because the computed value is \
-             too large. Please check the inflation parameters.",
-            token
-        );
-        0u128
-    });
+    let real_reward = reward_uint
+        .checked_mul_div(
+            base_native_precision_uint,
+            current_native_precision_uint,
+        )
+        .and_then(|x| x.0.try_into().ok())
+        .unwrap_or_else(|| {
+            tracing::warn!(
+                "MASP reward for {} assumed to be 0 because the computed \
+                 value is too large. Please check the inflation parameters.",
+                token
+            );
+            0u128
+        });
     // The conversion is computed such that if consecutive
     // conversions are added together, the
     // intermediate tokens cancel/ telescope out
