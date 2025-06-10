@@ -476,6 +476,8 @@ where
         None
     }
 
+    // a special event is emitted for each inner tx giving the human readable
+    // name of its wasm code.
     fn emit_wasm_name_event(
         &self,
         tx_data: &TxData<'_>,
@@ -502,6 +504,7 @@ where
         };
 
         let code_name_event = TxWasmEvent {
+            hash: tx_data.tx.wrapper_hash(),
             inner_tx_hash,
             name: code_name,
         };

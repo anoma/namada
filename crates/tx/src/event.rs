@@ -208,6 +208,8 @@ impl From<MaspEvent> for Event {
 
 /// An event that indicates the wasm payload of a tx
 pub struct TxWasmEvent {
+    /// Hash of wrapper tx
+    pub hash: Option<Hash>,
     /// Hash of inner tx
     pub inner_tx_hash: Hash,
     /// The name of the wasm payload
@@ -220,10 +222,14 @@ impl EventToEmit for TxWasmEvent {
 
 impl From<TxWasmEvent> for Event {
     fn from(tx_wasm_event: TxWasmEvent) -> Self {
-        Self::new(EventType::new("tx-wasm-name"), EventLevel::Tx)
-            .with(CodeName(tx_wasm_event.name))
-            .with(InnerTxHash(tx_wasm_event.inner_tx_hash))
-            .into()
+        let composite =
+            Self::new(EventType::new("tx-wasm-name"), EventLevel::Tx)
+                .with(CodeName(tx_wasm_event.name))
+                .with(InnerTxHash(tx_wasm_event.inner_tx_hash));
+        match tx_wasm_event.hash {
+            None => composite.into(),
+            Some(hash) => composite.with(TxHash(hash)).into(),
+        }
     }
 }
 
