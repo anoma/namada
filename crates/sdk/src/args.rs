@@ -35,6 +35,7 @@ use crate::error::Error;
 use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::ibc::{NamadaMemo, NamadaMemoData};
+use crate::masp::shielded_wallet::FmdIndices;
 use crate::rpc::{
     get_registry_from_xcs_osmosis_contract, osmosis_denom_from_namada_denom,
     query_ibc_denom, query_osmosis_pool_routes,
@@ -2470,9 +2471,9 @@ pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     /// Height to sync up to. Defaults to most recent
     pub last_query_height: Option<BlockHeight>,
     /// Spending keys used to determine note ownership
-    pub spending_keys: Vec<C::DatedSpendingKey>,
+    pub spending_keys: Vec<(C::DatedSpendingKey, Option<FmdIndices>)>,
     /// Viewing keys used to determine note ownership
-    pub viewing_keys: Vec<C::DatedViewingKey>,
+    pub viewing_keys: Vec<(C::DatedViewingKey, Option<FmdIndices>)>,
     /// Address of a `namada-masp-indexer` live instance
     ///
     /// If present, the shielded sync will be performed

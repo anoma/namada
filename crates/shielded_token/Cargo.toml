@@ -58,6 +58,7 @@ eyre.workspace = true
 futures.workspace = true
 flume = { workspace = true, optional = true }
 itertools.workspace = true
+kassandra.workspace = true
 lazy_static.workspace = true
 linkme = { workspace = true, optional = true }
 masp_primitives.workspace = true

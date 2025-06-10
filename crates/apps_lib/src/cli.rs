@@ -7115,8 +7115,16 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let ledger_address = CONFIG_RPC_LEDGER_ADDRESS.parse(matches);
             let last_query_height = BLOCK_HEIGHT_TO_OPT.parse(matches);
-            let spending_keys = DATED_SPENDING_KEYS.parse(matches);
-            let viewing_keys = DATED_VIEWING_KEYS.parse(matches);
+            let spending_keys = DATED_SPENDING_KEYS
+                .parse(matches)
+                .into_iter()
+                .zip(std::iter::repeat(None))
+                .collect();
+            let viewing_keys = DATED_VIEWING_KEYS
+                .parse(matches)
+                .into_iter()
+                .zip(std::iter::repeat(None))
+                .collect();
             let with_indexer = WITH_INDEXER.parse(matches);
             let wait_for_last_query_height =
                 WAIT_FOR_LAST_QUERY_HEIGHT.parse(matches);
@@ -7198,12 +7206,12 @@ pub mod args {
                 spending_keys: self
                     .spending_keys
                     .iter()
-                    .map(|sk| chain_ctx.get_cached(sk))
+                    .map(|(sk, _)| (chain_ctx.get_cached(sk), None))
                     .collect(),
                 viewing_keys: self
                     .viewing_keys
                     .iter()
-                    .map(|vk| chain_ctx.get_cached(vk))
+                    .map(|(vk, _)| (chain_ctx.get_cached(vk), None))
                     .collect(),
                 with_indexer: self.with_indexer,
                 retry_strategy: self.retry_strategy,

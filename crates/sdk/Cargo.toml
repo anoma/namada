@@ -110,6 +110,7 @@ futures.workspace = true
 init-once.workspace = true
 itertools.workspace = true
 jubjub = { workspace = true, optional = true }
+kassandra.workspace = true
 lazy_static.workspace = true
 linkme = { workspace = true, optional = true }
 masp_primitives.workspace = true
