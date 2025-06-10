@@ -171,43 +171,65 @@ pub fn shielded_reward_reset_migration(
 ) {
     // The address of the native token. This is what rewards are denominated in.
     const NATIVE_TOKEN_BECH32M: AddressBech32m =
-        "tnam1qxgfw7myv4dh0qna4hq0xdg6lx77fzl7dcem8h7e";
+        "tnam1q9gr66cvu4hrzm0sd5kmlnjje82gs3xlfg3v6nu7";
     let native_token = Address::from_str(NATIVE_TOKEN_BECH32M)
         .expect("unable to construct native token address");
+    
     // The MASP epoch in which this migration will be applied. This number
     // controls the number of epochs of conversions created.
-    const TARGET_MASP_EPOCH: MaspEpoch = MaspEpoch::new(2000);
-    // The tokens whose rewarrds will be reset.
-    const TOKENS: [(TokenAddress, Denomination, Precision); 6] = [
+    const TARGET_MASP_EPOCH: MaspEpoch = MaspEpoch::new(175); // est. 20:00 CEST May 27
+
+    // The tokens whose rewards will be reset.
+    const TOKENS: [(TokenAddress, Denomination, Precision); 10] = [
         (
-            TokenAddress::Ibc("channel-1", "uosmo"),
+            TokenAddress::Ibc("channel-1", "uosmo"), // OSMO
             Denomination(0u8),
-            1000u128,
+            10_000,
         ),
         (
-            TokenAddress::Ibc("channel-2", "uatom"),
+            TokenAddress::Ibc("channel-2", "uatom"), // ATOM
             Denomination(0u8),
-            1000u128,
+            5_000,
         ),
         (
-            TokenAddress::Ibc("channel-3", "utia"),
+            TokenAddress::Ibc("channel-3", "utia"), // TIA
             Denomination(0u8),
-            1000u128,
+            5_000,
         ),
         (
-            TokenAddress::Ibc("channel-0", "stuosmo"),
+            TokenAddress::Ibc("channel-0", "stuosmo"), // stOSMO
             Denomination(0u8),
-            1000u128,
+            5_000,
         ),
         (
-            TokenAddress::Ibc("channel-0", "stuatom"),
+            TokenAddress::Ibc("channel-0", "stuatom"), // stATOM
             Denomination(0u8),
-            1000u128,
+            5_000,
         ),
         (
-            TokenAddress::Ibc("channel-0", "stutia"),
+            TokenAddress::Ibc("channel-0", "stutia"), // stTIA
             Denomination(0u8),
-            1000u128,
+            5_000,
+        ),
+        (
+            TokenAddress::Ibc("channel-4", "upenumbra"), // UM
+            Denomination(0u8),
+            1_000,
+        ),
+        (
+            TokenAddress::Ibc("channel-5", "uusdc"), // USDC
+            Denomination(0u8),
+            1_000,
+        ),
+        (
+            TokenAddress::Ibc("channel-6", "unym"), // NYM
+            Denomination(0u8),
+            1_000,
+        ),
+        (
+            TokenAddress::Ibc("channel-7", "untrn"), // NTRN
+            Denomination(0u8),
+            1_000,
         ),
     ];
 
@@ -515,49 +537,45 @@ pub fn wasm_migration(updates: &mut Vec<migrations::DbUpdateType>) {
     // wasm_updates[x].1) The name of WASM being updated
     // wasm_updates[x].2) The bytes of the new WASM code
     const WASM_UPDATES: [(WasmHash, &str, WasmBytes); 2] = [
-        (
-            "83afcbf97c35188991ae2e73db2f48cb8d019c4295fe5323d9c3dfebcd5dbec0",
+      (
+            "6d753db0390e7cec16729fc405bfe41384c93bd79f42b8b8be41b22edbbf1b7c",
             "tx_transfer.wasm",
-            // The following bytes are just an example. Usually the following
-            // line will be: include_bytes!("<path to Wasm binary>"),
-            &[0xDE, 0xAD, 0xBE, 0xEF],
+            include_bytes!("tx_transfer.ef687f96ec919f5da2e90f125a2800f198a06bcd609a37e5a9ec90d442e32239.wasm"),
+            // &[0xDE, 0xAD, 0xBE, 0xEF],
         ),
         (
-            "6ff3c2a2ebc65061a9b89abd15fb37851ca77e162b42b7989889bd537e802b09",
+            "cecb1f1b75cd649915423c5e68be20c5232f94ab57a11a908dc66751bbdc4f72",
             "tx_ibc.wasm",
-            // The following bytes are just an example. Usually the following
-            // line will be: include_bytes!("<path to Wasm binary>"),
-            &[0xDE, 0xAD, 0xBE, 0xEF],
+            include_bytes!("tx_ibc.7b0d43f4a277aadd02562d811c755e09d7f191c601ca3bffb89a7f8b599dab1e.wasm"),
+            // &[0xDE, 0xAD, 0xBE, 0xEF],
         ),
     ];
 
     // Update the tx allowlist parameter
     let tx_allowlist_key = get_tx_allowlist_storage_key();
-    const TX_ALLOWLIST: [WasmHash; 24] = [
-        "ec357c39e05677da3d8da359fee6e3a8b9012dd1a7e7def51f4e484132f68c77",
-        "a324288bdc7a7d3cb15ca5ef3ebb04b9121b1d5804478dabd1ef4533459d7069",
-        "6012fff1d191a545d6f7960f1dd9b2df5fcdfc9dbb8dfd22bb1458f3983144b9",
-        "4fe1bb1e76c21eacd5eb84782c51aebd683643eefbd1034e4e13aa7284f508f8",
-        "23eec5e1bad79387e57d052840b86ff061aa3182638f690a642126183788f0e3",
-        "5a31f468d03207a8e566a55072ddad7aad018fc635621564fb1c105b0f089f4d",
-        "9eb40c4b40b5af540f9a32f8bd377a53cd3b5e0c3c799b4381ef6475f333e33d",
-        "2b3cf66f49093f674793fcdba72d45f1d7c0e34556800f597d3d5242d97091e0",
-        "6ff3c2a2ebc65061a9b89abd15fb37851ca77e162b42b7989889bd537e802b09",
-        "31a7199befce4226faad7fe1744895fb6845ee0749016c3a2a0a31b26088aff9",
-        "f0d270cab3357124eb8894c1e7cb0e775056ed613e41d075e23467bcaa36a1f7",
-        "51c4d0149807597c1c7981cf28cb8b078c93843b7ae91a6cd9e6b422f343e9a3",
-        "a07d722db5d3d06b0c65cb0c20811ce2a95105cebe2456a3ea6334eb2438fbab",
-        "f1cdb278dae8b7ab28fd850dcf9746b03aee2b42444ec9e39ae3a0bd46f3e17c",
-        "b48de32b91a58d8e63cd283bd96276f38736822ca8f90bfec2093eefdcdf5148",
-        "83afcbf97c35188991ae2e73db2f48cb8d019c4295fe5323d9c3dfebcd5dbec0",
-        "8293cecc00c63bb4b6216eec912c57c72544f42203ba1ff5a42ae098c9e921e4",
-        "f0e37af0417f5d54f20c81c2cf1b9301bd13ce79695b78c85d11b2ba187fa86d",
-        "0c650c7869da1ac3e734a4367557a499c937962effde4f7e7cc609278000ebd1",
-        "dbb6f005883075ab4133d8bd367af914a899946e7ae532f816be48c77044a512",
-        "bf4716b590b68562ee2c872757a0c370daf1504596d4350fffc0b94a566072ca",
-        "f6330d8c8bc92d9f8ea0f023688873722b65291bc6db9bb11ab3a0836e1be86b",
-        "c4357f5548c43086e56f22ac2e951ee2500368d8ed2479c0d0046b6e59f8a8e5",
-        "b4261ecafcfb0254efb39165311268d99bb5aa85ac47514913317d20f1791790",
+    const TX_ALLOWLIST: [WasmHash; 22] = [
+        "c6629064a1c3bde8503212cfa5e9b954169a7f162ad411b63a71db782fe909d7",
+        "490cf419bdbffe616c6aa6c72d38064e350ee65fb04d92472ccf285aec6844b6",
+        "473ee80e6e714f6097ec713c88f527b38da6479354075c879b66b9f53e813cb0",
+        "0295796e5ff47aeecb95b68c2fe308693e5f84b251126f26d03309e5f4f5da55",
+        "b745bc2b87bf8acd07e2f3409c77eee06c9b5206d2a77a2f23bb8e593c70cbfe",
+        "1b5a323c140b54700f280cde8b9aac1c12555f9c119e936432ddfa8f194d23ac",
+        "b74104949ac0c35ee922fdc3f3db454627742e2483d79550c12fcf31755c6d01",
+        "5120581194f1e6a122d2eec3f886e9cf5f079f56540d96193d3c1f9804c4d936",
+        "cecb1f1b75cd649915423c5e68be20c5232f94ab57a11a908dc66751bbdc4f72", // tx_ibc
+        "26f90ec6676444cd6191d7555fd48861372f901c46e5178c59a897b411616918",
+        "33ee28597cf0f6a11dfe6e23e9aedf2eb04dabb44069cbe317768f4d982d80be",
+        "fbe97ce1136225bdbf8e388bab833a8c51e80bc1b8d94f7d3f8e49b3fad08543",
+        "7d5ad1877643f7d9b32a511ef93a11e8503426baee0f5986d29e3f63a2355d58",
+        "b63738a98927be05fd27f00d208e8703031e45b579d42f776d27234c48a48523",
+        "f1fc74460bd9bbd17140c88dfc0543440f066ffb84849c35c2bb0e331e51cf1c",
+        "6d753db0390e7cec16729fc405bfe41384c93bd79f42b8b8be41b22edbbf1b7c", // tx_transfer
+        "36e774350b865752c9d309d518223abf0a60374bae15a1f73dfe4721b5887048",
+        "2e17680cec3e97ff5a6d4db2ba4a376a15f6da143abce690affd800645c6db80",
+        "12faf164aef7b6f91ed918db39f00e19fd3fc527a63f3b2589f43bf30bbaf24b",
+        "d7e34efc128d6a1c84691200f72f83ad9f696e1766f8ce083894f26343fc395f",
+        "faad78023b9391596981ac9a536070a3d7d469d5c6e20c2855b2cfca63c38f59",
+        "8a9df03a1a8f5e9e606e14a97fdfb2097dba062da1b3b2158bbfa7deabeeadfb",
     ];
     let mut tx_allowlist: Vec<String> = TX_ALLOWLIST
         .into_iter()
