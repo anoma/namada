@@ -56,5 +56,7 @@ borsh.workspace = true
 data-encoding.workspace = true
 linkme.workspace = true
 proptest.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, default-features = false }
+toml.workspace = true

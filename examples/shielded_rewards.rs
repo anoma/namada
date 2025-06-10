@@ -1,7 +1,9 @@
-use std::io::Write;
+use std::fs::OpenOptions;
+use std::io::{Error, Read, Write};
 
 use namada_core::token::DenominatedAmount;
 use namada_core::uint::Uint;
+use serde::{Deserialize, Serialize};
 
 /// Default value for the native currency code
 const DEFAULT_NATIVE_CODE: &str = "NAM";
@@ -20,144 +22,326 @@ const KP_GAIN_DECIMALS: u8 = 6;
 /// Number of decimal places to report the maximum reward rate threshold with
 const MAX_REWARD_RATE_THRESHOLD_DECIMALS: u8 = 75;
 
+#[derive(Serialize, Deserialize, Default)]
+/// Parameters that control the operation of shielded rewards
+pub struct ShieldedRewardsParams {
+    /// MASP epochs per year
+    masp_epochs_per_year: Option<u64>,
+    /// Native token currency code
+    native_code: Option<String>,
+    /// Native token decimal places
+    native_decimals: Option<u8>,
+    /// Exchange rate USD/native token
+    native_exchange_rate: Option<DenominatedAmount>,
+    /// Native token supply in native token
+    native_supply: Option<DenominatedAmount>,
+    /// Incentivised token currency code
+    incent_code: Option<String>,
+    /// Incentivised token decimal places
+    incent_decimals: Option<u8>,
+    /// Exchange rate USD/incentivised token
+    incent_exchange_rate: Option<DenominatedAmount>,
+    /// Target locked amount in incentivised token
+    lock_target: Option<DenominatedAmount>,
+    /// Incentivisation threshold in incentivised token
+    incent_threshold: Option<DenominatedAmount>,
+    /// Inflation in native token
+    inflation: Option<DenominatedAmount>,
+    /// Precision
+    precision: Option<Uint>,
+    /// Maximum reward rate
+    maximum_reward_rate: Option<DenominatedAmount>,
+    /// Locked amount tolerance as proportion of target
+    inflation_threshold: Option<DenominatedAmount>,
+}
+
 /// Computes bounds on inflation, token precision, and nominal proportional gain
 /// sufficient to yield non-zero rewards
 pub fn main() -> std::io::Result<()> {
+    let args: Vec<_> = std::env::args().collect();
+    if args.len() < 2 {
+        eprintln!("Usage: shielded-rewards <params.toml>");
+        eprintln!(
+            "Reads a shielded rewards parameter TOML at the given path, and \
+             computes how the varous parameters constrain each other.
+                   Any missing parameters are interactively requested and \
+             written to the path,."
+        );
+        return Result::Err(Error::other("Incorrect command line arguments."));
+    }
+    let mut params = String::new();
+    let mut params_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&args[1])?;
+    params_file.read_to_string(&mut params)?;
+    std::mem::drop(params_file);
+    let mut params: ShieldedRewardsParams =
+        toml::from_str(&params).map_err(Error::other)?;
     let stdin = std::io::stdin();
 
     // Let Y be the total MASP epochs per year
-    print!("MASP epochs per year ({}): ", DEFAULT_MASP_EPOCHS_PER_YEAR);
-    std::io::stdout().flush()?;
-    let mut masp_epochs_per_year = String::new();
-    stdin.read_line(&mut masp_epochs_per_year)?;
-    let masp_epochs_per_year = masp_epochs_per_year.trim();
-    let masp_epochs_per_year = if masp_epochs_per_year.is_empty() {
-        DEFAULT_MASP_EPOCHS_PER_YEAR
-    } else {
-        masp_epochs_per_year
-            .parse::<u64>()
-            .map_err(std::io::Error::other)?
-    };
+    let masp_epochs_per_year =
+        if let Some(masp_epochs_per_year) = params.masp_epochs_per_year {
+            println!("MASP epochs per year: {}", masp_epochs_per_year);
+            masp_epochs_per_year
+        } else {
+            print!("MASP epochs per year ({}): ", DEFAULT_MASP_EPOCHS_PER_YEAR);
+            std::io::stdout().flush()?;
+            let mut masp_epochs_per_year = String::new();
+            stdin.read_line(&mut masp_epochs_per_year)?;
+            let masp_epochs_per_year = masp_epochs_per_year.trim();
+            let masp_epochs_per_year = if masp_epochs_per_year.is_empty() {
+                DEFAULT_MASP_EPOCHS_PER_YEAR
+            } else {
+                masp_epochs_per_year
+                    .parse()
+                    .map_err(std::io::Error::other)?
+            };
+            params.masp_epochs_per_year = Some(masp_epochs_per_year);
+            std::fs::write(
+                &args[1],
+                toml::to_string_pretty(&params).map_err(Error::other)?,
+            )?;
+            masp_epochs_per_year
+        };
 
     // Get the currency code for the native token
-    print!("Native token currency code ({}): ", DEFAULT_NATIVE_CODE);
-    std::io::stdout().flush()?;
-    let mut native_code = String::new();
-    stdin.read_line(&mut native_code)?;
-    let native_code = native_code.trim();
-    let native_code = if native_code.is_empty() {
-        DEFAULT_NATIVE_CODE
+    let native_code = if let Some(native_code) = &params.native_code {
+        println!("Native token currency code: {}", native_code);
+        native_code.clone()
     } else {
+        print!("Native token currency code ({}): ", DEFAULT_NATIVE_CODE);
+        std::io::stdout().flush()?;
+        let mut native_code = String::new();
+        stdin.read_line(&mut native_code)?;
+        let native_code = native_code.trim();
+        let native_code = if native_code.is_empty() {
+            DEFAULT_NATIVE_CODE
+        } else {
+            native_code
+        }
+        .to_string();
+        params.native_code = Some(native_code.clone());
+        std::fs::write(
+            &args[1],
+            toml::to_string_pretty(&params).map_err(Error::other)?,
+        )?;
         native_code
     };
 
     // Get the decimal places for the native token
-    print!(
-        "Native token decimal places ({}): ",
-        DEFAULT_NATIVE_DECIMALS
-    );
-    std::io::stdout().flush()?;
-    let mut native_decimals = String::new();
-    stdin.read_line(&mut native_decimals)?;
-    let native_decimals = native_decimals.trim();
-    let native_decimals = if native_decimals.is_empty() {
-        DEFAULT_NATIVE_DECIMALS
-    } else {
+    let native_decimals = if let Some(native_decimals) = params.native_decimals
+    {
+        println!("Native token decimal places: {}", native_decimals);
         native_decimals
-            .parse::<u8>()
-            .map_err(std::io::Error::other)?
+    } else {
+        print!(
+            "Native token decimal places ({}): ",
+            DEFAULT_NATIVE_DECIMALS
+        );
+        std::io::stdout().flush()?;
+        let mut native_decimals = String::new();
+        stdin.read_line(&mut native_decimals)?;
+        let native_decimals = native_decimals.trim();
+        let native_decimals = if native_decimals.is_empty() {
+            DEFAULT_NATIVE_DECIMALS
+        } else {
+            native_decimals
+                .parse::<u8>()
+                .map_err(std::io::Error::other)?
+        };
+        params.native_decimals = Some(native_decimals);
+        std::fs::write(
+            &args[1],
+            toml::to_string_pretty(&params).map_err(Error::other)?,
+        )?;
+        native_decimals
     };
 
     // Get the exchange rate for the native token
-    print!("Exchange rate USD/{}: ", native_code);
-    std::io::stdout().flush()?;
-    let mut native_exchange_rate = String::new();
-    stdin.read_line(&mut native_exchange_rate)?;
-    let native_exchange_rate = native_exchange_rate
-        .trim()
-        .parse::<DenominatedAmount>()
-        .map_err(std::io::Error::other)?;
+    let native_exchange_rate =
+        if let Some(native_exchange_rate) = params.native_exchange_rate {
+            println!(
+                "Exchange rate USD/{}: {}",
+                native_code, native_exchange_rate
+            );
+            native_exchange_rate
+        } else {
+            print!("Exchange rate USD/{}: ", native_code);
+            std::io::stdout().flush()?;
+            let mut native_exchange_rate_str = String::new();
+            stdin.read_line(&mut native_exchange_rate_str)?;
+            let native_exchange_rate_str = native_exchange_rate_str.trim();
+            let native_exchange_rate = native_exchange_rate_str
+                .parse::<DenominatedAmount>()
+                .map_err(std::io::Error::other)?;
+            params.native_exchange_rate = Some(native_exchange_rate);
+            std::fs::write(
+                &args[1],
+                toml::to_string_pretty(&params).map_err(Error::other)?,
+            )?;
+            native_exchange_rate
+        };
 
     // Let S be the total supply of NAM
-    print!("Native token supply in {}: ", native_code);
-    std::io::stdout().flush()?;
-    let mut native_supply = String::new();
-    stdin.read_line(&mut native_supply)?;
-    let native_supply = native_supply
-        .trim()
-        .parse::<DenominatedAmount>()
-        .map_err(std::io::Error::other)?;
-    let native_supply = native_supply
-        .increase_precision(native_decimals.into())
-        .map_err(std::io::Error::other)?;
+    let native_supply = if let Some(native_supply) = params.native_supply {
+        println!("Native token supply in {}: {}", native_code, native_supply);
+        native_supply
+    } else {
+        print!("Native token supply in {}: ", native_code);
+        std::io::stdout().flush()?;
+        let mut native_supply_str = String::new();
+        stdin.read_line(&mut native_supply_str)?;
+        let native_supply_str = native_supply_str.trim();
+        let native_supply = native_supply_str
+            .parse::<DenominatedAmount>()
+            .map_err(std::io::Error::other)?;
+        let native_supply = native_supply
+            .increase_precision(native_decimals.into())
+            .map_err(std::io::Error::other)?;
+        params.native_supply = Some(native_supply);
+        std::fs::write(
+            &args[1],
+            toml::to_string_pretty(&params).map_err(Error::other)?,
+        )?;
+        native_supply
+    };
 
     // Get the currency code for the incentivised token
-    print!(
-        "Incentivised token currency code ({}): ",
-        DEFAULT_INCENT_CODE
-    );
-    std::io::stdout().flush()?;
-    let mut incent_code = String::new();
-    stdin.read_line(&mut incent_code)?;
-    let incent_code = incent_code.trim();
-    let incent_code = if incent_code.is_empty() {
-        DEFAULT_INCENT_CODE
+    let incent_code = if let Some(incent_code) = &params.incent_code {
+        println!("Incentivised token currency code: {}", incent_code,);
+        incent_code.clone()
     } else {
+        println!(
+            "Incentivised token currency code ({}): ",
+            DEFAULT_INCENT_CODE,
+        );
+        std::io::stdout().flush()?;
+        let mut incent_code = String::new();
+        stdin.read_line(&mut incent_code)?;
+        let incent_code = incent_code.trim();
+        let incent_code = if incent_code.is_empty() {
+            DEFAULT_INCENT_CODE
+        } else {
+            incent_code
+        }
+        .to_string();
+        params.incent_code = Some(incent_code.clone());
+        std::fs::write(
+            &args[1],
+            toml::to_string_pretty(&params).map_err(Error::other)?,
+        )?;
         incent_code
     };
 
     // Get the decimal places of the incentivised token
-    print!(
-        "Incentivised token decimal places ({}): ",
-        DEFAULT_INCENT_DECIMALS
-    );
-    std::io::stdout().flush()?;
-    let mut incent_decimals = String::new();
-    stdin.read_line(&mut incent_decimals)?;
-    let incent_decimals = incent_decimals.trim();
-    let incent_decimals = if incent_decimals.is_empty() {
-        DEFAULT_INCENT_DECIMALS
-    } else {
+    let incent_decimals = if let Some(incent_decimals) = params.incent_decimals
+    {
+        println!("Incentivised token decimal places: {}", incent_decimals,);
         incent_decimals
-            .parse::<u8>()
-            .map_err(std::io::Error::other)?
+    } else {
+        print!(
+            "Incentivised token decimal places ({}): ",
+            DEFAULT_INCENT_DECIMALS
+        );
+        std::io::stdout().flush()?;
+        let mut incent_decimals = String::new();
+        stdin.read_line(&mut incent_decimals)?;
+        let incent_decimals = incent_decimals.trim();
+        let incent_decimals = if incent_decimals.is_empty() {
+            DEFAULT_INCENT_DECIMALS
+        } else {
+            incent_decimals
+                .parse::<u8>()
+                .map_err(std::io::Error::other)?
+        };
+        params.incent_decimals = Some(incent_decimals);
+        std::fs::write(
+            &args[1],
+            toml::to_string_pretty(&params).map_err(Error::other)?,
+        )?;
+        incent_decimals
     };
 
     // Get the exchange rate for the incentivised token
-    print!("Exchange rate USD/{}: ", incent_code);
-    std::io::stdout().flush()?;
-    let mut incent_exchange_rate = String::new();
-    stdin.read_line(&mut incent_exchange_rate)?;
-    let incent_exchange_rate = incent_exchange_rate
-        .trim()
-        .parse::<DenominatedAmount>()
-        .map_err(std::io::Error::other)?;
+    let incent_exchange_rate =
+        if let Some(incent_exchange_rate) = params.incent_exchange_rate {
+            println!(
+                "Exchange rate USD/{}: {}",
+                incent_code, incent_exchange_rate
+            );
+            incent_exchange_rate
+        } else {
+            print!("Exchange rate USD/{}: ", incent_code);
+            std::io::stdout().flush()?;
+            let mut incent_exchange_rate_str = String::new();
+            stdin.read_line(&mut incent_exchange_rate_str)?;
+            let incent_exchange_rate_str = incent_exchange_rate_str.trim();
+            let incent_exchange_rate = incent_exchange_rate_str
+                .parse::<DenominatedAmount>()
+                .map_err(std::io::Error::other)?;
+            params.incent_exchange_rate = Some(incent_exchange_rate);
+            std::fs::write(
+                &args[1],
+                toml::to_string_pretty(&params).map_err(Error::other)?,
+            )?;
+            incent_exchange_rate
+        };
 
     // Let X be the target amount of TOK locked in the MASP
-    print!("Target locked amount in {}: ", incent_code);
-    std::io::stdout().flush()?;
-    let mut lock_target = String::new();
-    stdin.read_line(&mut lock_target)?;
-    let lock_target = lock_target
-        .trim()
-        .parse::<DenominatedAmount>()
-        .map_err(std::io::Error::other)?;
-    let lock_target = lock_target
-        .increase_precision(incent_decimals.into())
-        .map_err(std::io::Error::other)?;
+    let lock_target = if let Some(lock_target) = params.lock_target {
+        println!("Target locked amount in {}: {}", incent_code, lock_target);
+        lock_target
+    } else {
+        print!("Target locked amount in {}: ", incent_code);
+        std::io::stdout().flush()?;
+        let mut lock_target_str = String::new();
+        stdin.read_line(&mut lock_target_str)?;
+        let lock_target_str = lock_target_str.trim();
+        let lock_target = lock_target_str
+            .parse::<DenominatedAmount>()
+            .map_err(std::io::Error::other)?;
+        let lock_target = lock_target
+            .increase_precision(incent_decimals.into())
+            .map_err(std::io::Error::other)?;
+        params.lock_target = Some(lock_target);
+        std::fs::write(
+            &args[1],
+            toml::to_string_pretty(&params).map_err(Error::other)?,
+        )?;
+        lock_target
+    };
 
     // Let M be the desired minimum amount of TOK required to get rewards
-    print!("Incentivisation threshold in {}: ", incent_code);
-    std::io::stdout().flush()?;
-    let mut incent_threshold = String::new();
-    stdin.read_line(&mut incent_threshold)?;
-    let incent_threshold = incent_threshold
-        .trim()
-        .parse::<DenominatedAmount>()
-        .map_err(std::io::Error::other)?;
-    let incent_threshold = incent_threshold
-        .increase_precision(incent_decimals.into())
-        .map_err(std::io::Error::other)?;
+    let incent_threshold =
+        if let Some(incent_threshold) = params.incent_threshold {
+            println!(
+                "Incentivisation threshold in {}: {}",
+                incent_code, incent_threshold
+            );
+            incent_threshold
+        } else {
+            print!("Incentivisation threshold in {}: ", incent_code);
+            std::io::stdout().flush()?;
+            let mut incent_threshold_str = String::new();
+            stdin.read_line(&mut incent_threshold_str)?;
+            let incent_threshold = incent_threshold_str
+                .trim()
+                .parse::<DenominatedAmount>()
+                .map_err(std::io::Error::other)?;
+            let incent_threshold = incent_threshold
+                .increase_precision(incent_decimals.into())
+                .map_err(std::io::Error::other)?;
+            params.incent_threshold = Some(incent_threshold);
+            std::fs::write(
+                &args[1],
+                toml::to_string_pretty(&params).map_err(Error::other)?,
+            )?;
+            incent_threshold
+        };
 
     // It must be the case that X/I <= M. Or equivalently I >= X/M.
     let min_inflation = lock_target.amount().raw_amount()
@@ -174,20 +358,34 @@ pub fn main() -> std::io::Result<()> {
         lock_target,
         incent_code
     );
-    print!("Inflation (>= {}) in {}: ", min_inflation, native_code);
-    std::io::stdout().flush()?;
 
     // Let I be the computed amount of uNAM inflation in a single round of the
     // mechanism due to the incentivised token TOK.
-    let mut inflation = String::new();
-    stdin.read_line(&mut inflation)?;
-    let inflation = inflation
-        .trim()
-        .parse::<DenominatedAmount>()
-        .map_err(std::io::Error::other)?;
-    let inflation = inflation
-        .increase_precision(native_decimals.into())
-        .map_err(std::io::Error::other)?;
+    let inflation = if let Some(inflation) = params.inflation {
+        println!(
+            "Inflation in {} (>= {}): {}",
+            native_code, min_inflation, inflation
+        );
+        inflation
+    } else {
+        print!("Inflation in {} (>= {}): ", native_code, min_inflation);
+        std::io::stdout().flush()?;
+        let mut inflation_str = String::new();
+        stdin.read_line(&mut inflation_str)?;
+        let inflation = inflation_str
+            .trim()
+            .parse::<DenominatedAmount>()
+            .map_err(std::io::Error::other)?;
+        let inflation = inflation
+            .increase_precision(native_decimals.into())
+            .map_err(std::io::Error::other)?;
+        params.inflation = Some(inflation);
+        std::fs::write(
+            &args[1],
+            toml::to_string_pretty(&params).map_err(Error::other)?,
+        )?;
+        inflation
+    };
 
     // Let P be the precision of the token TOK. A necessary condition for there
     // to be inflation is that floor(I*P/X)>=1.
@@ -203,12 +401,26 @@ pub fn main() -> std::io::Result<()> {
     );
 
     // Get a precision, P, in the computed range from the user
-    print!("Precision ([{}, {}]): ", min_precision, max_precision);
-    std::io::stdout().flush()?;
-    let mut precision = String::new();
-    stdin.read_line(&mut precision)?;
-    let precision = Uint::from_str_radix(precision.trim(), 10)
-        .map_err(std::io::Error::other)?;
+    let precision = if let Some(precision) = params.precision {
+        println!(
+            "Precision ([{}, {}]): {}",
+            min_precision, max_precision, precision
+        );
+        precision
+    } else {
+        print!("Precision ([{}, {}]): ", min_precision, max_precision);
+        std::io::stdout().flush()?;
+        let mut precision_str = String::new();
+        stdin.read_line(&mut precision_str)?;
+        let precision = Uint::from_str_radix(precision_str.trim(), 10)
+            .map_err(std::io::Error::other)?;
+        params.precision = Some(precision);
+        std::fs::write(
+            &args[1],
+            toml::to_string_pretty(&params).map_err(Error::other)?,
+        )?;
+        precision
+    };
 
     // A reward of I*P/X uNAM is obtained for every P TOK locked in the pool
     let reward_per_precision = (inflation.amount().raw_amount() * precision)
@@ -274,34 +486,63 @@ pub fn main() -> std::io::Result<()> {
     );
 
     // Get the maximum reward rate, C, from the user.
-    print!("Maximum reward rate (>= {}): ", max_reward_rate_threshold);
-    std::io::stdout().flush()?;
-    let mut maximum_reward_rate = String::new();
-    stdin.read_line(&mut maximum_reward_rate)?;
-    let maximum_reward_rate = maximum_reward_rate
-        .trim()
-        .parse::<DenominatedAmount>()
-        .map_err(std::io::Error::other)?;
+    let maximum_reward_rate =
+        if let Some(maximum_reward_rate) = params.maximum_reward_rate {
+            println!(
+                "Maximum reward rate (>= {}): {}",
+                max_reward_rate_threshold, maximum_reward_rate
+            );
+            maximum_reward_rate
+        } else {
+            print!("Maximum reward rate (>= {}): ", max_reward_rate_threshold);
+            std::io::stdout().flush()?;
+            let mut maximum_reward_rate_str = String::new();
+            stdin.read_line(&mut maximum_reward_rate_str)?;
+            let maximum_reward_rate = maximum_reward_rate_str
+                .trim()
+                .parse::<DenominatedAmount>()
+                .map_err(std::io::Error::other)?;
+            params.maximum_reward_rate = Some(maximum_reward_rate);
+            std::fs::write(
+                &args[1],
+                toml::to_string_pretty(&params).map_err(Error::other)?,
+            )?;
+            maximum_reward_rate
+        };
 
     // Let T be the threshold such that shielded rewards are guaranteed when E
     // exceeds T
-    print!(
-        "Locked amount tolerance as proportion of target ({}): ",
-        DEFAULT_INFLATION_THRESHOLD
-    );
-    std::io::stdout().flush()?;
-    let mut inflation_threshold = String::new();
-    stdin.read_line(&mut inflation_threshold)?;
-    let inflation_threshold = inflation_threshold.trim();
-    let inflation_threshold = if inflation_threshold.is_empty() {
-        DEFAULT_INFLATION_THRESHOLD
+    let inflation_threshold =
+        if let Some(inflation_threshold) = params.inflation_threshold {
+            println!(
+                "Locked amount tolerance as proportion of target: {}",
+                inflation_threshold
+            );
+            inflation_threshold
+        } else {
+            print!(
+                "Locked amount tolerance as proportion of target ({}): ",
+                DEFAULT_INFLATION_THRESHOLD
+            );
+            std::io::stdout().flush()?;
+            let mut inflation_threshold = String::new();
+            stdin.read_line(&mut inflation_threshold)?;
+            let inflation_threshold = inflation_threshold.trim();
+            let inflation_threshold = if inflation_threshold.is_empty() {
+                DEFAULT_INFLATION_THRESHOLD
+            } else {
+                inflation_threshold
+            }
             .parse::<DenominatedAmount>()
-            .map_err(std::io::Error::other)?
-    } else {
-        inflation_threshold
-            .parse::<DenominatedAmount>()
-            .map_err(std::io::Error::other)?
-    };
+            .map_err(std::io::Error::other)?;
+            params.inflation_threshold = Some(inflation_threshold);
+            std::fs::write(
+                &args[1],
+                toml::to_string_pretty(&params).map_err(Error::other)?,
+            )?;
+            inflation_threshold
+        };
+
     let inflation_threshold = lock_target
         .checked_mul(inflation_threshold)
         .ok_or(std::io::Error::other(
