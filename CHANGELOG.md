@@ -85,6 +85,15 @@ Namada v1.0.0 is the first stable release of the Namada apps.
 - updated namada libraries to libs-v0.46.1
   ([\#4123](https://github.com/anoma/namada/pull/4123))
 
+## libs-v0.150.2
+
+Namada libs 0.150.2 release.
+
+### BUG FIXES
+
+- Changed how multisig signatures are added to a tx
+  ([\#4695](https://github.com/anoma/namada/pull/4695))
+
 ## libs-v0.150.1
 
 Namada libs v0.150.1 release
