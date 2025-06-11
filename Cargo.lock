@@ -5759,9 +5759,11 @@ dependencies = [
  "namada_shielded_token",
  "namada_trans_token",
  "proptest",
+ "serde",
  "serde_json",
  "sha2 0.10.8",
  "tokio",
+ "toml",
 ]
 
 [[package]]
