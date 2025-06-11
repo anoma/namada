@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v101.1.2
+
+Namada apps v101.1.2 release.
+
 ## v101.1.1
 
 Namada apps v101.1.1
