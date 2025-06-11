@@ -818,21 +818,9 @@ impl Tx {
             signatures: BTreeMap::new(),
             signer: Signer::PubKeys(vec![]),
         };
-        let mut sections = HashMap::new();
         // Put the supplied signatures into the correct sections
         for signature in signatures {
-            if let Some((addr, idx)) = &signature.index {
-                // Add the signature under the given multisig address
-                let section =
-                    sections.entry(addr.clone()).or_insert_with(|| {
-                        Authorization {
-                            targets: vec![self.raw_header_hash()],
-                            signatures: BTreeMap::new(),
-                            signer: Signer::Address(addr.clone()),
-                        }
-                    });
-                section.signatures.insert(*idx, signature.signature);
-            } else if let Signer::PubKeys(pks) = &mut pk_section.signer {
+            if let Signer::PubKeys(pks) = &mut pk_section.signer {
                 // Add the signature under its corresponding public key
                 pk_section.signatures.insert(
                     u8::try_from(pks.len())
@@ -842,10 +830,7 @@ impl Tx {
                 pks.push(signature.pubkey);
             }
         }
-        for section in std::iter::once(pk_section).chain(sections.into_values())
-        {
-            self.add_section(Section::Authorization(section));
-        }
+        self.add_section(Section::Authorization(pk_section));
         self
     }
 
