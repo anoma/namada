@@ -403,7 +403,7 @@ pub async fn query_rewards_estimate(
     args: args::QueryShieldingRewardsEstimate,
 ) {
     let mut shielded = context.shielded_mut().await;
-    let _ = shielded.load().await;
+    shielded.load().await;
     let raw_balance = match shielded
         .compute_shielded_balance(&args.owner.as_viewing_key())
         .await
@@ -482,7 +482,7 @@ async fn query_shielded_balance(
     // Pre-compute the masp asset types of `token`
     {
         let mut shielded = context.shielded_mut().await;
-        let _ = shielded.load().await;
+        shielded.load().await;
         // Precompute asset types to increase chances of success in decoding
         let token_map = context.wallet().await.get_addresses();
         let mut tokens: BTreeSet<_> = token_map.values().collect();
