@@ -1,6 +1,9 @@
 //! Virtual machine's host environment exposes functions that may be called from
 //! within a virtual machine.
 
+pub mod gas_meter;
+pub mod state;
+
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -26,7 +29,7 @@ use namada_state::prefix_iter::{PrefixIteratorId, PrefixIterators};
 use namada_state::write_log::{self, WriteLog};
 use namada_state::{
     DB, DBIter, InMemory, OptionExt, ResultExt, State, StateRead,
-    StorageHasher, StorageRead, StorageWrite, TxHostEnvState, VpHostEnvState,
+    StorageHasher, StorageRead, StorageWrite,
 };
 pub use namada_state::{Error, Result};
 use namada_token::MaspTransaction;
@@ -39,6 +42,7 @@ use namada_tx::{BatchedTx, BatchedTxRef, Tx, TxCommitments};
 use namada_vp::vp_host_fns;
 use thiserror::Error;
 
+use self::state::{TxHostEnvState, VpHostEnvState};
 #[cfg(feature = "wasm-runtime")]
 use super::wasm::{TxCache, VpCache};
 use crate::memory::VmMemory;
@@ -114,7 +118,7 @@ where
     /// Storage prefix iterators.
     pub iterators: HostRef<RwAccess, PrefixIterators<'static, D>>,
     /// Transaction gas meter. In  `RefCell` to charge gas in read-only fns.
-    pub gas_meter: HostRef<RoAccess, RefCell<TxGasMeter>>,
+    pub gas_meter: HostRef<RoAccess, RefCell<gas_meter::GasMeter<TxGasMeter>>>,
     /// Transaction sentinel. In  `RefCell` to charge gas in read-only fns.
     pub sentinel: HostRef<RoAccess, RefCell<TxSentinel>>,
     /// Hash of the wrapper transaction associated with
@@ -165,7 +169,7 @@ where
         in_mem: &InMemory<H>,
         db: &D,
         iterators: &mut PrefixIterators<'static, D>,
-        gas_meter: &RefCell<TxGasMeter>,
+        gas_meter: &RefCell<gas_meter::GasMeter<TxGasMeter>>,
         sentinel: &RefCell<TxSentinel>,
         wrapper_hash: &Hash,
         tx: &Tx,
@@ -265,7 +269,10 @@ where
     /// Use gas meter and sentinel
     pub fn gas_meter_and_sentinel(
         &self,
-    ) -> (&RefCell<TxGasMeter>, &RefCell<TxSentinel>) {
+    ) -> (
+        &RefCell<gas_meter::GasMeter<TxGasMeter>>,
+        &RefCell<TxSentinel>,
+    ) {
         let gas_meter = unsafe { self.gas_meter.get() };
         let sentinel = unsafe { self.sentinel.get() };
         (gas_meter, sentinel)
@@ -332,7 +339,7 @@ where
     /// Storage prefix iterators.
     pub iterators: HostRef<RwAccess, PrefixIterators<'static, D>>,
     /// VP gas meter. In  `RefCell` to charge gas in read-only fns.
-    pub gas_meter: HostRef<RoAccess, RefCell<VpGasMeter>>,
+    pub gas_meter: HostRef<RoAccess, RefCell<gas_meter::GasMeter<VpGasMeter>>>,
     /// The transaction code is used for signature verification
     pub tx: HostRef<RoAccess, Tx>,
     /// The commitments inside the transaction
@@ -404,7 +411,7 @@ where
         write_log: &WriteLog,
         in_mem: &InMemory<H>,
         db: &D,
-        gas_meter: &RefCell<VpGasMeter>,
+        gas_meter: &RefCell<gas_meter::GasMeter<VpGasMeter>>,
         tx: &Tx,
         cmt: &TxCommitments,
         tx_index: &TxIndex,
@@ -480,7 +487,7 @@ where
         write_log: &WriteLog,
         in_mem: &InMemory<H>,
         db: &D,
-        gas_meter: &RefCell<VpGasMeter>,
+        gas_meter: &RefCell<gas_meter::GasMeter<VpGasMeter>>,
         tx: &Tx,
         cmt: &TxCommitments,
         tx_index: &TxIndex,
@@ -545,7 +552,7 @@ where
     }
 
     /// Use gas meter
-    pub fn gas_meter(&self) -> &RefCell<VpGasMeter> {
+    pub fn gas_meter(&self) -> &RefCell<gas_meter::GasMeter<VpGasMeter>> {
         let gas_meter = unsafe { self.gas_meter.get() };
         gas_meter
     }
@@ -594,37 +601,6 @@ where
     CA: WasmCacheAccess,
 {
     consume_tx_gas(env, used_gas.into())
-}
-
-// Internal funtion to charge gas for txs. Called by the other functions in this
-// file while the public version is left to be used directly from wasm and as a
-// hook for gas instrumentation
-fn consume_tx_gas<MEM, D, H, CA>(
-    env: &mut TxVmEnv<MEM, D, H, CA>,
-    used_gas: Gas,
-) -> Result<()>
-where
-    MEM: VmMemory,
-    D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: 'static + StorageHasher,
-    CA: WasmCacheAccess,
-{
-    let (gas_meter, sentinel) = env.ctx.gas_meter_and_sentinel();
-
-    // if we run out of gas, we need to stop the execution
-    gas_meter
-        .borrow_mut()
-        .consume(used_gas)
-        .map_err(|err| {
-            sentinel.borrow_mut().set_out_of_gas();
-            tracing::info!(
-                "Stopping transaction execution because of gas error: {}",
-                err
-            );
-
-            TxRuntimeError::OutOfGas(err)
-        })
-        .into_storage_result()
 }
 
 /// Called from VP wasm to request to use the given gas amount
@@ -2140,7 +2116,7 @@ where
     let tx = unsafe { env.ctx.tx.get() };
 
     let (gas_meter, sentinel) = env.ctx.gas_meter_and_sentinel();
-    match tx.verify_signatures(
+    let result = match tx.verify_signatures(
         &HashSet::from_iter(hashes),
         public_keys_map,
         &None,
@@ -2163,7 +2139,9 @@ where
             _ => Ok(HostEnvResult::Fail.to_i64()),
         },
     }
-    .into_storage_result()
+    .into_storage_result();
+
+    result
 }
 
 /// Appends the new note commitments to the tree in storage
@@ -2343,6 +2321,39 @@ where
     Ok(())
 }
 
+// Internal funtion to charge gas for txs. Called by the other functions in this
+// file while the public version is left to be used directly from wasm and as a
+// hook for gas instrumentation
+fn consume_tx_gas<MEM, D, H, CA>(
+    env: &mut TxVmEnv<MEM, D, H, CA>,
+    used_gas: Gas,
+) -> Result<()>
+where
+    MEM: VmMemory,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let (gas_meter, sentinel) = env.ctx.gas_meter_and_sentinel();
+
+    // if we run out of gas, we need to stop the execution
+    let result = gas_meter
+        .borrow_mut()
+        .consume(used_gas)
+        .map_err(|err| {
+            sentinel.borrow_mut().set_out_of_gas();
+            tracing::info!(
+                "Stopping transaction execution because of gas error: {}",
+                err
+            );
+
+            TxRuntimeError::OutOfGas(err)
+        })
+        .into_storage_result();
+
+    result
+}
+
 /// A helper module for testing
 #[cfg(feature = "testing")]
 pub mod testing {
@@ -2358,7 +2369,7 @@ pub mod testing {
         state: &mut S,
         iterators: &mut PrefixIterators<'static, <S as StateRead>::D>,
         verifiers: &mut BTreeSet<Address>,
-        gas_meter: &RefCell<TxGasMeter>,
+        gas_meter: &RefCell<gas_meter::GasMeter<TxGasMeter>>,
         sentinel: &RefCell<TxSentinel>,
         tx: &Tx,
         cmt: &TxCommitments,
@@ -2401,7 +2412,7 @@ pub mod testing {
         state: &mut S,
         iterators: &mut PrefixIterators<'static, <S as StateRead>::D>,
         verifiers: &mut BTreeSet<Address>,
-        gas_meter: &RefCell<TxGasMeter>,
+        gas_meter: &RefCell<gas_meter::GasMeter<TxGasMeter>>,
         sentinel: &RefCell<TxSentinel>,
         tx: &Tx,
         cmt: &TxCommitments,
@@ -2454,7 +2465,7 @@ pub mod testing {
         address: &Address,
         state: &S,
         iterators: &mut PrefixIterators<'static, <S as StateRead>::D>,
-        gas_meter: &RefCell<VpGasMeter>,
+        gas_meter: &RefCell<gas_meter::GasMeter<VpGasMeter>>,
         tx: &Tx,
         cmt: &TxCommitments,
         tx_index: &TxIndex,
