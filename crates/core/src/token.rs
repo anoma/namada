@@ -512,8 +512,8 @@ impl DenominatedAmount {
         }
     }
 
-    /// Attempt to increase the precision of an amount. Can fail
-    /// if the resulting amount does not fit into 256 bits.
+    /// Return an equivalent denominated amount with the given denomination. Can
+    /// fail if the resulting amount does not fit into 256 bits.
     pub fn increase_precision(
         self,
         denom: Denomination,
@@ -534,8 +534,43 @@ impl DenominatedAmount {
             .ok_or(AmountParseError::PrecisionOverflow)
     }
 
+    /// Return the closest denominated amount with the given denomination and
+    /// the error.
+    pub fn approximate(
+        self,
+        denom: Denomination,
+    ) -> Result<(Self, Self), AmountParseError> {
+        if denom.0 < self.denom.0 {
+            // Divide numerator and denominator by a power of 10
+            let amount = self.amount.raw_amount();
+            #[allow(clippy::arithmetic_side_effects)]
+            let (quot, rem) = Uint::from(10)
+                .checked_pow(Uint::from(self.denom.0 - denom.0))
+                .and_then(|scaling| {
+                    amount.checked_div(scaling).zip(amount.checked_rem(scaling))
+                })
+                .ok_or(AmountParseError::PrecisionOverflow)?;
+            let approx = Self {
+                amount: quot.into(),
+                denom,
+            };
+            let error = Self {
+                amount: rem.into(),
+                denom: self.denom,
+            };
+            Ok((approx, error))
+        } else {
+            // Multiply numerator and denominator by a power of 10
+            let error = Self {
+                amount: 0.into(),
+                denom: self.denom,
+            };
+            self.increase_precision(denom).map(|x| (x, error))
+        }
+    }
+
     /// Create a new [`DenominatedAmount`] with the same underlying
-    /// amout but a new denomination.
+    /// amount but a new denomination.
     pub fn redenominate(self, new_denom: u8) -> Self {
         Self {
             amount: self.amount,
@@ -588,6 +623,38 @@ impl DenominatedAmount {
             amount,
             denom: lhs.denom,
         })
+    }
+
+    /// Checked division computed to the given precision. Returns `None` on
+    /// overflow.
+    pub fn checked_div_precision(
+        &self,
+        rhs: DenominatedAmount,
+        denom: Denomination,
+    ) -> Option<Self> {
+        #[allow(clippy::arithmetic_side_effects)]
+        let pow = i16::from(rhs.denom.0) + i16::from(denom.0)
+            - i16::from(self.denom.0);
+        if pow < 0 {
+            return None;
+        }
+        let amount = Uint::from(10).checked_pow(Uint::from(pow)).and_then(
+            |scaling| {
+                scaling.checked_mul_div(
+                    self.amount.raw_amount(),
+                    rhs.amount.raw_amount(),
+                )
+            },
+        )?;
+        Some(Self {
+            amount: amount.0.into(),
+            denom,
+        })
+    }
+
+    /// Checked division. Returns `None` on overflow.
+    pub fn checked_div(&self, rhs: DenominatedAmount) -> Option<Self> {
+        self.checked_div_precision(rhs, self.denom)
     }
 
     /// Returns the significand of this number
