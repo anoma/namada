@@ -494,13 +494,12 @@ where
             .code_sec()
             .map(|c| c.code.hash())
         {
-            None => "none".to_string(),
+            None => "".to_string(),
             Some(hash) => self
                 .state
                 .read(&Key::wasm_code_name(&hash))
-                .ok()
-                .flatten()
-                .unwrap_or("unknown".to_string()),
+                .expect("Reading wasm name from storage should not fail")
+                .unwrap_or("".to_string()),
         };
 
         let code_name_event = TxWasmEvent {
@@ -6332,10 +6331,10 @@ mod test_finalize_block {
         // indexers
         let event = events.remove(0);
         let code_name = event.read_attribute::<CodeName>().unwrap();
-        assert_eq!(code_name, "unknown");
+        assert_eq!(code_name, "");
         let event = events.remove(0);
         let code_name = event.read_attribute::<CodeName>().unwrap();
-        assert_eq!(code_name, "unknown");
+        assert_eq!(code_name, "");
         let event = events.remove(0);
         let msg = event.read_attribute::<Log>().unwrap();
         assert_eq!(&msg, EVENT_MSG);
@@ -6412,10 +6411,10 @@ mod test_finalize_block {
         // order
         let event = events.remove(0);
         let code_name = event.read_attribute::<CodeName>().unwrap();
-        assert_eq!(code_name, "unknown");
+        assert_eq!(code_name, "");
         let event = events.remove(0);
         let code_name = event.read_attribute::<CodeName>().unwrap();
-        assert_eq!(code_name, "unknown");
+        assert_eq!(code_name, "");
         let event = events.remove(0);
         let msg = event.read_attribute::<Log>().unwrap();
         assert_eq!(&msg, "bing");
@@ -6488,10 +6487,10 @@ mod test_finalize_block {
         // multiple tx results (2)
         let event = events.remove(0);
         let code_name = event.read_attribute::<CodeName>().unwrap();
-        assert_eq!(code_name, "unknown");
+        assert_eq!(code_name, "");
         let event = events.remove(0);
         let code_name = event.read_attribute::<CodeName>().unwrap();
-        assert_eq!(code_name, "unknown");
+        assert_eq!(code_name, "");
         let tx_event = events.remove(0);
         let tx_results = tx_event.read_attribute::<Batch<'_>>().unwrap();
         assert_eq!(tx_results.len(), 2);
