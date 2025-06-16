@@ -104,19 +104,14 @@ pub struct ShieldedWallet<U: ShieldedUtils> {
 }
 
 /// The data for an indexed masp transaction
-#[derive(BorshSerialize, BorshDeserialize, Debug)]
+#[derive(BorshSerialize, BorshDeserialize, Debug, Default)]
 pub struct TxHistoryEntry {
-    // FIXME: should just add the conversions here?
-    // FIXME: it seems to me like we can't understand the conversions in the
-    // bundle. Maybe we could look for all the conversions for the given assets
-    // and see if they match the known ones? No they are behing a zkp
-    // FIXME: maybe we can just signal if there were conversions? Like with a
-    // boolean? FIXME: can we try to apply the conversions to the input
-    // notes to update their amounts?
     /// The inputs of the indexed transaction
     pub inputs: HashMap<AssetData, Amount>,
     /// The outputs of the indexed transaction
     pub outputs: HashMap<AssetData, Amount>,
+    /// A flag to mark the presence of conversions in the transaction
+    pub conversions: bool,
 }
 
 /// Default implementation to ease construction of TxContexts. Derive cannot be
@@ -284,10 +279,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
             .entry(vk.to_owned())
             .or_default()
             .entry(indexed_tx)
-            .or_insert(TxHistoryEntry {
-                inputs: Default::default(),
-                outputs: Default::default(),
-            })
+            .or_default()
             .outputs
             .entry(asset_data)
             .or_insert(Amount::zero());
@@ -305,6 +297,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
         update_witness_map: bool,
         update_history: Option<IndexedTx>,
     ) -> Result<(), eyre::Error> {
+        let used_conversions = transaction.sapling_bundle().map_or_else(
+            || false,
+            |bundle| !bundle.shielded_converts.is_empty(),
+        );
+
         for ss in transaction
             .sapling_bundle()
             .map_or(&vec![], |x| &x.shielded_spends)
@@ -316,6 +313,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
                 if update_witness_map {
                     self.witness_map.swap_remove(note_pos);
                 }
+                // Update the history if required
                 if let Some(indexed_tx) = update_history {
                     let vk = self.vk_map.get(note_pos).ok_or_else(|| {
                         eyre!(
@@ -333,22 +331,18 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
                         .ok_or_else(|| eyre!("Can not get the asset data"))?
                         .to_owned();
 
-                    let input_entry = self
+                    let history_entry = self
                         .shielded_history
                         .entry(vk.to_owned())
                         .or_default()
                         .entry(indexed_tx)
-                        .or_insert(TxHistoryEntry {
-                            inputs: Default::default(),
-                            outputs: Default::default(),
-                        })
+                        .or_default();
+                    history_entry.conversions = used_conversions;
+
+                    let input_entry = history_entry
                         .inputs
                         .entry(asset_data)
                         .or_insert(Amount::zero());
-
-                    // FIXME: we don't account for conversions in the spent
-                    // notes, and this is wrong? Problem is that I don't think
-                    // we can account for the conversions
                     *input_entry = checked!(input_entry + note.value.into())
                         .wrap_err("Overflow in shielded history inputs")?;
                 }
@@ -613,7 +607,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         else {
             return Ok(());
         };
-        // FIXME: so here we get the conversion in cleartext
         // Get the conversion for the given asset type, otherwise fail
         let Some((token, denom, position, ep, conv, path)) =
             Self::query_conversion(client, asset_type).await
@@ -650,14 +643,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         let mut output = I128Sum::zero();
         // Repeatedly exchange assets until it is no longer possible
         while let Some(asset_type) = input.asset_types().next().cloned() {
-            // FIXME: maybe when we get the spent notes we could try to look for
-            // the conversions of that asset and try to construct the conversion
-            // and then see if it matches the encrypted one? Could be a very
-            // slow process though FIXME: can we even reconstruct
-            // the convertion note from the allowed conversion? We probably need
-            // the builder but I'm not sure the build process is deterministic.
-            // Maybe we can just try to construct a commitment that matches the
-            // conversion commitment?
             self.query_allowed_conversion(client, asset_type, &mut conversions)
                 .await?;
             // Consolidate the current amount with any dust from output.
@@ -1054,8 +1039,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 let pre_contr =
                     I128Sum::from_pair(note.asset_type, i128::from(note.value));
                 let (contr, proposed_convs) = self
-                    // FIXME: here we account for the conversions, look at how
-                    // we do that
                     .compute_exchanged_amount(
                         context.client(),
                         context.io(),
@@ -1682,7 +1665,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             }
             // Commit the conversion notes used during summation
             for (conv, wit, value) in used_convs.values() {
-                // FIXME: here we commit the conversions we've used
                 if value.is_positive() {
                     builder
                         .add_sapling_convert(
