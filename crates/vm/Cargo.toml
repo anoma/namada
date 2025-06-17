@@ -63,6 +63,8 @@ namada_tx = { path = "../tx", features = ["testing"] }
 assert_matches.workspace = true
 byte-unit.workspace = true
 itertools.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 tempfile.workspace = true
 test-log.workspace = true
 wasmer-compiler.workspace = true

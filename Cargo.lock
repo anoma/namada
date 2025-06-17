@@ -6620,6 +6620,8 @@ dependencies = [
  "namada_vp",
  "parity-wasm",
  "rayon",
+ "serde",
+ "serde_json",
  "smooth-operator",
  "tempfile",
  "test-log",

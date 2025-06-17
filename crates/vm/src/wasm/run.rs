@@ -7,16 +7,20 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::num::NonZeroU32;
 use std::rc::Rc;
+use std::str::FromStr;
 
 use borsh::BorshDeserialize;
-use namada_core::address::Address;
+use namada_core::address::{self, Address};
 use namada_core::hash::{Error as TxHashError, Hash};
 use namada_core::internal::HostEnvResult;
 use namada_core::storage::{Key, TxIndex};
 use namada_core::validity_predicate::VpError;
 use namada_gas::{GasMetering, TxGasMeter, VpGasMeter, WASM_MEMORY_PAGE_GAS};
 use namada_state::prefix_iter::PrefixIterators;
-use namada_state::{DB, DBIter, State, StateRead, StorageHasher, StorageRead};
+use namada_state::{
+    BlockHeader, BlockHeight, DB, DBIter, State, StateRead, StorageHasher,
+    StorageRead,
+};
 use namada_tx::data::{TxSentinel, TxType};
 use namada_tx::{BatchedTxRef, Commitment, Section, Tx, TxCommitments};
 use namada_vp::vp_host_fns;
@@ -24,7 +28,7 @@ use parity_wasm::elements::Instruction::*;
 use parity_wasm::elements::{self, SignExtInstruction};
 use thiserror::Error;
 use wasmer::sys::{BaseTunables, Features};
-use wasmer::{Engine, Module, NativeEngineExt, Store, Target};
+use wasmer::{AsEngineRef, Engine, Module, NativeEngineExt, Store, Target};
 
 use super::TxCache;
 use super::memory::{Limit, WasmMemory};
@@ -33,7 +37,7 @@ use crate::types::VpInput;
 use crate::wasm::host_env::{tx_imports, vp_imports};
 use crate::wasm::{Cache, CacheName, VpCache, memory};
 use crate::{
-    HostRef, RwAccess, WasmCacheAccess, WasmValidationError,
+    HostRef, RwAccess, WasmCacheAccess, WasmValidationError, cosmwasm,
     validate_untrusted_wasm,
 };
 
@@ -146,7 +150,7 @@ pub fn tx<S, CA>(
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<BTreeSet<Address>>
 where
-    S: StateRead + State + StorageRead,
+    S: 'static + StateRead + State + StorageRead,
     CA: 'static + WasmCacheAccess,
 {
     let tx_code = tx
@@ -190,8 +194,9 @@ where
         }
     }
 
-    if is_cosmwasm(&tx_code.code.hash(), state)? {
+    if let Some(contract_addr) = is_cosmwasm(&tx_code.code.hash(), state)? {
         cosmwasm_tx(
+            contract_addr,
             state,
             gas_meter,
             wrapper_hash,
@@ -354,6 +359,7 @@ where
 
 /// Execute a CosmWasm transaction call.
 fn cosmwasm_tx<S, CA>(
+    contract_addr: Address,
     state: &mut S,
     gas_meter: &RefCell<TxGasMeter>,
     wrapper_hash: Option<&Hash>,
@@ -364,10 +370,81 @@ fn cosmwasm_tx<S, CA>(
     tx_code: namada_tx::Code,
 ) -> Result<()>
 where
-    S: StateRead + State + StorageRead,
+    S: 'static + StateRead + State + StorageRead,
     CA: 'static + WasmCacheAccess,
 {
-    todo!()
+    let code = match tx_code.code {
+        Commitment::Hash(hash) => todo!(),
+        Commitment::Id(code) => code,
+    };
+
+    let chain_id = state.get_chain_id().unwrap().to_string();
+    let BlockHeight(height) = state.get_block_height().unwrap();
+    let BlockHeader { time, .. } =
+        StorageRead::get_block_header(state, BlockHeight(height))
+            .unwrap()
+            .unwrap();
+
+    let owner = address::testing::established_address_2();
+    let backend = cosmwasm::backend(unsafe { make_static(state) }, owner);
+    let options = cosmwasm_vm::InstanceOptions {
+        gas_limit: gas_meter.borrow().tx_gas_limit.clone().into(),
+    };
+    let memory_limit = Some(cosmwasm_vm::Size::mega(2));
+    let mut instance =
+        cosmwasm_vm::Instance::from_code(&code, backend, options, memory_limit)
+            .unwrap();
+
+    let env = cosmwasm_std::Env {
+        block: cosmwasm_std::BlockInfo {
+            height,
+            time: cosmwasm_std::Timestamp::from_seconds(
+                time.to_unix_timestamp() as u64,
+            ),
+            chain_id,
+        },
+        transaction: None,
+        contract: cosmwasm_std::ContractInfo {
+            address: cosmwasm_std::Addr::unchecked(contract_addr.to_string()),
+        },
+    };
+    // TODO sender and funds attached to tx data?
+    let info = cosmwasm_std::MessageInfo {
+        sender:
+        //todo!("Find the sender from tx signer?"),
+        cosmwasm_std::Addr::unchecked( namada_core::address::testing::established_address_1().to_string()),
+        funds:
+        //todo!("How do we attach these to our tx fmt?"),
+        vec![]
+    };
+    let namada_tx::BatchedTxRef { tx, ref cmt } = tx.batch_ref_tx(cmt);
+    let msg = tx.data(cmt).unwrap();
+
+    let result: cosmwasm_std::Response<cosmwasm_std::Empty> =
+        dbg!(cosmwasm_vm::call_execute(&mut instance, &env, &info, &msg))
+            .unwrap()
+            .unwrap();
+
+    let cosmwasm_std::Response {
+        messages,
+        attributes,
+        events,
+        data,
+        ..
+    } = result;
+    for msg in messages {
+        match msg.msg {
+            cosmwasm_std::CosmosMsg::Bank(bank_msg) => todo!(),
+            cosmwasm_std::CosmosMsg::Custom(_) => todo!(),
+            cosmwasm_std::CosmosMsg::Wasm(wasm_msg) => todo!(),
+            _ => todo!(),
+        }
+    }
+    Ok(())
+}
+
+unsafe fn make_static<T>(t: &mut T) -> &'static mut T {
+    core::mem::transmute(t)
 }
 
 /// Execute a validity predicate code. Returns whether the validity
@@ -760,12 +837,20 @@ pub fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {
     elements::serialize(module).map_err(Error::SerializationError)
 }
 
-fn is_cosmwasm<S>(code_hash: &Hash, state: &S) -> Result<bool>
+/// Returns the address of the smart-contract, if the given code is CosmWasm.
+fn is_cosmwasm<S>(code_hash: &Hash, state: &S) -> Result<Option<Address>>
 where
     S: StateRead,
 {
+    // if code_hash = &Hash::from_str(
+    //     "b3fb49333f12e7116b609a7a0d7af88bd4de1122e4e09591efe65820734a1394",
+    // )
+    // .unwrap()
+    // {
+    //     return true;
+    // }
     let key = Key::cosmwasm(code_hash);
-    state.has_key(&key).map_err(|e| {
+    state.read(&key).map_err(|e| {
         Error::LoadWasmCode(format!(
             "Failed to check existence of storage key {key}, error {e}"
         ))
@@ -1088,8 +1173,10 @@ mod tests {
 
     use assert_matches::assert_matches;
     use itertools::Either;
+    use namada_core::address;
     use namada_core::arith::checked;
     use namada_core::borsh::BorshSerializeExt;
+    use namada_core::time::DateTimeUtc;
     use namada_state::StorageWrite;
     use namada_state::testing::TestState;
     use namada_test_utils::TestWasms;
@@ -2205,6 +2292,90 @@ mod tests {
             &verifiers,
             vp_cache.clone(),
         )
+    }
+
+    #[test]
+    fn cosmwasm() {
+        let contract_addr = address::testing::established_address_1();
+        let (mut tx_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+
+        #[derive(serde::Serialize)]
+        pub enum ExecuteMsg {
+            increment {},
+            reset { count: i32 },
+        }
+
+        let tx_data = serde_json::to_vec(&ExecuteMsg::increment {}).unwrap();
+        let tx_index = TxIndex::default();
+        let mut state = TestState::default();
+
+        // TEMP hack: instantiate the counter key
+        {
+            use namada_core::storage;
+
+            #[derive(serde::Serialize)]
+            pub struct State {
+                pub count: i32,
+                pub owner: cosmwasm_std::Addr,
+            }
+
+            let owner = address::testing::established_address_2();
+            let key = storage::Key::from(storage::DbKeySeg::AddressSeg(
+                owner.clone(),
+            ))
+            .with_segment(storage::DbKeySeg::StringSeg("state".to_string()));
+            state
+                .write_bytes(
+                    &key,
+                    serde_json::to_vec(&State {
+                        count: 1,
+                        owner: cosmwasm_std::Addr::unchecked(owner.to_string()),
+                    })
+                    .unwrap(),
+                )
+                .unwrap()
+        }
+
+        state.in_mem_mut().header = Some(BlockHeader {
+            hash: Hash::zero(),
+            time: DateTimeUtc::now(),
+            next_validators_hash: Hash::zero(),
+        });
+        let gas_meter = RefCell::new(TxGasMeter::new(TX_GAS_LIMIT, GAS_SCALE));
+
+        let tx_code = include_bytes!(
+            "/home/tz/dev/cosmwasm-by-example/counter/target/wasm32-unknown-unknown/release/counter.wasm"
+        );
+
+        // store the tx code
+        let code_hash = Hash::sha256(&tx_code);
+        let code_len = (tx_code.len() as u64).serialize_to_vec();
+        let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
+        let _ = state
+            .write_log_mut()
+            .write(&key, tx_code.serialize_to_vec())
+            .unwrap();
+        let _ = state.write_log_mut().write(&len_key, code_len).unwrap();
+
+        let mut outer_tx = Tx::from_type(TxType::Raw);
+        outer_tx.set_code(Code::from_hash(code_hash, None));
+        outer_tx.set_data(Data::new(tx_data));
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
+
+        cosmwasm_tx(
+            contract_addr,
+            &mut state,
+            &gas_meter,
+            None,
+            &tx_index,
+            batched_tx.tx,
+            batched_tx.cmt,
+            &mut tx_cache,
+            namada_tx::Code::new(tx_code.to_vec(), None),
+        )
+        .unwrap()
     }
 
     fn execute_tx_with_code(tx_code: &[u8]) -> Result<BTreeSet<Address>> {

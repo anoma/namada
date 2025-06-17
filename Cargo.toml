@@ -135,7 +135,7 @@ color-eyre = "0.6"
 concat-idents = "1.1"
 config = "0.15"
 cosmwasm-std = { path = "../cosmwasm/packages/std" }
-cosmwasm-vm = { path = "../cosmwasm/packages/vm", default-features = false }
+cosmwasm-vm = { path = "../cosmwasm/packages/vm", default-features = false, features = ["iterator"] }
 criterion = { version = "0.5", features = ["html_reports"] }
 data-encoding = "2.3"
 derivation-path = "0.2"
