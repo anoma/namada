@@ -980,8 +980,8 @@ Namada 0.41.0 is a minor release that primarily improves gas, fixes bugs related
 - Improved the interface of the gas type. Removed the duplicated gas used from
   events. ([\#3428](https://github.com/anoma/namada/pull/3428))
 - Implement the phase 2 masp shielded sync client. This client uses
-  a [`namada-masp-indexer`](https://github.com/anoma/namada-masp-
-  indexer) instance to query the state of the shielded context.
+  a [`namada-masp-indexer`](https://github.com/anoma/namada-masp-indexer) 
+  instance to query the state of the shielded context.
   ([\#3456](https://github.com/anoma/namada/pull/3456))
 - Minor improvements to governance and PGF code quality, including
   template gov proposal jsons and a python script to attach wasm code.
