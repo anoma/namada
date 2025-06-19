@@ -14,9 +14,7 @@ use namada_apps_lib::wallet::defaults::{
 };
 use namada_core::address::Address;
 use namada_core::dec::Dec;
-use namada_core::masp::{
-    AssetData, MaspTxId, Precision, TokenMap, encode_asset_type,
-};
+use namada_core::masp::{MaspTxId, Precision, TokenMap, encode_asset_type};
 use namada_node::shell::testing::client::run;
 use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
@@ -31,9 +29,7 @@ use namada_sdk::token::storage_key::{
     masp_reward_precision_key, masp_scheduled_base_native_precision_key,
     masp_scheduled_reward_precision_key, masp_token_map_key,
 };
-use namada_sdk::token::{
-    self, Amount, DenominatedAmount, MaspDigitPos, MaspEpoch,
-};
+use namada_sdk::token::{self, Amount, DenominatedAmount, MaspEpoch};
 use namada_sdk::tx::{IndexedTx, Section, Tx};
 use namada_sdk::{DEFAULT_GAS_LIMIT, tx};
 use test_log::test;
@@ -7977,17 +7973,10 @@ fn speculative_context() -> Result<()> {
         })
         .unwrap();
     assert!(first_aa_history_entry.inputs.is_empty());
-    let expected_outputs: HashMap<AssetData, Amount> = [(
-        AssetData {
-            token: native_token.clone(),
-            denom: 6.into(),
-            position: MaspDigitPos::Zero,
-            epoch: MaspEpoch::zero().next(),
-        },
-        Amount::from(100_000_000),
-    )]
-    .into_iter()
-    .collect();
+    let expected_outputs: HashMap<Address, Amount> =
+        [(native_token.clone(), Amount::from(100_000_000))]
+            .into_iter()
+            .collect();
     assert_eq!(expected_outputs, first_aa_history_entry.outputs);
     let second_aa_history_entry = aa_history
         .get(&IndexedTx {
@@ -7997,17 +7986,10 @@ fn speculative_context() -> Result<()> {
         })
         .unwrap();
     assert!(second_aa_history_entry.inputs.is_empty());
-    let expected_outputs: HashMap<AssetData, Amount> = [(
-        AssetData {
-            token: native_token.clone(),
-            denom: 6.into(),
-            position: MaspDigitPos::Zero,
-            epoch: MaspEpoch::zero().next(),
-        },
-        Amount::from(100_000_000),
-    )]
-    .into_iter()
-    .collect();
+    let expected_outputs: HashMap<Address, Amount> =
+        [(native_token.clone(), Amount::from(100_000_000))]
+            .into_iter()
+            .collect();
     assert_eq!(expected_outputs, second_aa_history_entry.outputs);
 
     // 3. Spend an amount of tokens which is less than the amount of every
@@ -8235,29 +8217,15 @@ fn speculative_context() -> Result<()> {
             batch_index: 0.into(),
         })
         .unwrap();
-    let expected_inputs: HashMap<AssetData, Amount> = [(
-        AssetData {
-            token: native_token.clone(),
-            denom: 6.into(),
-            position: MaspDigitPos::Zero,
-            epoch: MaspEpoch::zero().next(),
-        },
-        Amount::from(100_000_000),
-    )]
-    .into_iter()
-    .collect();
+    let expected_inputs: HashMap<Address, Amount> =
+        [(native_token.clone(), Amount::from(100_000_000))]
+            .into_iter()
+            .collect();
     assert_eq!(expected_inputs, third_aa_history_entry.inputs);
-    let expected_outputs: HashMap<AssetData, Amount> = [(
-        AssetData {
-            token: native_token.clone(),
-            denom: 6.into(),
-            position: MaspDigitPos::Zero,
-            epoch: MaspEpoch::zero().next(),
-        },
-        Amount::from(10_000_000),
-    )]
-    .into_iter()
-    .collect();
+    let expected_outputs: HashMap<Address, Amount> =
+        [(native_token.clone(), Amount::from(10_000_000))]
+            .into_iter()
+            .collect();
     assert_eq!(expected_outputs, third_aa_history_entry.outputs);
     let fourth_aa_history_entry = aa_history
         .get(&IndexedTx {
@@ -8266,29 +8234,15 @@ fn speculative_context() -> Result<()> {
             batch_index: 0.into(),
         })
         .unwrap();
-    let expected_inputs: HashMap<AssetData, Amount> = [(
-        AssetData {
-            token: native_token.clone(),
-            denom: 6.into(),
-            position: MaspDigitPos::Zero,
-            epoch: MaspEpoch::zero().next(),
-        },
-        Amount::from(100_000_000),
-    )]
-    .into_iter()
-    .collect();
+    let expected_inputs: HashMap<Address, Amount> =
+        [(native_token.clone(), Amount::from(100_000_000))]
+            .into_iter()
+            .collect();
     assert_eq!(expected_inputs, fourth_aa_history_entry.inputs);
-    let expected_outputs: HashMap<AssetData, Amount> = [(
-        AssetData {
-            token: native_token.clone(),
-            denom: 6.into(),
-            position: MaspDigitPos::Zero,
-            epoch: MaspEpoch::zero().next(),
-        },
-        Amount::from(10_000_000),
-    )]
-    .into_iter()
-    .collect();
+    let expected_outputs: HashMap<Address, Amount> =
+        [(native_token.clone(), Amount::from(10_000_000))]
+            .into_iter()
+            .collect();
     assert_eq!(expected_outputs, fourth_aa_history_entry.outputs);
     let ab_history = shielded_wallet.shielded_history.get_index(1).unwrap().1;
     assert_eq!(ab_history.len(), 2);
@@ -8300,17 +8254,10 @@ fn speculative_context() -> Result<()> {
         })
         .unwrap();
     assert!(first_ab_history_entry.inputs.is_empty());
-    let expected_outputs: HashMap<AssetData, Amount> = [(
-        AssetData {
-            token: native_token.clone(),
-            denom: 6.into(),
-            position: MaspDigitPos::Zero,
-            epoch: MaspEpoch::zero().next(),
-        },
-        Amount::from(90_000_000),
-    )]
-    .into_iter()
-    .collect();
+    let expected_outputs: HashMap<Address, Amount> =
+        [(native_token.clone(), Amount::from(90_000_000))]
+            .into_iter()
+            .collect();
     assert_eq!(expected_outputs, first_ab_history_entry.outputs);
     let second_ab_history_entry = ab_history
         .get(&IndexedTx {
@@ -8320,17 +8267,10 @@ fn speculative_context() -> Result<()> {
         })
         .unwrap();
     assert!(second_ab_history_entry.inputs.is_empty());
-    let expected_outputs: HashMap<AssetData, Amount> = [(
-        AssetData {
-            token: native_token.clone(),
-            denom: 6.into(),
-            position: MaspDigitPos::Zero,
-            epoch: MaspEpoch::zero().next(),
-        },
-        Amount::from(90_000_000),
-    )]
-    .into_iter()
-    .collect();
+    let expected_outputs: HashMap<Address, Amount> =
+        [(native_token.clone(), Amount::from(90_000_000))]
+            .into_iter()
+            .collect();
     assert_eq!(expected_outputs, second_ab_history_entry.outputs);
 
     Ok(())
@@ -9367,17 +9307,10 @@ fn shielded_history() -> Result<()> {
         })
         .unwrap();
     assert!(nam_aa_history_entry.inputs.is_empty());
-    let expected_outputs: HashMap<AssetData, Amount> = [(
-        AssetData {
-            token: native_token.clone(),
-            denom: 6.into(),
-            position: MaspDigitPos::Zero,
-            epoch: Some(MaspEpoch::new(1)),
-        },
-        Amount::from(10_000_000),
-    )]
-    .into_iter()
-    .collect();
+    let expected_outputs: HashMap<Address, Amount> =
+        [(native_token.clone(), Amount::from(10_000_000))]
+            .into_iter()
+            .collect();
     assert_eq!(expected_outputs, nam_aa_history_entry.outputs);
     assert!(!nam_aa_history_entry.conversions);
     let btc_aa_history_entry = aa_history
@@ -9388,17 +9321,10 @@ fn shielded_history() -> Result<()> {
         })
         .unwrap();
     assert!(btc_aa_history_entry.inputs.is_empty());
-    let expected_outputs: HashMap<AssetData, Amount> = [(
-        AssetData {
-            token: btc_addr,
-            denom: 8.into(),
-            position: MaspDigitPos::Zero,
-            epoch: Some(MaspEpoch::new(1)),
-        },
-        Amount::from(1_000_000_000),
-    )]
-    .into_iter()
-    .collect();
+    let expected_outputs: HashMap<Address, Amount> =
+        [(btc_addr, Amount::from(1_000_000_000))]
+            .into_iter()
+            .collect();
     assert_eq!(expected_outputs, btc_aa_history_entry.outputs);
     assert!(!btc_aa_history_entry.conversions);
 
@@ -9533,29 +9459,15 @@ fn shielded_history() -> Result<()> {
             batch_index: 0.into(),
         })
         .unwrap();
-    let expected_inputs: HashMap<AssetData, Amount> = [(
-        AssetData {
-            token: native_token.clone(),
-            denom: 6.into(),
-            position: MaspDigitPos::Zero,
-            epoch: Some(MaspEpoch::new(1)),
-        },
-        Amount::from(10_000_000),
-    )]
-    .into_iter()
-    .collect();
+    let expected_inputs: HashMap<Address, Amount> =
+        [(native_token.clone(), Amount::from(10_000_000))]
+            .into_iter()
+            .collect();
     assert_eq!(expected_inputs, nam_aa_history_entry.inputs);
-    let expected_outputs: HashMap<AssetData, Amount> = [(
-        AssetData {
-            token: native_token.clone(),
-            denom: 6.into(),
-            position: MaspDigitPos::Zero,
-            epoch: Some(MaspEpoch::new(1)),
-        },
-        Amount::from(5_000_000),
-    )]
-    .into_iter()
-    .collect();
+    let expected_outputs: HashMap<Address, Amount> =
+        [(native_token.clone(), Amount::from(5_000_000))]
+            .into_iter()
+            .collect();
     assert_eq!(expected_outputs, nam_aa_history_entry.outputs);
     assert!(!nam_aa_history_entry.conversions);
     // Check entry for VK(B)
@@ -9567,17 +9479,10 @@ fn shielded_history() -> Result<()> {
         })
         .unwrap();
     assert!(nam_ab_history_entry.inputs.is_empty());
-    let expected_outputs: HashMap<AssetData, Amount> = [(
-        AssetData {
-            token: native_token,
-            denom: 6.into(),
-            position: MaspDigitPos::Zero,
-            epoch: Some(MaspEpoch::new(1)),
-        },
-        Amount::from(5_000_000),
-    )]
-    .into_iter()
-    .collect();
+    let expected_outputs: HashMap<Address, Amount> =
+        [(native_token, Amount::from(5_000_000))]
+            .into_iter()
+            .collect();
     assert_eq!(expected_outputs, nam_ab_history_entry.outputs);
     assert!(!nam_ab_history_entry.conversions);
 
@@ -9706,17 +9611,10 @@ fn shielded_history_with_conversions() -> Result<()> {
         })
         .unwrap();
     assert!(btc_aa_history_entry.inputs.is_empty());
-    let expected_outputs: HashMap<AssetData, Amount> = [(
-        AssetData {
-            token: btc_addr.clone(),
-            denom: 8.into(),
-            position: MaspDigitPos::Zero,
-            epoch: Some(MaspEpoch::new(3)),
-        },
-        Amount::from(1_000_000_000),
-    )]
-    .into_iter()
-    .collect();
+    let expected_outputs: HashMap<Address, Amount> =
+        [(btc_addr.clone(), Amount::from(1_000_000_000))]
+            .into_iter()
+            .collect();
     assert_eq!(expected_outputs, btc_aa_history_entry.outputs);
     assert!(!btc_aa_history_entry.conversions);
 
@@ -9860,29 +9758,15 @@ fn shielded_history_with_conversions() -> Result<()> {
             batch_index: 0.into(),
         })
         .unwrap();
-    let expected_inputs: HashMap<AssetData, Amount> = [(
-        AssetData {
-            token: btc_addr.clone(),
-            denom: 8.into(),
-            position: MaspDigitPos::Zero,
-            epoch: Some(MaspEpoch::new(3)),
-        },
-        Amount::from(1_000_000_000),
-    )]
-    .into_iter()
-    .collect();
+    let expected_inputs: HashMap<Address, Amount> =
+        [(btc_addr.clone(), Amount::from(1_000_000_000))]
+            .into_iter()
+            .collect();
     assert_eq!(expected_inputs, btc_aa_history_entry.inputs);
-    let expected_outputs: HashMap<AssetData, Amount> = [(
-        AssetData {
-            token: native_token.clone(),
-            denom: 6.into(),
-            position: MaspDigitPos::Zero,
-            epoch: Some(MaspEpoch::new(4)),
-        },
-        Amount::from(7_500_000),
-    )]
-    .into_iter()
-    .collect();
+    let expected_outputs: HashMap<Address, Amount> =
+        [(native_token.clone(), Amount::from(7_500_000))]
+            .into_iter()
+            .collect();
     assert_eq!(expected_outputs, btc_aa_history_entry.outputs);
     assert!(btc_aa_history_entry.conversions);
 
@@ -9896,17 +9780,10 @@ fn shielded_history_with_conversions() -> Result<()> {
         })
         .unwrap();
     assert!(btc_ab_history_entry.inputs.is_empty());
-    let expected_outputs: HashMap<AssetData, Amount> = [(
-        AssetData {
-            token: btc_addr,
-            denom: 8.into(),
-            position: MaspDigitPos::Zero,
-            epoch: Some(MaspEpoch::new(4)),
-        },
-        Amount::from(1_000_000_000),
-    )]
-    .into_iter()
-    .collect();
+    let expected_outputs: HashMap<Address, Amount> =
+        [(btc_addr, Amount::from(1_000_000_000))]
+            .into_iter()
+            .collect();
     assert_eq!(expected_outputs, btc_ab_history_entry.outputs);
     assert!(!btc_ab_history_entry.conversions);
 
