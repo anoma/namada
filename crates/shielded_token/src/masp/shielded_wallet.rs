@@ -97,9 +97,7 @@ pub struct ShieldedWallet<U: ShieldedUtils> {
     /// indexer
     // FIXME: should this be optional or put behind a compiler feature? Or
     // maybe a generic type on the ShieldedWallet?
-    // FIXME: rename to just history
-    pub shielded_history:
-        HashMap<ViewingKey, HashMap<IndexedTx, TxHistoryEntry>>,
+    pub history: HashMap<ViewingKey, HashMap<IndexedTx, TxHistoryEntry>>,
     /// The sync state of the context
     pub sync_status: ContextSyncStatus,
 }
@@ -133,7 +131,7 @@ impl<U: ShieldedUtils + Default> Default for ShieldedWallet<U> {
             spents: HashSet::default(),
             asset_types: HashMap::default(),
             vk_map: HashMap::default(),
-            shielded_history: Default::default(),
+            history: Default::default(),
             sync_status: ContextSyncStatus::Confirmed,
         }
     }
@@ -278,7 +276,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
             .ok_or_else(|| eyre!("Can not get the asset data"))?
             .to_owned();
         let output_entry = self
-            .shielded_history
+            .history
             .entry(vk.to_owned())
             .or_default()
             .entry(indexed_tx)
@@ -339,7 +337,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
                         .to_owned();
 
                     let history_entry = self
-                        .shielded_history
+                        .history
                         .entry(vk.to_owned())
                         .or_default()
                         .entry(indexed_tx)
