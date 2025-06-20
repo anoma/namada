@@ -905,9 +905,35 @@ pub fn prepare_wasm_code<T: AsRef<[u8]>>(
         )
         .map_err(|_original_module| Error::GasMeterInjection)?,
     };
-    let module =
-        wasm_instrument::inject_stack_limiter(module, WASM_STACK_LIMIT)
-            .map_err(|_original_module| Error::StackLimiterInjection)?;
+    let stack_limiter_exempt_fn_ids = {
+        // cannot examine imported func ids, so we skip them
+        let mut exempt = wasm_instrument::utils::imported_function_ids(&module);
+
+        // when using a mutable wasm global to track gas, we want to match the
+        // behavior of the gas host fn not getting instrumented
+        if let GasMeterKind::MutGlobal = gas_meter_kind {
+            let total_number_of_fns_in_wasm_module: u32 = module
+                .functions_space()
+                .try_into()
+                .expect("the number of wasm functions should fit in 32 bits");
+
+            // NB: the gas wasm fn is appended to the bottom of
+            // the module with [`wasm_instrument::gas_metering::inject`]
+            let wasm_gas_fn_id = total_number_of_fns_in_wasm_module
+                .checked_sub(1)
+                .expect("there should be at least one wasm fn in the module");
+
+            exempt.insert(wasm_gas_fn_id);
+        }
+
+        exempt
+    };
+    let module = wasm_instrument::inject_stack_limiter(
+        module,
+        WASM_STACK_LIMIT,
+        &stack_limiter_exempt_fn_ids,
+    )
+    .map_err(|_original_module| Error::StackLimiterInjection)?;
     elements::serialize(module).map_err(Error::SerializationError)
 }
 

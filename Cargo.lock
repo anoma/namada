@@ -5492,6 +5492,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nam-wasm-instrument"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f6bbeb218db27d14ff0dd937675549f32ad2e74a044aa6c613291a1a33c83fa"
+dependencies = [
+ "parity-wasm",
+]
+
+[[package]]
 name = "namada_account"
 version = "0.150.0"
 dependencies = [
@@ -5594,6 +5603,7 @@ dependencies = [
  "lazy_static",
  "masp_primitives",
  "masp_proofs",
+ "nam-wasm-instrument",
  "namada_apps_lib",
  "namada_node",
  "namada_vm",
@@ -5603,7 +5613,6 @@ dependencies = [
  "rand_core",
  "sha2 0.10.8",
  "tempfile",
- "wasm-instrument",
  "wasmer",
  "wasmer-compiler-singlepass",
 ]
@@ -6442,6 +6451,7 @@ dependencies = [
  "byte-unit",
  "clru",
  "itertools 0.14.0",
+ "nam-wasm-instrument",
  "namada_account",
  "namada_core",
  "namada_events",
@@ -6460,7 +6470,6 @@ dependencies = [
  "test-log",
  "thiserror 2.0.11",
  "tracing",
- "wasm-instrument",
  "wasmer",
  "wasmer-cache",
  "wasmer-compiler",
@@ -10321,15 +10330,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ba64e81215916eaeb48fee292f29401d69235d62d8b8fd92a7b2844ec5ae5f7"
 dependencies = [
  "leb128",
-]
-
-[[package]]
-name = "wasm-instrument"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a47ecb37b9734d1085eaa5ae1a81e60801fd8c28d4cabdd8aedb982021918bc"
-dependencies = [
- "parity-wasm",
 ]
 
 [[package]]
