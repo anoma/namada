@@ -11,6 +11,7 @@ use crate::TypeHash;
 derive_typehash!(Vec::<u8>);
 derive_typehash!(Vec::<String>);
 derive_typehash!(u64);
+derive_typehash!(u32);
 derive_typehash!(u128);
 derive_typehash!(Option::<u32>);
 #[cfg(feature = "masp")]

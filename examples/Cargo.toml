@@ -28,6 +28,10 @@ path = "tx_schema.rs"
 name = "make-db-migration"
 path = "make-db-migration.rs"
 
+[[example]]
+name = "housefire-max-tx-bytes"
+path = "housefire-max-tx-bytes.rs"
+
 [features]
 default = ["migrations"]
 migrations = []
