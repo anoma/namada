@@ -25,6 +25,10 @@ name = "tx-schema"
 path = "tx_schema.rs"
 
 [[example]]
+name = "fix"
+path = "fix.rs"
+
+[[example]]
 name = "make-db-migration"
 path = "make-db-migration.rs"
 
@@ -43,6 +47,7 @@ namada_apps_lib = { workspace = true, features = ["migrations"] }
 namada_core = { workspace = true }
 namada_macros = { workspace = true }
 namada_migrations = { workspace = true, features = ["masp"] }
+namada_node = {workspace = true}
 namada_parameters = { workspace = true }
 namada_trans_token = { workspace = true, features = ["migrations"] }
 namada_sdk = { workspace = true, default-features = false, features = [

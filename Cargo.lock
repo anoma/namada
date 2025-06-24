@@ -5754,6 +5754,7 @@ dependencies = [
  "namada_core",
  "namada_macros",
  "namada_migrations",
+ "namada_node",
  "namada_parameters",
  "namada_sdk",
  "namada_shielded_token",

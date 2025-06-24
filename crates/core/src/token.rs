@@ -446,6 +446,7 @@ pub struct DenominatedAmount {
     denom: Denomination,
 }
 
+
 impl DenominatedAmount {
     /// Make a new denominated amount representing amount*10^(-denom)
     pub const fn new(amount: Amount, denom: Denomination) -> Self {

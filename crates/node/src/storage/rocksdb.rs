@@ -129,7 +129,7 @@ pub struct RocksDB {
 
 /// DB Handle for batch writes.
 #[derive(Default)]
-pub struct RocksDBWriteBatch(WriteBatch);
+pub struct RocksDBWriteBatch(pub WriteBatch);
 
 /// Open RocksDB for the DB
 pub fn open(
@@ -266,7 +266,7 @@ impl Drop for RocksDB {
 }
 
 impl RocksDB {
-    fn get_column_family(&self, cf_name: &str) -> Result<&ColumnFamily> {
+    pub fn get_column_family(&self, cf_name: &str) -> Result<&ColumnFamily> {
         self.inner
             .cf_handle(cf_name)
             .ok_or(Error::DBError("No {cf_name} column family".to_string()))

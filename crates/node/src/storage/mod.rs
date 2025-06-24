@@ -12,7 +12,7 @@ use blake2b_rs::{Blake2b, Blake2bBuilder};
 use namada_sdk::state::{FullAccessState, StorageHasher};
 #[cfg(test)]
 pub use rocksdb::SnapshotPath;
-pub use rocksdb::{DbSnapshot, DbSnapshotMeta, RocksDBUpdateVisitor, open};
+pub use rocksdb::{DbSnapshot, RocksDBWriteBatch, DbSnapshotMeta, RocksDBUpdateVisitor, open};
 
 #[derive(Default)]
 pub struct PersistentStorageHasher(Blake2bHasher);
