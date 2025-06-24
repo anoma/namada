@@ -111,14 +111,11 @@ pub async fn syncing<
 
     #[cfg(feature = "testing")]
     {
-        // Load the confirmed context and update the conversions for the
-        // shielded history. This is needed for integration tests only
-        // as the cli wallet is not supposed to compile the history of shielded
-        // transactions
-        shielded
-            .load_confirmed()
-            .await
-            .map_err(|e| Error::Other(e.to_string()))?;
+        // Load the confirmed context (if present) and update the conversions
+        // for the shielded history. This is needed for integration
+        // tests only as the cli wallet is not supposed to compile the
+        // history of shielded transactions
+        let _ = shielded.load_confirmed().await;
         for (asset_type, (token, denom, position, epoch, _conv)) in
             namada_sdk::rpc::query_conversions(&client).await?
         {

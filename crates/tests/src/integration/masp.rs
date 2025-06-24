@@ -19,6 +19,7 @@ use namada_node::shell::testing::client::run;
 use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
 use namada_sdk::account::AccountPublicKeysMap;
+#[cfg(feature = "historic-masp")]
 use namada_sdk::collections::HashMap;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_sdk::signing::SigningTxData;
@@ -30,7 +31,9 @@ use namada_sdk::token::storage_key::{
     masp_scheduled_reward_precision_key, masp_token_map_key,
 };
 use namada_sdk::token::{self, Amount, DenominatedAmount, MaspEpoch};
-use namada_sdk::tx::{IndexedTx, Section, Tx};
+#[cfg(feature = "historic-masp")]
+use namada_sdk::tx::IndexedTx;
+use namada_sdk::tx::{Section, Tx};
 use namada_sdk::{DEFAULT_GAS_LIMIT, tx};
 use test_log::test;
 
@@ -7878,6 +7881,7 @@ fn tricky_masp_txs() -> Result<()> {
 // Test generation of transactions and querying balance with the speculative
 // context. Also checks that the shielded history is not updated when in a
 // speculative context.
+#[cfg(feature = "historic-masp")]
 #[test]
 fn speculative_context() -> Result<()> {
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -9150,6 +9154,7 @@ fn multiple_inputs_from_single_note() -> Result<()> {
 
 // Test that the shielded wallet constructs the correct history of MASP
 // transactions for its keys
+#[cfg(feature = "historic-masp")]
 #[test]
 fn history() -> Result<()> {
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -9490,6 +9495,7 @@ fn history() -> Result<()> {
 }
 
 // Test that shielded history entries flag the presence of conversions when used
+#[cfg(feature = "historic-masp")]
 #[test]
 fn history_with_conversions() -> Result<()> {
     let rt = tokio::runtime::Runtime::new().unwrap();
