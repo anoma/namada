@@ -466,6 +466,8 @@ where
         }
     }
 
+    tracing::info!("DEBUG: Query with key {storage_key} height {queried_height}");
+    let start = std::time::SystemTime::now();
     match ctx
         .state
         .db_read_with_height(&storage_key, queried_height)
@@ -481,6 +483,8 @@ where
             } else {
                 None
             };
+            let duration = start.elapsed().unwrap();
+            tracing::info!("DEBUG: Query with key {storage_key} took {duration:?}");
             Ok(EncodedResponseQuery {
                 data: value,
                 proof,
@@ -498,6 +502,8 @@ where
             } else {
                 None
             };
+            let duration = start.elapsed().unwrap();
+            tracing::info!("DEBUG: Query with key {storage_key} took {duration:?}, but None");
             Ok(EncodedResponseQuery {
                 data: vec![],
                 proof,
