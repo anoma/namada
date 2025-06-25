@@ -305,10 +305,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
         #[cfg(feature = "historic")] update_history: Option<IndexedTx>,
     ) -> Result<(), eyre::Error> {
         #[cfg(feature = "historic")]
-        let used_conversions = transaction.sapling_bundle().map_or_else(
-            || false,
-            |bundle| !bundle.shielded_converts.is_empty(),
-        );
+        let used_conversions = transaction
+            .sapling_bundle()
+            .map_or(false, |bundle| !bundle.shielded_converts.is_empty());
 
         for ss in transaction
             .sapling_bundle()
