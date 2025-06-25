@@ -18,9 +18,7 @@ use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::ibc::primitives::IntoHostTime;
 use namada_core::key::*;
-use namada_core::masp::{
-    AssetData, ExtendedViewingKey, MaspTxId, PaymentAddress,
-};
+use namada_core::masp::{AssetData, MaspTxId, PaymentAddress};
 use namada_core::tendermint::Time as TmTime;
 use namada_core::time::DateTimeUtc;
 use namada_core::token::{Amount, DenominatedAmount};
@@ -837,8 +835,11 @@ async fn make_ledger_token_transfer_endpoints(
     }
     if let Some(builder) = builder {
         for sapling_input in builder.builder.sapling_inputs() {
-            let vk = ExtendedViewingKey::from(*sapling_input.key());
-            output.push(format!("Sender : {}", vk));
+            let pa = sapling_input.address().ok_or_else(|| {
+                Error::Other("unable to load vp code".to_string())
+            })?;
+            let pa = PaymentAddress::from(pa);
+            output.push(format!("Sender : {}", pa));
             make_ledger_amount_asset(
                 tokens,
                 output,
