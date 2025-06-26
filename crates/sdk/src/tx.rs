@@ -3001,9 +3001,13 @@ where
         tx_builder.add_memo(memo);
     }
 
+    tracing::info!("DEBUG: query_wasm_code_hash");
+    let start = std::time::SystemTime::now();
     let tx_code_hash = query_wasm_code_hash(context, path.to_string_lossy())
         .await
         .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
+    let duration = start.elapsed().unwrap();
+    tracing::info!("DEBUG: query_wasm_code_hash took {} us", duration.as_micros());
 
     on_tx(&mut tx_builder, &mut data)?;
 
