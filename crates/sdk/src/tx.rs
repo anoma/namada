@@ -3296,6 +3296,8 @@ pub async fn build_shielded_transfer<N: Namada>(
 
     let fee_payer = signing_data.fee_payer_or_err()?;
     // Add masp fee payment if necessary
+    tracing::info!("DEBUG: get_masp_fee_payment_amount in shielded");
+    let start = std::time::SystemTime::now();
     let masp_fee_data = get_masp_fee_payment_amount(
         context,
         &args.tx,
@@ -3307,6 +3309,8 @@ pub async fn build_shielded_transfer<N: Namada>(
             .or(args.sources.first().map(|data| data.source)),
     )
     .await?;
+    let duration = start.elapsed().unwrap();
+    tracing::info!("DEBUG: get_masp_fee_payment_amount in shielded took {} us", duration.as_micros());
     if let Some(fee_data) = &masp_fee_data {
         data = data
             .transfer(
@@ -3318,6 +3322,8 @@ pub async fn build_shielded_transfer<N: Namada>(
             .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
     }
 
+    tracing::info!("DEBUG: construct_shielded_parts in shielded");
+    let start = std::time::SystemTime::now();
     let shielded_parts = construct_shielded_parts(
         context,
         transfer_data,
@@ -3327,6 +3333,8 @@ pub async fn build_shielded_transfer<N: Namada>(
     )
     .await?
     .expect("Shielded transfer must have shielded parts");
+    let duration = start.elapsed().unwrap();
+    tracing::info!("DEBUG: construct_shielded_parts in shielded took {} us", duration.as_micros());
 
     let fee_payer = signing_data.fee_payer_or_err()?.to_owned();
     let add_shielded_parts = |tx: &mut Tx, data: &mut token::Transfer| {
@@ -3510,6 +3518,8 @@ pub async fn build_shielding_transfer<N: Namada>(
             .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
     }
 
+    tracing::info!("DEBUG: construct_shielded_parts in shielding");
+    let start = std::time::SystemTime::now();
     let shielded_parts = construct_shielded_parts(
         context,
         transfer_data,
@@ -3519,6 +3529,8 @@ pub async fn build_shielding_transfer<N: Namada>(
     )
     .await?
     .expect("Shielding transfer must have shielded parts");
+    let duration = start.elapsed().unwrap();
+    tracing::info!("DEBUG: construct_shielded_parts in shielding took {} us", duration.as_micros());
     let shielded_tx_epoch = shielded_parts.0.epoch;
 
     let fee_payer = signing_data.fee_payer_or_err()?.to_owned();
@@ -3655,6 +3667,8 @@ pub async fn build_unshielding_transfer<N: Namada>(
             .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
     }
 
+    tracing::info!("DEBUG: construct_shielded_parts in unshielding");
+    let start = std::time::SystemTime::now();
     let shielded_parts = construct_shielded_parts(
         context,
         transfer_data,
@@ -3664,6 +3678,8 @@ pub async fn build_unshielding_transfer<N: Namada>(
     )
     .await?
     .expect("Shielding transfer must have shielded parts");
+    let duration = start.elapsed().unwrap();
+    tracing::info!("DEBUG: construct_shielded_parts in unshielding took {} us", duration.as_micros());
 
     let fee_payer = signing_data.fee_payer_or_err()?.to_owned();
     let add_shielded_parts = |tx: &mut Tx, data: &mut token::Transfer| {
