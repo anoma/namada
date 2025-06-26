@@ -60,16 +60,48 @@ use crate::masp::{
 #[cfg(any(test, feature = "testing"))]
 use crate::masp::{ENV_VAR_MASP_TEST_SEED, testing};
 
-/// Type alias for the respose we get from
+/// Type  for the response we get from
 /// querying conversions
-pub type ConversionData = (
-    Address,
-    Denomination,
-    MaspDigitPos,
-    MaspEpoch,
-    I128Sum,
-    MerklePath<Node>,
-);
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct ConversionData {
+    token: Address,
+    denomination: Denomination,
+    digit_pos: MaspDigitPos,
+    epoch: MaspEpoch,
+    conversion: I128Sum,
+    merkle_path: MerklePath<Node>,
+}
+
+impl
+    From<(
+        Address,
+        Denomination,
+        MaspDigitPos,
+        MaspEpoch,
+        I128Sum,
+        MerklePath<Node>,
+    )> for ConversionData
+{
+    fn from(
+        value: (
+            Address,
+            Denomination,
+            MaspDigitPos,
+            MaspEpoch,
+            I128Sum,
+            MerklePath<Node>,
+        ),
+    ) -> Self {
+        ConversionData {
+            token: value.0,
+            denomination: value.1,
+            digit_pos: value.2,
+            epoch: value.3,
+            conversion: value.4,
+            merkle_path: value.5,
+        }
+    }
+}
 
 /// A conversions cache
 #[derive(Clone, Default, BorshSerialize, BorshDeserialize, Debug)]
@@ -467,17 +499,11 @@ pub trait ShieldedQueries<U: ShieldedUtils + MaybeSend + MaybeSync>:
         client: &C,
         asset_type: AssetType,
         cache: &mut EpochedConversions,
-    ) -> Option<(
-        Address,
-        Denomination,
-        MaspDigitPos,
-        MaspEpoch,
-        I128Sum,
-        MerklePath<Node>,
-    )> {
+    ) -> Option<ConversionData> {
         match cache.inner.get(&asset_type).cloned() {
             None => {
-                let res = Self::query_conversion(client, asset_type).await?;
+                let res: ConversionData =
+                    Self::query_conversion(client, asset_type).await?.into();
                 cache.inner.insert(asset_type, res.clone());
                 Some(res)
             }
@@ -510,10 +536,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     ShieldedQueries<U>
 {
     /// A method that loads the wallet and empties the conversion cache if the
-    /// masp epoch has advanced. This method is only called by functions
-    /// which are relatively fast so the chances of crossing a masp boundary
-    /// are minimal. However, if it happens, the function may produce
-    /// invalid output and need to be run again.
+    /// masp epoch has advanced.
     #[allow(async_fn_in_trait)]
     async fn load_with_caching<C: Client + Sync>(
         &mut self,
@@ -580,14 +603,13 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             return decoded.cloned();
         }
         // Query for the conversion for the given asset type
-        let (token, denom, position, ep, _conv, _path): (
-            Address,
-            Denomination,
-            MaspDigitPos,
-            _,
-            I128Sum,
-            MerklePath<Node>,
-        ) = Self::get_conversion(client, asset_type, &mut self.conversions)
+        let ConversionData {
+            token,
+            denomination: denom,
+            digit_pos: position,
+            epoch: ep,
+            ..
+        } = Self::get_conversion(client, asset_type, &mut self.conversions)
             .await?;
         let pre_asset_type = AssetData {
             token,
@@ -616,9 +638,15 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             return Ok(());
         };
         // Get the conversion for the given asset type, otherwise fail
-        let Some((token, denom, position, ep, conv, path)) =
-            Self::get_conversion(client, asset_type, &mut self.conversions)
-                .await
+        let Some(ConversionData {
+            token,
+            denomination: denom,
+            digit_pos: position,
+            epoch: ep,
+            conversion: conv,
+            merkle_path: path,
+        }) = Self::get_conversion(client, asset_type, &mut self.conversions)
+            .await
         else {
             return Ok(());
         };
