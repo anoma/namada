@@ -271,6 +271,20 @@ impl Sub<DateTimeUtc> for DateTimeUtc {
     }
 }
 
+impl Sub<DurationSecs> for DateTimeUtc {
+    type Output = DateTimeUtc;
+
+    #[allow(clippy::arithmetic_side_effects)]
+    fn sub(self, duration: DurationSecs) -> Self::Output {
+        let duration_std = std::time::Duration::from_secs(duration.0);
+        let duration_chrono = Duration::from_std(duration_std).expect(
+            "Duration shouldn't be larger than the maximum value supported \
+             for chrono::Duration",
+        );
+        (self.0 - duration_chrono).into()
+    }
+}
+
 impl BorshSerialize for DateTimeUtc {
     fn serialize<W: std::io::Write>(
         &self,
