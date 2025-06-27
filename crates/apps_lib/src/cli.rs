@@ -3673,7 +3673,7 @@ pub mod args {
     pub const SENDER: Arg<String> = arg("sender");
     pub const SHIELDED: ArgFlag = flag("shielded");
     pub const SHOW_IBC_TOKENS: ArgFlag = flag("show-ibc-tokens");
-    pub const SLIPPAGE: ArgOpt<f64> = arg_opt("slippage-percentage");
+    pub const SLIPPAGE: ArgOpt<Dec> = arg_opt("slippage-percentage");
     pub const SIGNING_KEYS: ArgMulti<WalletPublicKey, GlobStar> =
         arg_multi("signing-keys");
     pub const SIGNATURES: ArgMulti<PathBuf, GlobStar> = arg_multi("signatures");
@@ -5256,9 +5256,12 @@ pub mod args {
                 PAYMENT_ADDRESS_TARGET_OPT.parse(matches);
             let maybe_overflow = OVERFLOW_OPT.parse(matches);
             let slippage_percent = SLIPPAGE.parse(matches);
-            if slippage_percent
-                .is_some_and(|percent| !(0.0..=100.0).contains(&percent))
-            {
+            if slippage_percent.is_some_and(|percent| {
+                let zero = Dec::zero();
+                let hundred = Dec::new(100, 0).unwrap();
+
+                percent >= zero && percent <= hundred
+            }) {
                 panic!(
                     "The slippage percent must be a number between 0 and 100."
                 )
@@ -5269,13 +5272,11 @@ pub mod args {
                 .map(|d| Slippage::MinOutputAmount(d.redenominate(0).amount()))
                 .or_else(|| {
                     Some(Slippage::Twap {
-                        slippage_percentage: slippage_percent
-                            .expect(
-                                "If a minimum amount was not provided, \
-                                 slippage-percentage and window-seconds must \
-                                 be specified.",
-                            )
-                            .to_string(),
+                        slippage_percentage: slippage_percent.expect(
+                            "If a minimum amount was not provided, \
+                             slippage-percentage and window-seconds must be \
+                             specified.",
+                        ),
                         window_seconds: window_seconds.expect(
                             "If a minimum amount was not provided, \
                              slippage-percentage and window-seconds must be \

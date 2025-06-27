@@ -16,6 +16,7 @@ use namada_core::address::{Address, InternalAddress};
 use namada_core::arith::checked;
 use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::collections::{HashMap, HashSet};
+use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::ibc::IbcTokenHash;
 use namada_core::ibc::apps::transfer::types::PrefixedDenom;
@@ -23,7 +24,7 @@ use namada_core::ibc::core::host::types::identifiers::ChannelId;
 use namada_core::key::common;
 use namada_core::masp::MaspEpoch;
 use namada_core::storage::{BlockResults, Key, PrefixValue};
-use namada_core::time::DurationSecs;
+use namada_core::time::{DateTimeUtc, DurationSecs};
 use namada_core::token::{
     Amount, DenominatedAmount, Denomination, MaspDigitPos,
 };
@@ -1563,6 +1564,123 @@ pub async fn query_ibc_denom<N: Namada>(
     }
 
     token.as_ref().to_string()
+}
+
+/// Determine the minimum output amount of a trade based
+/// on a time weighted average price of the output token.
+pub async fn compute_min_output_amount_from_twap(
+    rest_rpc_addr: &str,
+    input_amount: InputAmount,
+    osmosis_input_denom: &str,
+    slippage_percentage: Dec,
+    window_seconds: u64,
+    route: &[OsmosisPoolHop],
+) -> Result<Amount, Error> {
+    #[derive(Deserialize)]
+    struct ResponseOk {
+        arithmetic_twap: Dec,
+    }
+
+    #[derive(Deserialize)]
+    struct ResponseErr {
+        message: String,
+    }
+
+    if route.is_empty() {
+        return Err(Error::Other("Pool route cannot be empty".to_owned()));
+    }
+
+    let slippage_percentage = slippage_percentage
+        .trunc_div(&Dec::new(100, 0).unwrap())
+        .ok_or_else(|| {
+            Error::Other(format!(
+                "Invalid slippage percentage {slippage_percentage}"
+            ))
+        })?;
+
+    let mut twap_price = Dec::one();
+    let mut sell_denom = osmosis_input_denom.to_owned();
+
+    let (start_time, end_time) = {
+        #[allow(clippy::disallowed_methods)]
+        let end = DateTimeUtc::now();
+        let start = end - DurationSecs(window_seconds);
+        (start.to_rfc3339_z(), end.to_rfc3339_z())
+    };
+
+    let client = reqwest::Client::new();
+    let request_url =
+        format!("{rest_rpc_addr}/osmosis/twap/v1beta1/ArithmeticTwap");
+
+    for OsmosisPoolHop {
+        pool_id,
+        token_out_denom,
+    } in route
+    {
+        let response = client
+            .get(&request_url)
+            .query(&[
+                ("pool_id", pool_id),
+                ("base_asset", &sell_denom),
+                ("quote_asset", token_out_denom),
+                ("start_time", &start_time),
+                ("end_time", &end_time),
+            ])
+            .send()
+            .await
+            .map_err(|err| {
+                Error::Other(format!(
+                    "Failed to query Osmosis GRPC gateway: {err}",
+                ))
+            })?;
+
+        if !response.status().is_success() {
+            let ResponseErr { message } =
+                response.json().await.map_err(|err| {
+                    Error::Other(format!(
+                        "Failed to read failure response from HTTP request \
+                         body: {err}"
+                    ))
+                })?;
+            return Err(Error::Other(format!(
+                "Invalid Osmosis GRPC gateway query: {message}"
+            )));
+        }
+
+        let ResponseOk {
+            arithmetic_twap: twap,
+        } = response.json().await.map_err(|err| {
+            Error::Other(format!(
+                "Failed to read success response from HTTP request body: {err}"
+            ))
+        })?;
+
+        let new_twap_price = checked!(twap_price * twap)?;
+
+        twap_price = new_twap_price;
+        sell_denom = token_out_denom.clone();
+    }
+
+    // NB: throw away denom
+    let input_amount = match input_amount {
+        InputAmount::Validated(da) => da.amount(),
+        InputAmount::Unvalidated(da) => da.amount(),
+    };
+
+    let trunc_twap_price = Amount::from_uint(
+        checked!(twap_price - twap_price * slippage_percentage)?
+            .to_uint()
+            .ok_or_else(|| {
+                Error::Other(format!(
+                    "Error truncating TWAP price {twap_price}"
+                ))
+            })?,
+        0,
+    )
+    .unwrap();
+    let min_out = checked!(trunc_twap_price * input_amount)?;
+
+    Ok(min_out)
 }
 
 /// Query the registry contract embedded in the state of

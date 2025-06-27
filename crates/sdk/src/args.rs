@@ -36,6 +36,7 @@ use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::ibc::{NamadaMemo, NamadaMemoData};
 use crate::rpc::{
+    compute_min_output_amount_from_twap,
     get_registry_from_xcs_osmosis_contract, osmosis_denom_from_namada_denom,
     query_ibc_denom, query_osmosis_pool_routes,
 };
@@ -504,7 +505,7 @@ pub enum Slippage {
         /// The maximum percentage difference allowed between the estimated and
         /// actual trade price. This must be a decimal number in the range
         /// `[0, 100]`.
-        slippage_percentage: String,
+        slippage_percentage: Dec,
         /// The time period (in seconds) over which the average price is
         /// calculated
         window_seconds: u64,
@@ -532,7 +533,7 @@ pub struct TxOsmosisSwap<C: NamadaTypes = SdkTypes> {
     pub local_recovery_addr: String,
     /// The route to take through Osmosis pools
     pub route: Option<Vec<OsmosisPoolHop>>,
-    /// A REST rpc endpoint to Osmosis
+    /// A REST rpc endpoint to the Osmosis GRPC gateway
     pub osmosis_rest_rpc: String,
 }
 
@@ -688,10 +689,20 @@ impl TxOsmosisSwap<SdkTypes> {
                     Slippage::MinOutputAmount(amount_to_shield) => {
                         amount_to_shield
                     }
-                    Slippage::Twap { .. } => todo!(
-                        "Cannot compute min output amount from slippage TWAP \
-                         yet"
-                    ),
+                    Slippage::Twap {
+                        slippage_percentage,
+                        window_seconds,
+                    } => {
+                        compute_min_output_amount_from_twap(
+                            &osmosis_rest_rpc,
+                            transfer.amount,
+                            &osmosis_input_denom,
+                            slippage_percentage,
+                            window_seconds,
+                            &route,
+                        )
+                        .await?
+                    }
                 };
 
                 let shielding_tx = tx::gen_ibc_shielding_transfer(
