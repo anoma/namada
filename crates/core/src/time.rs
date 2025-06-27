@@ -156,6 +156,8 @@ impl Display for DateTimeUtc {
 
 impl DateTimeUtc {
     const FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S%.9f+00:00";
+    // XXX: do not use this format for consensus critical applications
+    const FORMAT_Z: &'static str = "%Y-%m-%dT%H:%M:%S%.9f+00:00";
 
     /// Returns a DateTimeUtc which corresponds to the current date.
     pub fn now() -> Self {
@@ -184,9 +186,14 @@ impl DateTimeUtc {
             .expect("This operation should be infallible")
     }
 
-    /// Returns an rfc3339 string or an error.
+    /// Returns an rfc3339 string.
     pub fn to_rfc3339(&self) -> String {
         self.0.format(DateTimeUtc::FORMAT).to_string()
+    }
+
+    /// Returns an rfc3339 string (with a Z).
+    pub fn to_rfc3339_z(&self) -> String {
+        self.0.format(DateTimeUtc::FORMAT_Z).to_string()
     }
 
     /// Parses a rfc3339 string, or returns an error.
