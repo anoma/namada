@@ -4061,12 +4061,12 @@ fn osmosis_xcs() -> Result<()> {
     ));
 
     // Transparently swap samoleans with nam
-    run!(
+    let mut cmd = run!(
         &test_namada,
         Bin::Client,
         [
             "osmosis-swap",
-            "--osmosis-rest-rpc",
+            "--osmosis-lcd",
             "http://localhost:1317",
             "--source",
             BERTHA,
@@ -4091,9 +4091,12 @@ fn osmosis_xcs() -> Result<()> {
             "--node",
             &rpc_namada,
         ],
-        Some(40),
-    )?
-    .assert_success();
+        Some(80),
+    )?;
+
+    // confirm trade
+    cmd.send_line("y")?;
+    cmd.assert_success();
 
     wait_for_packet_relay(
         &hermes_namada_osmosis,
@@ -4119,12 +4122,12 @@ fn osmosis_xcs() -> Result<()> {
     )?;
 
     // Perform a shielded swap of samoleans and nam
-    run!(
+    let mut cmd = run!(
         &test_namada,
         Bin::Client,
         [
             "osmosis-swap",
-            "--osmosis-rest-rpc",
+            "--osmosis-lcd",
             "http://localhost:1317",
             "--source",
             AA_VIEWING_KEY,
@@ -4156,8 +4159,11 @@ fn osmosis_xcs() -> Result<()> {
             "500000",
         ],
         Some(40),
-    )?
-    .assert_success();
+    )?;
+
+    // confirm trade
+    cmd.send_line("y")?;
+    cmd.assert_success();
 
     wait_for_packet_relay(
         &hermes_namada_osmosis,
