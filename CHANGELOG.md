@@ -20,6 +20,11 @@ Namada apps v101.1.1
 - Updated Namada libraries to lib-v0.150.0
   ([\#4680](https://github.com/anoma/namada/pull/4680))
 
+### MISCELLANEOUS
+
+- Updated Namada libraries to lib-v0.150.0
+  ([\#4680](https://github.com/anoma/namada/pull/4680))
+
 ## v101.0.0
 
 Namada apps v101.0.0 release.
