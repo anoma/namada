@@ -220,11 +220,11 @@ where
 
     let wasm_gas_meter = RefCell::new(GasMeter::new(
         gas_meter_kind,
-        || {
+        || unsafe {
             // If gas metering is done through a host function, we
             // take the provided gas meter, then restore it after
             // we return from the wasm vm
-            TxGasMeter::default()
+            TxGasMeter::placeholder()
         },
         || {
             // If gas metering is done through a wasm function, we
@@ -263,7 +263,8 @@ where
 
     wasm_gas_meter.borrow_mut().init(
         |meter| {
-            *meter = gas_meter.take();
+            *meter = gas_meter
+                .replace_with(|_| unsafe { TxGasMeter::placeholder() });
 
             Ok(())
         },
@@ -409,7 +410,7 @@ where
 
     let wasm_gas_meter = RefCell::new(GasMeter::new(
         gas_meter_kind,
-        VpGasMeter::default,
+        || unsafe { VpGasMeter::placeholder() },
         WasmGasMeter::uninit,
     ));
 
@@ -461,7 +462,8 @@ where
             // Initialize gas meter
             wasm_gas_meter.borrow_mut().init(
                 |meter| {
-                    *meter = gas_meter.take();
+                    *meter = gas_meter
+                        .replace_with(|_| unsafe { VpGasMeter::placeholder() });
 
                     Ok(())
                 },
@@ -484,7 +486,8 @@ where
             Ok(guest_memory)
         },
         || {
-            let wasm_gas_meter = wasm_gas_meter.take();
+            let wasm_gas_meter = wasm_gas_meter
+                .replace_with(|_| unsafe { GasMeter::vp_placeholder() });
 
             wasm_gas_meter
                 .flush_to_meter(&mut *gas_meter.borrow_mut())
@@ -669,7 +672,7 @@ where
 
         let wasm_gas_meter = RefCell::new(GasMeter::new(
             GasMeterKind::MutGlobal,
-            VpGasMeter::default,
+            || unsafe { VpGasMeter::placeholder() },
             WasmGasMeter::uninit,
         ));
 
@@ -699,7 +702,10 @@ where
                 |instance, store| {
                     wasm_gas_meter.borrow_mut().init(
                         |meter| {
-                            *meter = native_ctx.gas_meter.take();
+                            *meter =
+                                native_ctx.gas_meter.replace_with(|_| unsafe {
+                                    VpGasMeter::placeholder()
+                                });
 
                             Ok(())
                         },
@@ -720,7 +726,10 @@ where
                     )
                 },
                 || {
-                    let wasm_gas_meter = wasm_gas_meter.take();
+                    let wasm_gas_meter =
+                        wasm_gas_meter.replace_with(|_| unsafe {
+                            GasMeter::vp_placeholder()
+                        });
 
                     wasm_gas_meter
                         .flush_to_meter(&mut *native_ctx.gas_meter.borrow_mut())
@@ -768,7 +777,8 @@ where
             input_data,
             |_instance, _store| Ok(()),
             || {
-                let wasm_gas_meter = wasm_gas_meter.take();
+                let wasm_gas_meter = wasm_gas_meter
+                    .replace_with(|_| unsafe { GasMeter::vp_placeholder() });
 
                 unsafe { ctx.gas_meter.get() }
                     .borrow_mut()

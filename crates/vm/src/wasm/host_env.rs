@@ -16,7 +16,7 @@ use crate::wasm::memory::WasmMemory;
 use crate::{WasmCacheAccess, host_env};
 
 /// Wasm native gas meter
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct WasmGasMeter {
     gas_scale: u64,
     initial_gas: Gas,

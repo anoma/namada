@@ -1,6 +1,6 @@
 //! Gas meter used in the vm.
 
-use namada_gas::{Gas, GasMeterKind, GasMetering, TxGasMeter};
+use namada_gas::{Gas, GasMeterKind, GasMetering, TxGasMeter, VpGasMeter};
 
 #[cfg(feature = "wasm-runtime")]
 use crate::wasm::host_env::WasmGasMeter;
@@ -13,12 +13,6 @@ pub enum GasMeter<N> {
     /// Gas is stored in wasm memory
     #[cfg(feature = "wasm-runtime")]
     Wasm(WasmGasMeter),
-}
-
-impl<N: Default> Default for GasMeter<N> {
-    fn default() -> Self {
-        Self::Native(N::default())
-    }
 }
 
 #[cfg(feature = "wasm-runtime")]
@@ -64,6 +58,30 @@ impl<N> GasMeter<N> {
         } else {
             None
         }
+    }
+}
+
+impl GasMeter<TxGasMeter> {
+    /// Return a placeholder [`GasMeter`] for tx gas metering.
+    ///
+    /// ## Safety
+    ///
+    /// This should only be used as an unitialized meter. Do
+    /// not perform gas metering with it.
+    pub const unsafe fn tx_placeholder() -> Self {
+        Self::Native(unsafe { TxGasMeter::placeholder() })
+    }
+}
+
+impl GasMeter<VpGasMeter> {
+    /// Return a placeholder [`GasMeter`] for vp gas metering.
+    ///
+    /// ## Safety
+    ///
+    /// This should only be used as an unitialized meter. Do
+    /// not perform gas metering with it.
+    pub const unsafe fn vp_placeholder() -> Self {
+        Self::Native(unsafe { VpGasMeter::placeholder() })
     }
 }
 

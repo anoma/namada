@@ -426,7 +426,7 @@ pub trait GasMetering {
 }
 
 /// Gas metering in a transaction
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct TxGasMeter {
     /// Track gas overflow
     gas_overflow: bool,
@@ -439,7 +439,7 @@ pub struct TxGasMeter {
 }
 
 /// Gas metering in a validity predicate
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct VpGasMeter {
     /// Track gas overflow
     gas_overflow: bool,
@@ -500,6 +500,21 @@ impl GasMetering for TxGasMeter {
 }
 
 impl TxGasMeter {
+    /// Return a placeholder [`TxGasMeter`].
+    ///
+    /// ## Safety
+    ///
+    /// This should only be used as an unitialized meter. Do
+    /// not perform gas metering with it.
+    pub const unsafe fn placeholder() -> Self {
+        Self {
+            gas_overflow: false,
+            gas_scale: 0u64,
+            tx_gas_limit: Gas::new(0u64),
+            transaction_gas: Gas::new(0u64),
+        }
+    }
+
     /// Initialize a new Tx gas meter. Requires a gas limit for the specific
     /// wrapper transaction and the protocol's gas scale
     pub fn new(tx_gas_limit: impl Into<Gas>, gas_scale: u64) -> Self {
@@ -582,6 +597,22 @@ impl GasMetering for VpGasMeter {
 }
 
 impl VpGasMeter {
+    /// Return a placeholder [`VpGasMeter`].
+    ///
+    /// ## Safety
+    ///
+    /// This should only be used as an unitialized meter. Do
+    /// not perform gas metering with it.
+    pub const unsafe fn placeholder() -> Self {
+        Self {
+            gas_overflow: false,
+            gas_scale: 0u64,
+            tx_gas_limit: Gas::new(0u64),
+            prev_meter_consumed_gas: Gas::new(0u64),
+            current_gas: Gas::new(0u64),
+        }
+    }
+
     /// Initialize a new VP gas meter from the [`TxGasMeter`]
     pub fn new_from_tx_meter(tx_gas_meter: &TxGasMeter) -> Self {
         Self::new_from_meter(tx_gas_meter)

@@ -233,7 +233,7 @@ impl TestTxEnv {
     pub fn execute_tx(&mut self) -> Result<(), Error> {
         let gas_meter = RefCell::new(
             if let GasMeter::Native(meter) = &mut *self.gas_meter.borrow_mut() {
-                std::mem::take(meter)
+                std::mem::replace(meter, unsafe { TxGasMeter::placeholder() })
             } else {
                 unreachable!()
             },
@@ -252,7 +252,9 @@ impl TestTxEnv {
         )
         .and(Ok(()));
 
-        *self.gas_meter.borrow_mut() = GasMeter::Native(gas_meter.take());
+        *self.gas_meter.borrow_mut() = GasMeter::Native(
+            gas_meter.replace_with(|_| unsafe { TxGasMeter::placeholder() }),
+        );
 
         res
     }
