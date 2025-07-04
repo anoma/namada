@@ -106,6 +106,7 @@ where
         &mut state,
         &mut vp_wasm_cache,
         &mut tx_wasm_cache,
+        protocol::GasMeterKind::MutGlobal,
     )
     .map_err(|err| err.error)
     .into_storage_result()?;
@@ -114,7 +115,7 @@ where
         tx_result_string,
         tx_gas_meter
             .borrow()
-            .get_tx_consumed_gas()
+            .get_consumed_gas()
             .get_whole_gas_units(gas_scale),
     );
 

@@ -100,7 +100,7 @@ pub enum RwAccess {}
 /// Reference to host environment data, to be used from wasm
 /// to implement host functions.
 #[derive(Debug)]
-pub struct HostRef<ACCESS, T> {
+pub struct HostRef<ACCESS, T: ?Sized> {
     data: NonNull<T>,
     _access: PhantomData<*const ACCESS>,
 }

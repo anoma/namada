@@ -494,7 +494,7 @@ mod tests {
     use namada_core::storage::TxIndex;
     use namada_core::tendermint::time::Time as TmTime;
     use namada_core::time::DurationSecs;
-    use namada_gas::{TxGasMeter, VpGasMeter};
+    use namada_gas::{GasMeterKind, TxGasMeter, VpGasMeter};
     use namada_governance::parameters::GovernanceParameters;
     use namada_parameters::EpochDuration;
     use namada_parameters::storage::get_epoch_duration_storage_key;
@@ -1060,6 +1060,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
 
         let ibc = Ibc::new(ctx);
@@ -1136,6 +1137,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
 
         let ibc = Ibc::new(ctx);
@@ -1262,6 +1264,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
         let ibc = Ibc::new(ctx);
         // this should return true because state has been stored
@@ -1371,6 +1374,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
         let ibc = Ibc::new(ctx);
         // this should return true because state has been stored
@@ -1465,6 +1469,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
         let ibc = Ibc::new(ctx);
         // this should fail because no event
@@ -1586,6 +1591,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
         let ibc = Ibc::new(ctx);
         // this should return true because state has been stored
@@ -1696,6 +1702,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
         let ibc = Ibc::new(ctx);
         assert_matches!(
@@ -1791,6 +1798,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
         let ibc = Ibc::new(ctx);
         assert_matches!(
@@ -1914,6 +1922,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
         let ibc = Ibc::new(ctx);
         assert_matches!(
@@ -2036,6 +2045,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
         let ibc = Ibc::new(ctx);
         assert_matches!(
@@ -2143,6 +2153,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
         let ibc = Ibc::new(ctx);
         assert_matches!(
@@ -2245,6 +2256,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
         let ibc = Ibc::new(ctx);
         assert_matches!(
@@ -2401,6 +2413,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
         let ibc = Ibc::new(ctx);
         assert_matches!(
@@ -2612,6 +2625,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
         let ibc = Ibc::new(ctx);
         assert_matches!(
@@ -2767,6 +2781,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
         let ibc = Ibc::new(ctx);
         assert_matches!(
@@ -2925,6 +2940,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
         let ibc = Ibc::new(ctx);
         assert_matches!(
@@ -3083,6 +3099,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
         let ibc = Ibc::new(ctx);
         assert_matches!(
@@ -3261,6 +3278,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
         let ibc = Ibc::new(ctx);
         assert_matches!(
@@ -3495,6 +3513,7 @@ mod tests {
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
+            GasMeterKind::MutGlobal,
         );
         let ibc = Ibc::new(ctx);
         assert_matches!(
